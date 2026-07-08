@@ -8,9 +8,11 @@
     "scheme": "nextepisode",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.nagibneto.nextepisode"
     },
     "android": {
+      "package": "com.nagibneto.nextepisode",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -29,7 +31,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "O app acessa suas fotos para anexar imagens e GIFs aos comentários."
+          "photosPermission": "O app acessa suas fotos para anexar imagens e GIFs aos comentários.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [
@@ -44,6 +48,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a3175347-d00d-4076-bbbe-0e927617ab89"
+      }
+    },
+    "owner": "nagibn"
   }
 }
