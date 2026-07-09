@@ -63,6 +63,12 @@ export async function updateDisplayName(userId: string, displayName: string) {
   if (error) throw error;
 }
 
+/** Apaga a conta autenticada e todos os dados dela (via Edge Function delete-account). */
+export async function deleteAccount() {
+  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  if (error) throw error;
+}
+
 // ---------- Séries seguidas ----------
 
 export async function getFollowedShows(userId: string): Promise<FollowedShow[]> {

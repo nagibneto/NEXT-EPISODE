@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de Privacidade — Next Episode</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 20px 80px;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #eaeaea; background: #121212; }
+    a { color: #6fb1ff; }
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  h2 { font-size: 1.15rem; margin-top: 2.2em; }
+  .updated { color: #6b6b6b; font-size: 0.9rem; margin-bottom: 2em; }
+  ul { padding-left: 1.3em; }
+  li { margin-bottom: 0.4em; }
+  a { color: #1a56db; }
+  .contact {
+    margin-top: 2.5em;
+    padding: 16px;
+    border-radius: 10px;
+    background: rgba(127,127,127,0.1);
+  }
+</style>
+</head>
+<body>
+
+<h1>Política de Privacidade — Next Episode</h1>
+<p class="updated">Última atualização: 9 de julho de 2026</p>
+
+<p>
+  Este documento explica quais dados o aplicativo <strong>Next Episode</strong>
+  coleta, para que servem e como você pode solicitar a exclusão da sua conta
+  e dos seus dados.
+</p>
+
+<h2>Quem somos</h2>
+<p>
+  O Next Episode é um aplicativo desenvolvido de forma independente para
+  acompanhamento de séries de TV. Contato do responsável pelo app:
+  <a href="mailto:nagibneto_2@hotmail.com">nagibneto_2@hotmail.com</a>.
+</p>
+
+<h2>Quais dados coletamos</h2>
+<ul>
+  <li><strong>Dados de cadastro:</strong> e-mail, nome de usuário e apelido. A senha é gerenciada pelo Supabase Auth e nunca é armazenada em texto puro nem acessível por nós.</li>
+  <li><strong>Atividade no app:</strong> séries que você segue, episódios marcados como assistidos, notas dadas a episódios.</li>
+  <li><strong>Conteúdo que você publica:</strong> comentários em episódios e imagens/GIFs anexados a eles.</li>
+  <li><strong>Relações sociais:</strong> pedidos de amizade enviados/aceitos e quem você segue no app.</li>
+  <li><strong>Notificações:</strong> um token de dispositivo (via Expo/Firebase) para enviar avisos de novos episódios, caso você autorize notificações.</li>
+</ul>
+<p>
+  Não coletamos dados de localização, contatos, nem usamos rastreamento
+  publicitário de terceiros. Não vendemos dados pessoais.
+</p>
+
+<h2>Com quem compartilhamos</h2>
+<ul>
+  <li><strong>Supabase</strong> — hospeda o banco de dados, autenticação e armazenamento de imagens do app.</li>
+  <li><strong>TMDB (The Movie Database)</strong> — fornece informações públicas sobre séries e episódios (sinopses, datas, pôsteres). Suas buscas por séries podem ser enviadas à TMDB, sem dados pessoais identificáveis.</li>
+  <li><strong>Expo / Firebase Cloud Messaging</strong> — usados apenas para entregar notificações push, se você autorizar.</li>
+</ul>
+<p>Nenhum desses serviços recebe seus dados para fins de publicidade.</p>
+
+<h2>Por quanto tempo guardamos seus dados</h2>
+<p>
+  Enquanto sua conta existir. Você pode excluir sua conta e todos os dados
+  associados a qualquer momento — veja abaixo como.
+</p>
+
+<h2>Como excluir sua conta e seus dados</h2>
+<p>
+  <strong>Pelo app:</strong> abra o Next Episode, vá em
+  <strong>Perfil → Excluir conta</strong> e confirme. Isso apaga
+  permanentemente seu perfil, séries seguidas, episódios assistidos, notas,
+  comentários, imagens enviadas, amizades e token de notificação.
+</p>
+<p>
+  <strong>Sem acesso ao app:</strong> envie um e-mail para
+  <a href="mailto:nagibneto_2@hotmail.com">nagibneto_2@hotmail.com</a>
+  a partir do endereço cadastrado na conta, pedindo a exclusão. Vamos
+  confirmar e remover seus dados em até 30 dias.
+</p>
+
+<h2>Segurança</h2>
+<p>
+  O banco de dados usa Row Level Security (RLS): cada usuário só acessa e
+  altera os próprios dados privados, e as regras de acesso a dados
+  compartilhados (como o feed de amigos) são reforçadas no banco, não só no
+  aplicativo.
+</p>
+
+<h2>Crianças</h2>
+<p>
+  O Next Episode não é direcionado a crianças menores de 13 anos e não
+  coletamos intencionalmente dados desse público.
+</p>
+
+<h2>Alterações nesta política</h2>
+<p>
+  Podemos atualizar esta página quando o app mudar. A data no topo indica a
+  versão mais recente.
+</p>
+
+<div class="contact">
+  <strong>Dúvidas sobre privacidade ou seus dados?</strong><br />
+  Escreva para <a href="mailto:nagibneto_2@hotmail.com">nagibneto_2@hotmail.com</a>.
+</div>
+
+</body>
+</html>

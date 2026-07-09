@@ -1,13 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  deleteAccount,
   getFollowedShows,
   getProfile,
   profileDisplayName,
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [nickname, setNickname] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
@@ -75,6 +77,32 @@ export default function ProfileScreen() {
   async function handleSignOut() {
     if (user) await unregisterPushToken(user.id);
     await signOut();
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Excluir conta',
+      'Isso apaga sua conta e todos os seus dados (séries, avaliações, comentários, amizades) permanentemente. Essa ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            setError(null);
+            try {
+              if (user) await unregisterPushToken(user.id);
+              await deleteAccount();
+              await signOut();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Não foi possível excluir a conta.');
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -179,6 +207,18 @@ export default function ProfileScreen() {
         onPress={handleSignOut}>
         <ThemedText type="smallBold" themeColor="danger">
           Sair da conta
+        </ThemedText>
+      </Pressable>
+
+      <Pressable
+        disabled={deleting}
+        style={[
+          styles.actionButton,
+          { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
+        ]}
+        onPress={handleDeleteAccount}>
+        <ThemedText type="smallBold" themeColor="danger">
+          {deleting ? 'Excluindo…' : 'Excluir conta'}
         </ThemedText>
       </Pressable>
 

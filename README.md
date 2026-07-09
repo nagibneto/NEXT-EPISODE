@@ -72,7 +72,7 @@ npx expo start
 - **Amigos** — busque usuários por nome de usuário ou apelido e mande um pedido de
   amizade; a outra pessoa vê o pedido em Amigos e precisa aceitar para a conexão
   virar mútua (Perfil → Encontrar amigos).
-- **Perfil** — apelido editável (é o nome que aparece para os outros), contadores e atalhos.
+- **Perfil** — apelido editável (é o nome que aparece para os outros), contadores, atalhos e exclusão de conta.
 - **Estatísticas** — tempo total assistido (meses/dias/horas, estilo TV Time) e as
   séries que mais consumiram seu tempo.
 - **Notificações locais** — ao abrir o app ou seguir uma série, agenda notificações
@@ -103,6 +103,25 @@ Para receber notificação de episódio novo mesmo com o app fechado há dias:
 O app registra o push token do aparelho automaticamente ao abrir a aba
 "Minhas Séries" (e o remove ao sair da conta).
 
+## Exclusão de conta (obrigatório pelas lojas)
+
+Apps com cadastro precisam oferecer exclusão de conta dentro do app e uma
+forma de solicitar isso mesmo sem acesso ao app. No Next Episode:
+
+- **No app**: Perfil → Excluir conta.
+- **Fora do app**: instruções em [`docs/privacy.html`](docs/privacy.html)
+  (a política de privacidade, publicada via GitHub Pages).
+
+A exclusão roda na Edge Function `delete-account`, que apaga o usuário em
+`auth.users` (cascateando perfil, séries, episódios, notas, comentários,
+amizades e push tokens) e remove as mídias dele no bucket `comment-media`.
+
+Deploy:
+```bash
+supabase functions deploy delete-account
+```
+(sem `--no-verify-jwt` — a função precisa validar quem está chamando.)
+
 ## Estrutura do código
 
 ```
@@ -125,6 +144,10 @@ supabase/
   schema.sql                # tabelas + políticas RLS (rodar no SQL Editor)
   functions/
     notify-new-episodes/    # Edge Function de push remoto (cron diário)
+    delete-account/         # Edge Function de exclusão de conta
+docs/
+  privacy.html              # política de privacidade (publicada via GitHub Pages)
+eas.json                    # perfis de build (development, preview, production)
 ```
 
 ## Próximos passos sugeridos
