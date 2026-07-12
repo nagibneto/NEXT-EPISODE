@@ -4,6 +4,20 @@
 
 import { supabase } from './supabase';
 
+/**
+ * Extrai uma mensagem legível de qualquer erro. Os erros do Supabase nem
+ * sempre são instâncias de Error (podem ser objetos simples com .message),
+ * e sem isso a tela mostraria só um fallback genérico escondendo a causa.
+ */
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return fallback;
+}
+
 export interface FollowedShow {
   tmdb_id: number;
   name: string;
@@ -15,7 +29,12 @@ export interface Profile {
   id: string;
   username: string;
   display_name: string | null;
+  /** Índice do avatar escolhido (1–12, ver src/lib/avatars.ts); null = sem avatar. */
+  avatar_id: number | null;
 }
+
+/** Séries e filmes compartilham as tabelas de notas/comentários; isto distingue os dois. */
+export type MediaType = 'tv' | 'movie';
 
 /** Nome exibido no app: apelido quando definido, senão o username. */
 export function profileDisplayName(profile: Pick<Profile, 'username' | 'display_name'> | null) {
@@ -40,7 +59,11 @@ export interface EpisodeComment {
   content: string;
   image_url: string | null;
   created_at: string;
-  profiles: { username: string; display_name: string | null } | null;
+  /** id do comentário pai quando isto é uma resposta (1 nível só). */
+  parent_id: string | null;
+  like_count: number;
+  liked_by_me: boolean;
+  profiles: { username: string; display_name: string | null; avatar_id: number | null } | null;
 }
 
 // ---------- Perfil ----------
@@ -48,11 +71,19 @@ export interface EpisodeComment {
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name')
+    .select('id, username, display_name, avatar_id')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export async function updateAvatar(userId: string, avatarId: number | null) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_id: avatarId })
+    .eq('id', userId);
+  if (error) throw error;
 }
 
 export async function updateDisplayName(userId: string, displayName: string) {
@@ -125,6 +156,23 @@ export async function getWatchedEpisodes(
   return data ?? [];
 }
 
+export async function isEpisodeWatched(
+  userId: string,
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumber: number
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('watched_episodes')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('tmdb_show_id', tmdbShowId)
+    .eq('season_number', seasonNumber)
+    .eq('episode_number', episodeNumber);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 export async function markEpisodeWatched(
   userId: string,
   tmdbShowId: number,
@@ -152,18 +200,107 @@ export async function markEpisodeWatched(
   }
 }
 
+/**
+ * Marca vários episódios de uma temporada de uma vez (ex.: "marcar temporada
+ * como assistida"). Upsert ignora os que já estavam marcados.
+ */
+export async function markSeasonWatched(
+  userId: string,
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumbers: number[]
+) {
+  if (episodeNumbers.length === 0) return;
+  const { error } = await supabase.from('watched_episodes').upsert(
+    episodeNumbers.map((episodeNumber) => ({
+      user_id: userId,
+      tmdb_show_id: tmdbShowId,
+      season_number: seasonNumber,
+      episode_number: episodeNumber,
+    })),
+    { onConflict: 'user_id,tmdb_show_id,season_number,episode_number', ignoreDuplicates: true }
+  );
+  if (error) throw error;
+}
+
+/** Desmarca todos os episódios de uma temporada. */
+export async function unmarkSeasonWatched(
+  userId: string,
+  tmdbShowId: number,
+  seasonNumber: number
+) {
+  const { error } = await supabase
+    .from('watched_episodes')
+    .delete()
+    .eq('user_id', userId)
+    .eq('tmdb_show_id', tmdbShowId)
+    .eq('season_number', seasonNumber);
+  if (error) throw error;
+}
+
+// ---------- Filmes assistidos ----------
+
+export interface WatchedMovie {
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  watched_at: string;
+}
+
+export async function getWatchedMovies(userId: string): Promise<WatchedMovie[]> {
+  const { data, error } = await supabase
+    .from('watched_movies')
+    .select('tmdb_id, title, poster_path, watched_at')
+    .eq('user_id', userId)
+    .order('watched_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function isMovieWatched(userId: string, tmdbId: number): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('watched_movies')
+    .select('tmdb_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('tmdb_id', tmdbId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+export async function markMovieWatched(
+  userId: string,
+  movie: { tmdb_id: number; title: string; poster_path: string | null },
+  watched: boolean
+) {
+  if (watched) {
+    const { error } = await supabase
+      .from('watched_movies')
+      .upsert({ user_id: userId, ...movie }, { onConflict: 'user_id,tmdb_id' });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('watched_movies')
+      .delete()
+      .eq('user_id', userId)
+      .eq('tmdb_id', movie.tmdb_id);
+    if (error) throw error;
+  }
+}
+
 // ---------- Notas de episódios ----------
 
 export async function getMyEpisodeRating(
   userId: string,
   tmdbShowId: number,
   seasonNumber: number,
-  episodeNumber: number
+  episodeNumber: number,
+  mediaType: MediaType = 'tv'
 ): Promise<number | null> {
   const { data, error } = await supabase
     .from('episode_ratings')
     .select('rating')
     .eq('user_id', userId)
+    .eq('media_type', mediaType)
     .eq('tmdb_show_id', tmdbShowId)
     .eq('season_number', seasonNumber)
     .eq('episode_number', episodeNumber)
@@ -175,11 +312,13 @@ export async function getMyEpisodeRating(
 export async function getEpisodeAverageRating(
   tmdbShowId: number,
   seasonNumber: number,
-  episodeNumber: number
+  episodeNumber: number,
+  mediaType: MediaType = 'tv'
 ): Promise<{ average: number; count: number }> {
   const { data, error } = await supabase
     .from('episode_ratings')
     .select('rating')
+    .eq('media_type', mediaType)
     .eq('tmdb_show_id', tmdbShowId)
     .eq('season_number', seasonNumber)
     .eq('episode_number', episodeNumber);
@@ -195,10 +334,12 @@ export async function rateEpisode(
   tmdbShowId: number,
   seasonNumber: number,
   episodeNumber: number,
-  rating: number
+  rating: number,
+  mediaType: MediaType = 'tv'
 ) {
   const { error } = await supabase.from('episode_ratings').upsert({
     user_id: userId,
+    media_type: mediaType,
     tmdb_show_id: tmdbShowId,
     season_number: seasonNumber,
     episode_number: episodeNumber,
@@ -209,20 +350,82 @@ export async function rateEpisode(
 
 // ---------- Comentários ----------
 
+/** Comentários do episódio, com contagem de curtidas, ordenados pelos mais curtidos primeiro. */
 export async function getEpisodeComments(
   tmdbShowId: number,
   seasonNumber: number,
-  episodeNumber: number
+  episodeNumber: number,
+  viewerId: string,
+  mediaType: MediaType = 'tv'
 ): Promise<EpisodeComment[]> {
+  // O nome do FK desambigua o join: depois de comment_likes/comment_reports
+  // existirem, há mais de um caminho entre episode_comments e profiles, e o
+  // PostgREST recusa o embed sem essa dica.
   const { data, error } = await supabase
     .from('episode_comments')
-    .select('id, user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at, profiles(username, display_name)')
+    .select('id, user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at, parent_id, profiles!episode_comments_user_id_fkey(username, display_name, avatar_id)')
+    .eq('media_type', mediaType)
     .eq('tmdb_show_id', tmdbShowId)
     .eq('season_number', seasonNumber)
-    .eq('episode_number', episodeNumber)
-    .order('created_at', { ascending: false });
+    .eq('episode_number', episodeNumber);
   if (error) throw error;
-  return (data as unknown as EpisodeComment[]) ?? [];
+  const comments = (data as unknown as Omit<EpisodeComment, 'like_count' | 'liked_by_me'>[]) ?? [];
+  if (comments.length === 0) return [];
+
+  const { data: likeRows, error: likesError } = await supabase
+    .from('comment_likes')
+    .select('comment_id, user_id')
+    .in(
+      'comment_id',
+      comments.map((c) => c.id)
+    );
+  if (likesError) throw likesError;
+
+  const likeCounts = new Map<string, number>();
+  const likedByMe = new Set<string>();
+  for (const row of likeRows ?? []) {
+    likeCounts.set(row.comment_id, (likeCounts.get(row.comment_id) ?? 0) + 1);
+    if (row.user_id === viewerId) likedByMe.add(row.comment_id);
+  }
+
+  return comments
+    .map((c) => ({
+      ...c,
+      like_count: likeCounts.get(c.id) ?? 0,
+      liked_by_me: likedByMe.has(c.id),
+    }))
+    .sort((a, b) => b.like_count - a.like_count || b.created_at.localeCompare(a.created_at));
+}
+
+export async function likeComment(commentId: string, userId: string) {
+  const { error } = await supabase
+    .from('comment_likes')
+    .insert({ comment_id: commentId, user_id: userId });
+  if (error) throw error;
+}
+
+export async function unlikeComment(commentId: string, userId: string) {
+  const { error } = await supabase
+    .from('comment_likes')
+    .delete()
+    .eq('comment_id', commentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function reportComment(commentId: string, reporterId: string) {
+  const { error } = await supabase
+    .from('comment_reports')
+    .insert({ comment_id: commentId, reporter_id: reporterId });
+  if (error) throw error;
+}
+
+/** Sinaliza o comentário de outra pessoa como spoiler (com 3+ sinalizações ele é ocultado pra todo mundo). */
+export async function markCommentSpoiler(commentId: string, userId: string) {
+  const { error } = await supabase
+    .from('comment_spoiler_flags')
+    .insert({ comment_id: commentId, user_id: userId });
+  if (error) throw error;
 }
 
 export async function addEpisodeComment(
@@ -231,17 +434,35 @@ export async function addEpisodeComment(
   seasonNumber: number,
   episodeNumber: number,
   content: string,
-  imageUrl?: string | null
-) {
-  const { error } = await supabase.from('episode_comments').insert({
-    user_id: userId,
-    tmdb_show_id: tmdbShowId,
-    season_number: seasonNumber,
-    episode_number: episodeNumber,
-    content,
-    image_url: imageUrl ?? null,
-  });
-  if (error) throw error;
+  imageUrl?: string | null,
+  parentId?: string | null,
+  mediaType: MediaType = 'tv'
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('episode_comments')
+    .insert({
+      user_id: userId,
+      media_type: mediaType,
+      tmdb_show_id: tmdbShowId,
+      season_number: seasonNumber,
+      episode_number: episodeNumber,
+      content,
+      image_url: imageUrl ?? null,
+      parent_id: parentId ?? null,
+    })
+    .select('id')
+    .single();
+  if (error) {
+    // Os limites anti-spam vêm do trigger enforce_comment_limits, que já
+    // levanta exceção com mensagem amigável em português (repassada abaixo).
+    // Código 23514 = restrição (CHECK) violada — a única que o usuário pode
+    // disparar sozinho é a de links, já que a de tamanho é limitada pelo input.
+    if (error.code === '23514' && error.message?.includes('episode_comments_no_urls_check')) {
+      throw new Error('Comentários não podem conter links.');
+    }
+    throw error;
+  }
+  return data.id;
 }
 
 export async function deleteEpisodeComment(commentId: string) {
@@ -283,7 +504,7 @@ export async function searchProfiles(query: string, excludeUserId: string): Prom
   if (!term) return [];
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name')
+    .select('id, username, display_name, avatar_id')
     .or(`username.ilike.%${term}%,display_name.ilike.%${term}%`)
     .neq('id', excludeUserId)
     .limit(20);
@@ -295,7 +516,7 @@ export async function searchProfiles(query: string, excludeUserId: string): Prom
 export async function getFriends(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_followed_id_fkey(id, username, display_name)')
+    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id)')
     .eq('follower_id', userId)
     .eq('status', 'accepted');
   if (error) throw error;
@@ -306,7 +527,7 @@ export async function getFriends(userId: string): Promise<Profile[]> {
 export async function getIncomingFriendRequests(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_follower_id_fkey(id, username, display_name)')
+    .select('profiles!user_follows_follower_id_fkey(id, username, display_name, avatar_id)')
     .eq('followed_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -317,7 +538,7 @@ export async function getIncomingFriendRequests(userId: string): Promise<Profile
 export async function getOutgoingFriendRequests(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_followed_id_fkey(id, username, display_name)')
+    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id)')
     .eq('follower_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -374,6 +595,41 @@ export async function removeFriendRequest(userId: string, otherId: string) {
   if (error) throw error;
 }
 
+// ---------- Bloqueio de usuários ----------
+
+/** Bloqueia e desfaz qualquer amizade/pedido pendente entre os dois. */
+export async function blockUser(blockerId: string, blockedId: string) {
+  const { error } = await supabase
+    .from('user_blocks')
+    .insert({ blocker_id: blockerId, blocked_id: blockedId });
+  if (error) throw error;
+
+  await supabase
+    .from('user_follows')
+    .delete()
+    .or(
+      `and(follower_id.eq.${blockerId},followed_id.eq.${blockedId}),and(follower_id.eq.${blockedId},followed_id.eq.${blockerId})`
+    );
+}
+
+export async function unblockUser(blockerId: string, blockedId: string) {
+  const { error } = await supabase
+    .from('user_blocks')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId);
+  if (error) throw error;
+}
+
+export async function getBlockedUsers(userId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('user_blocks')
+    .select('profiles!user_blocks_blocked_id_fkey(id, username, display_name, avatar_id)')
+    .eq('blocker_id', userId);
+  if (error) throw error;
+  return ((data as unknown as { profiles: Profile }[]) ?? []).map((row) => row.profiles);
+}
+
 // ---------- Feed social ----------
 
 export interface FeedWatchedItem {
@@ -418,6 +674,9 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
     supabase
       .from('episode_comments')
       .select('user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at')
+      // O feed renderiza séries (busca detalhes por tmdb_show_id); comentários
+      // de filmes ficam de fora por enquanto.
+      .eq('media_type', 'tv')
       .in('user_id', friendIds)
       .order('created_at', { ascending: false })
       .limit(40),

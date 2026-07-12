@@ -6,10 +6,11 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { getWatchedCounts } from '@/lib/db';
-import { getShowDetailsCached, posterUrl } from '@/lib/tmdb';
+import { getWatchedCounts, getWatchedMovies } from '@/lib/db';
+import { getMovieDetailsCached, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
 
 const FALLBACK_RUNTIME_MIN = 40;
+const FALLBACK_MOVIE_RUNTIME_MIN = 110;
 
 interface ShowStat {
   tmdb_show_id: number;
@@ -21,8 +22,11 @@ interface ShowStat {
 
 interface Stats {
   totalMinutes: number;
+  tvMinutes: number;
+  movieMinutes: number;
   totalEpisodes: number;
   totalShows: number;
+  totalMovies: number;
   topShows: ShowStat[];
 }
 
@@ -46,6 +50,16 @@ function formatDuration(totalMinutes: number) {
   return { months, days, hours, minutes };
 }
 
+/** Versão curta ("3d 14h", "5h 20min", "42 min") para os quadrinhos. */
+function shortDuration(totalMinutes: number) {
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}min`;
+  return `${minutes} min`;
+}
+
 export default function StatsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
@@ -58,7 +72,22 @@ export default function StatsScreen() {
 
     (async () => {
       try {
-        const counts = await getWatchedCounts();
+        const [counts, movies] = await Promise.all([
+          getWatchedCounts(),
+          getWatchedMovies(user.id),
+        ]);
+        const movieMinutes = (
+          await Promise.all(
+            movies.map(async (movie) => {
+              try {
+                const details = await getMovieDetailsCached(movie.tmdb_id);
+                return details.runtime || FALLBACK_MOVIE_RUNTIME_MIN;
+              } catch {
+                return FALLBACK_MOVIE_RUNTIME_MIN;
+              }
+            })
+          )
+        ).reduce((acc, minutes) => acc + minutes, 0);
         const shows = await Promise.all(
           counts.map(async (count) => {
             try {
@@ -83,10 +112,14 @@ export default function StatsScreen() {
         );
         if (cancelled) return;
         shows.sort((a, b) => b.minutes - a.minutes);
+        const tvMinutes = shows.reduce((acc, show) => acc + show.minutes, 0);
         setStats({
-          totalMinutes: shows.reduce((acc, show) => acc + show.minutes, 0),
+          totalMinutes: tvMinutes + movieMinutes,
+          tvMinutes,
+          movieMinutes,
           totalEpisodes: shows.reduce((acc, show) => acc + show.episodes, 0),
           totalShows: shows.length,
+          totalMovies: movies.length,
           topShows: shows.slice(0, 10),
         });
       } catch (err) {
@@ -135,7 +168,7 @@ export default function StatsScreen() {
         <View style={styles.durationRow}>
           {duration.months > 0 && (
             <View style={styles.durationBlock}>
-              <ThemedText type="subtitle" style={{ color: theme.accent }}>
+              <ThemedText type="subtitle" style={{ color: theme.gold }}>
                 {duration.months}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
@@ -144,7 +177,7 @@ export default function StatsScreen() {
             </View>
           )}
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.accent }}>
+            <ThemedText type="subtitle" style={{ color: theme.gold }}>
               {duration.days}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -152,7 +185,7 @@ export default function StatsScreen() {
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.accent }}>
+            <ThemedText type="subtitle" style={{ color: theme.gold }}>
               {duration.hours}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -160,7 +193,7 @@ export default function StatsScreen() {
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.accent }}>
+            <ThemedText type="subtitle" style={{ color: theme.gold }}>
               {duration.minutes}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -172,7 +205,26 @@ export default function StatsScreen() {
 
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.accent }}>
+          <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            {shortDuration(stats.tvMinutes)}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Tempo em séries
+          </ThemedText>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            {shortDuration(stats.movieMinutes)}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Tempo em filmes
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="subtitle" style={{ color: theme.gold }}>
             {stats.totalEpisodes}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -180,11 +232,19 @@ export default function StatsScreen() {
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.accent }}>
+          <ThemedText type="subtitle" style={{ color: theme.gold }}>
             {stats.totalShows}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Séries
+          </ThemedText>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            {stats.totalMovies}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Filmes
           </ThemedText>
         </View>
       </View>
@@ -222,7 +282,7 @@ export default function StatsScreen() {
       )}
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-        Tempo estimado com base na duração média dos episódios informada pela TMDB.
+        Tempo estimado com base na duração dos episódios e filmes informada pela TMDB.
       </ThemedText>
     </ScrollView>
   );

@@ -18,6 +18,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="show/[id]/index" options={{ title: 'Série' }} />
+          <Stack.Screen name="movie/[id]" options={{ title: 'Filme' }} />
           <Stack.Screen name="show/[id]/season/[seasonNumber]" options={{ title: 'Temporada' }} />
           <Stack.Screen
             name="episode/[showId]/[seasonNumber]/[episodeNumber]"
@@ -25,6 +26,7 @@ export default function RootLayout() {
           />
           <Stack.Screen name="import-tv-time" options={{ title: 'Importar do TV Time' }} />
           <Stack.Screen name="friends" options={{ title: 'Amigos' }} />
+          <Stack.Screen name="blocked-users" options={{ title: 'Usuários bloqueados' }} />
           <Stack.Screen name="stats" options={{ title: 'Estatísticas' }} />
         </Stack>
       </ThemeProvider>

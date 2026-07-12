@@ -7,7 +7,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 
-/** Logo + nome do app, usado como título da aba Minhas Séries. */
+/** Logo + nome do app, usado como título da aba Watchlist. */
 function AppHeaderTitle() {
   const theme = useTheme();
   return (
@@ -67,7 +67,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Minhas Séries',
+          title: 'Watchlist',
           headerTitle: () => <AppHeaderTitle />,
           headerTitleAlign: 'left',
           tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,

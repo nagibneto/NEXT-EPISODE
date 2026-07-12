@@ -12,14 +12,22 @@ interface ShowCardProps {
   name: string;
   posterPath: string | null;
   subtitle?: string;
+  /** Para onde o card leva: série (padrão) ou filme. */
+  media?: 'tv' | 'movie';
 }
 
-export function ShowCard({ tmdbId, name, posterPath, subtitle }: ShowCardProps) {
+export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv' }: ShowCardProps) {
   const theme = useTheme();
   const uri = posterUrl(posterPath);
 
   return (
-    <Link href={{ pathname: '/show/[id]', params: { id: String(tmdbId) } }} asChild>
+    <Link
+      href={
+        media === 'movie'
+          ? { pathname: '/movie/[id]', params: { id: String(tmdbId) } }
+          : { pathname: '/show/[id]', params: { id: String(tmdbId) } }
+      }
+      asChild>
       <Pressable style={styles.card}>
         {uri ? (
           <Image source={{ uri }} style={styles.poster} contentFit="cover" transition={150} />

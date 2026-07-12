@@ -8,7 +8,12 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { getWatchedEpisodes, markEpisodeWatched } from '@/lib/db';
+import {
+  getWatchedEpisodes,
+  markEpisodeWatched,
+  markSeasonWatched,
+  unmarkSeasonWatched,
+} from '@/lib/db';
 import { getSeasonDetails, stillUrl, type TmdbSeasonDetails } from '@/lib/tmdb';
 
 export default function SeasonScreen() {
@@ -21,6 +26,7 @@ export default function SeasonScreen() {
   const [season, setSeason] = useState<TmdbSeasonDetails | null>(null);
   const [watched, setWatched] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [markingSeason, setMarkingSeason] = useState(false);
 
   useEffect(() => {
     getSeasonDetails(showId, seasonNumber)
@@ -87,6 +93,37 @@ export default function SeasonScreen() {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+  const releasedEpisodes = season.episodes.filter(
+    (episode) => !!episode.air_date && episode.air_date <= today
+  );
+  const allWatched =
+    releasedEpisodes.length > 0 &&
+    releasedEpisodes.every((episode) => watched.has(episode.episode_number));
+
+  async function toggleSeasonWatched() {
+    if (!user || markingSeason) return;
+    setMarkingSeason(true);
+    const previous = watched;
+    try {
+      if (allWatched) {
+        setWatched(new Set());
+        await unmarkSeasonWatched(user.id, showId, seasonNumber);
+      } else {
+        setWatched(new Set(releasedEpisodes.map((episode) => episode.episode_number)));
+        await markSeasonWatched(
+          user.id,
+          showId,
+          seasonNumber,
+          releasedEpisodes.map((episode) => episode.episode_number)
+        );
+      }
+    } catch {
+      // Desfaz a atualização otimista se a API falhar.
+      setWatched(previous);
+    } finally {
+      setMarkingSeason(false);
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -95,6 +132,31 @@ export default function SeasonScreen() {
         data={season.episodes}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          releasedEpisodes.length > 0 ? (
+            <Pressable
+              style={[
+                styles.seasonButton,
+                {
+                  backgroundColor: allWatched ? theme.backgroundElement : theme.accent,
+                  opacity: markingSeason ? 0.6 : 1,
+                },
+              ]}
+              disabled={markingSeason}
+              onPress={toggleSeasonWatched}>
+              <Ionicons
+                name={allWatched ? 'close-circle-outline' : 'checkmark-done'}
+                size={18}
+                color={allWatched ? theme.text : theme.accentText}
+              />
+              <ThemedText
+                type="smallBold"
+                style={{ color: allWatched ? theme.text : theme.accentText }}>
+                {allWatched ? 'Desmarcar temporada' : 'Marcar temporada como assistida'}
+              </ThemedText>
+            </Pressable>
+          ) : null
+        }
         renderItem={({ item }) => {
           const released = !!item.air_date && item.air_date <= today;
           const still = stillUrl(item.still_path);
@@ -189,5 +251,14 @@ const styles = StyleSheet.create({
   },
   watchedButton: {
     paddingHorizontal: Spacing.two,
+  },
+  seasonButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: Spacing.one,
   },
 });

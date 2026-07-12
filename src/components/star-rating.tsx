@@ -32,7 +32,7 @@ export function StarRating({ value, onChange, disabled }: StarRatingProps) {
               const next = rating === starValue ? starValue - 1 : starValue;
               onChange?.(next);
             }}>
-            <ThemedText style={[styles.star, { color: filled || half ? theme.accent : theme.backgroundSelected }]}>
+            <ThemedText style={[styles.star, { color: filled || half ? theme.gold : theme.backgroundSelected }]}>
               {half ? '⯨' : '★'}
             </ThemedText>
           </Pressable>

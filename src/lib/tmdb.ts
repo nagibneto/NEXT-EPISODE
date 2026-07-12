@@ -132,6 +132,61 @@ export function getShowDetailsCached(showId: number) {
   return cached;
 }
 
+// ---------- Filmes ----------
+
+export interface TmdbMovieSummary {
+  id: number;
+  title: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  release_date: string | null;
+  vote_average: number;
+}
+
+export interface TmdbMovieDetails extends TmdbMovieSummary {
+  genres: { id: number; name: string }[];
+  /** Duração em minutos (pode vir 0 quando o TMDB não tem o dado). */
+  runtime: number | null;
+  status: string;
+  tagline: string | null;
+}
+
+export function searchMovies(query: string, page = 1) {
+  return get<{ results: TmdbMovieSummary[]; total_pages: number }>('/search/movie', {
+    query,
+    page: String(page),
+    include_adult: 'false',
+  });
+}
+
+export function getPopularMovies(page = 1) {
+  return get<{ results: TmdbMovieSummary[]; total_pages: number }>('/movie/popular', {
+    page: String(page),
+  });
+}
+
+export function getMovieDetails(movieId: number) {
+  return get<TmdbMovieDetails>(`/movie/${movieId}`);
+}
+
+// Mesmo esquema de cache das séries, para telas que consultam muitos filmes
+// de uma vez (estatísticas).
+const movieDetailsCache = new Map<number, Promise<TmdbMovieDetails>>();
+
+export function getMovieDetailsCached(movieId: number) {
+  let cached = movieDetailsCache.get(movieId);
+  if (!cached) {
+    cached = getMovieDetails(movieId).catch((error) => {
+      // Não guarda falhas no cache para permitir nova tentativa.
+      movieDetailsCache.delete(movieId);
+      throw error;
+    });
+    movieDetailsCache.set(movieId, cached);
+  }
+  return cached;
+}
+
 export function getSeasonDetails(showId: number, seasonNumber: number) {
   return get<TmdbSeasonDetails>(`/tv/${showId}/season/${seasonNumber}`);
 }

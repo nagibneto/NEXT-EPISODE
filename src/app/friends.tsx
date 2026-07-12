@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -153,6 +154,7 @@ export default function FriendsScreen() {
   function renderProfile({ item }: { item: Profile }) {
     return (
       <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
         <View style={styles.rowInfo}>
           <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -168,6 +170,7 @@ export default function FriendsScreen() {
     const busy = busyIds.has(item.id);
     return (
       <View key={item.id} style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
         <View style={styles.rowInfo}>
           <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">

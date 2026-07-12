@@ -1,30 +1,31 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { AVATAR_IDS, avatarSource } from '@/lib/avatars';
 import {
   deleteAccount,
-  getFollowedShows,
   getProfile,
   profileDisplayName,
+  updateAvatar,
   updateDisplayName,
   type Profile,
 } from '@/lib/db';
 import { unregisterPushToken } from '@/lib/notifications';
-import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [followedCount, setFollowedCount] = useState<number | null>(null);
-  const [watchedCount, setWatchedCount] = useState<number | null>(null);
+  const [choosingAvatar, setChoosingAvatar] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nickname, setNickname] = useState('');
   const [saving, setSaving] = useState(false);
@@ -37,16 +38,22 @@ export default function ProfileScreen() {
       getProfile(user.id)
         .then((data) => setProfile(data))
         .catch(() => {});
-      getFollowedShows(user.id)
-        .then((shows) => setFollowedCount(shows.length))
-        .catch(() => {});
-      supabase
-        .from('watched_episodes')
-        .select('tmdb_show_id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .then(({ count }) => setWatchedCount(count ?? 0));
     }, [user])
   );
+
+  async function handleChooseAvatar(avatarId: number) {
+    if (!user) return;
+    const previous = profile?.avatar_id ?? null;
+    // Atualização otimista: mostra o avatar novo na hora e desfaz se falhar.
+    setProfile((prev) => (prev ? { ...prev, avatar_id: avatarId } : prev));
+    setChoosingAvatar(false);
+    try {
+      await updateAvatar(user.id, avatarId);
+    } catch (err) {
+      setProfile((prev) => (prev ? { ...prev, avatar_id: previous } : prev));
+      setError(err instanceof Error ? err.message : 'Não foi possível salvar o avatar.');
+    }
+  }
 
   function startEditing() {
     setNickname(profile ? profileDisplayName(profile) : '');
@@ -108,6 +115,18 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+        <View style={styles.avatarRow}>
+          <Pressable hitSlop={4} onPress={() => setChoosingAvatar(true)}>
+            <UserAvatar
+              avatarId={profile?.avatar_id}
+              name={profile ? profileDisplayName(profile) : '?'}
+              size={64}
+            />
+            <View style={[styles.avatarEditBadge, { backgroundColor: theme.accent }]}>
+              <Ionicons name="pencil" size={12} color={theme.accentText} />
+            </View>
+          </Pressable>
+        </View>
         {editing ? (
           <View style={styles.editRow}>
             <TextInput
@@ -159,68 +178,102 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.accent }}>
-            {followedCount ?? '–'}
+      <Modal
+        visible={choosingAvatar}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChoosingAvatar(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setChoosingAvatar(false)}>
+          <Pressable
+            style={[styles.avatarModal, { backgroundColor: theme.backgroundElement }]}
+            // Impede que o toque dentro do cartão feche o modal.
+            onPress={(event) => event.stopPropagation()}>
+            <ThemedText type="subtitle" style={styles.avatarModalTitle}>
+              Escolha seu avatar
+            </ThemedText>
+            <View style={styles.avatarGrid}>
+              {AVATAR_IDS.map((avatarId) => {
+                const selected = profile?.avatar_id === avatarId;
+                return (
+                  <Pressable
+                    key={avatarId}
+                    style={[
+                      styles.avatarOption,
+                      selected && { borderColor: theme.accent, borderWidth: 3 },
+                    ]}
+                    onPress={() => handleChooseAvatar(avatarId)}>
+                    <Image
+                      source={avatarSource(avatarId)!}
+                      style={styles.avatarOptionImage}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <View style={styles.grid}>
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/stats')}>
+          <Ionicons name="stats-chart" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Estatísticas
           </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Séries seguidas
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/friends')}>
+          <Ionicons name="people" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Encontrar amigos
           </ThemedText>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.accent }}>
-            {watchedCount ?? '–'}
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/import-tv-time')}>
+          <Ionicons name="cloud-download" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Importar do TV Time
           </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Episódios assistidos
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/blocked-users')}>
+          <Ionicons name="hand-left" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Bloqueados
           </ThemedText>
-        </View>
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={22} color={theme.danger} />
+          <ThemedText type="smallBold" themeColor="danger" style={styles.tileLabel}>
+            Sair da conta
+          </ThemedText>
+        </Pressable>
+
+        <Pressable
+          disabled={deleting}
+          style={[
+            styles.tile,
+            { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
+          ]}
+          onPress={handleDeleteAccount}>
+          <Ionicons name="trash-outline" size={22} color={theme.danger} />
+          <ThemedText type="smallBold" themeColor="danger" style={styles.tileLabel}>
+            {deleting ? 'Excluindo…' : 'Excluir conta'}
+          </ThemedText>
+        </Pressable>
       </View>
-
-      <Pressable
-        style={[styles.actionButton, { backgroundColor: theme.backgroundElement }]}
-        onPress={() => router.push('/stats')}>
-        <ThemedText type="smallBold" themeColor="accent">
-          Estatísticas de tempo assistido
-        </ThemedText>
-      </Pressable>
-
-      <Pressable
-        style={[styles.actionButton, { backgroundColor: theme.backgroundElement }]}
-        onPress={() => router.push('/friends')}>
-        <ThemedText type="smallBold" themeColor="accent">
-          Encontrar amigos
-        </ThemedText>
-      </Pressable>
-
-      <Pressable
-        style={[styles.actionButton, { backgroundColor: theme.backgroundElement }]}
-        onPress={() => router.push('/import-tv-time')}>
-        <ThemedText type="smallBold" themeColor="accent">
-          Importar histórico do TV Time
-        </ThemedText>
-      </Pressable>
-
-      <Pressable
-        style={[styles.actionButton, { backgroundColor: theme.backgroundElement }]}
-        onPress={handleSignOut}>
-        <ThemedText type="smallBold" themeColor="danger">
-          Sair da conta
-        </ThemedText>
-      </Pressable>
-
-      <Pressable
-        disabled={deleting}
-        style={[
-          styles.actionButton,
-          { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
-        ]}
-        onPress={handleDeleteAccount}>
-        <ThemedText type="smallBold" themeColor="danger">
-          {deleting ? 'Excluindo…' : 'Excluir conta'}
-        </ThemedText>
-      </Pressable>
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.credit}>
         Dados de séries fornecidos por TMDB (themoviedb.org).
@@ -239,6 +292,49 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.four,
     gap: Spacing.one,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    marginBottom: Spacing.one,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    borderRadius: 999,
+    padding: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  avatarModal: {
+    borderRadius: 16,
+    padding: Spacing.four,
+    gap: Spacing.three,
+    width: '100%',
+    maxWidth: 360,
+  },
+  avatarModalTitle: {
+    textAlign: 'center',
+  },
+  avatarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  avatarOption: {
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  avatarOptionImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   nameRow: {
     flexDirection: 'row',
@@ -261,21 +357,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
   },
-  statsRow: {
+  grid: {
     flexDirection: 'row',
-    gap: Spacing.three,
+    flexWrap: 'wrap',
+    gap: Spacing.two,
   },
-  statCard: {
-    flex: 1,
+  tile: {
+    // Dois por linha: 45% de base + grow preenche a linha junto com o gap.
+    flexGrow: 1,
+    flexBasis: '45%',
     borderRadius: 12,
-    padding: Spacing.three,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.two,
     alignItems: 'center',
     gap: Spacing.one,
   },
-  actionButton: {
-    borderRadius: 12,
-    padding: Spacing.three,
-    alignItems: 'center',
+  tileLabel: {
+    textAlign: 'center',
   },
   credit: {
     textAlign: 'center',

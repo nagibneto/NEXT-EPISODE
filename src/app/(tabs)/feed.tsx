@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -111,7 +112,14 @@ export default function FeedScreen() {
         )}
         <View style={styles.itemBody}>
           <View style={styles.itemHeader}>
-            <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
+            <View style={styles.itemUser}>
+              <UserAvatar
+                avatarId={item.user.avatar_id}
+                name={profileDisplayName(item.user)}
+                size={24}
+              />
+              <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
+            </View>
             <ThemedText type="small" themeColor="textSecondary">
               {relativeDate(item.date)}
             </ThemedText>
@@ -230,6 +238,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  itemUser: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    flexShrink: 1,
   },
   commentImage: {
     width: '100%',

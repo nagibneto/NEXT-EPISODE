@@ -14,8 +14,10 @@ export const Colors = {
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
-    accent: '#F5C518',
-    accentText: '#1a1a1a',
+    // Azul do logo para ações; amarelo do logo para números e estrelas.
+    accent: '#2E7CF0',
+    accentText: '#ffffff',
+    gold: '#F5C518',
     danger: '#D93025',
   },
   dark: {
@@ -24,8 +26,10 @@ export const Colors = {
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
-    accent: '#F5C518',
-    accentText: '#1a1a1a',
+    // Azul mais claro para manter contraste sobre fundo escuro.
+    accent: '#5C9EFF',
+    accentText: '#081326',
+    gold: '#F5C518',
     danger: '#F28B82',
   },
 } as const;

@@ -1,0 +1,44 @@
+CATEGORIA
+Entretenimento
+
+E-MAIL DE CONTATO
+nagibneto_2@hotmail.com
+
+SITE (opcional)
+https://nagibneto.github.io/NEXT-EPISODE/privacy.html
+
+--------------------------------------------------------------------
+DESCRIÇÃO CURTA (máx. 80 caracteres) — contando: 79
+--------------------------------------------------------------------
+Acompanhe séries, avalie episódios e converse com a turma sobre cada um
+
+--------------------------------------------------------------------
+DESCRIÇÃO COMPLETA (máx. 4000 caracteres)
+--------------------------------------------------------------------
+Next Episode é o app pra quem assiste série de verdade: marque o que já viu, dê nota episódio por episódio e converse com seus amigos sobre o que está passando — tudo num só lugar.
+
+ACOMPANHE SUAS SÉRIES
+Siga as séries que você assiste e tenha uma grade só com elas. Marque cada episódio como assistido conforme avança nas temporadas.
+
+AVALIE CADA EPISÓDIO
+Dê sua nota de 1 a 10 pra cada episódio e veja a média de nota da comunidade. Descubra se aquele episódio que você amou (ou odiou) é consenso ou não.
+
+COMENTE E DISCUTA COM A GALERA
+Comente os episódios com texto, foto ou GIF, curta os melhores comentários e responda outras pessoas — vire aquela discussão sobre o último episódio que todo mundo quer participar.
+
+ENCONTRE SEUS AMIGOS
+Busque amigos pelo nome de usuário, mande pedido de amizade e veja o que eles estão assistindo no feed de atividades.
+
+PRÓXIMOS EPISÓDIOS
+Um calendário com a data de estreia dos próximos episódios das suas séries, pra você nunca perder o lançamento.
+
+SUAS ESTATÍSTICAS
+Veja quanto tempo você já passou assistindo série (em meses, dias e horas) e quais séries mais consumiram seu tempo.
+
+NOTIFICAÇÕES
+Receba um aviso quando um novo episódio de uma série que você segue estrear.
+
+JÁ USAVA TV TIME?
+Importe seu histórico de episódios assistidos direto do TV Time e continue de onde parou.
+
+Dados de séries fornecidos por TMDB (themoviedb.org). Next Episode não é endossado nem certificado pelo TMDB.
