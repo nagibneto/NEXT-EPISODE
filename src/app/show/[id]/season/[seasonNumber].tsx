@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,12 +9,14 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  followShowsBulk,
   getWatchedEpisodes,
   markEpisodeWatched,
   markSeasonWatched,
   unmarkSeasonWatched,
 } from '@/lib/db';
-import { getSeasonDetails, stillUrl, type TmdbSeasonDetails } from '@/lib/tmdb';
+import { syncEpisodeNotifications } from '@/lib/notifications';
+import { getSeasonDetails, getShowDetailsCached, stillUrl, type TmdbSeasonDetails } from '@/lib/tmdb';
 
 export default function SeasonScreen() {
   const theme = useTheme();
@@ -27,6 +29,27 @@ export default function SeasonScreen() {
   const [watched, setWatched] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [markingSeason, setMarkingSeason] = useState(false);
+  // Evita repetir o upsert de "seguir" a cada episódio marcado nesta tela.
+  const followEnsured = useRef(false);
+
+  /**
+   * Marcar um episódio como assistido também passa a seguir a série, para ela
+   * aparecer na watchlist. O upsert ignora duplicados, então é seguro chamar
+   * mesmo que o usuário já siga.
+   */
+  const ensureFollowing = useCallback(async () => {
+    if (!user || followEnsured.current) return;
+    try {
+      const show = await getShowDetailsCached(showId);
+      await followShowsBulk(user.id, [
+        { tmdb_id: show.id, name: show.name, poster_path: show.poster_path },
+      ]);
+      followEnsured.current = true;
+      syncEpisodeNotifications(user.id).catch(() => {});
+    } catch {
+      // Seguir é efeito colateral: falhar aqui não deve desfazer o "assistido".
+    }
+  }, [user, showId]);
 
   useEffect(() => {
     getSeasonDetails(showId, seasonNumber)
@@ -62,6 +85,7 @@ export default function SeasonScreen() {
       });
       try {
         await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, !isWatched);
+        if (!isWatched) ensureFollowing();
       } catch {
         setWatched((current) => {
           const next = new Set(current);
@@ -71,7 +95,7 @@ export default function SeasonScreen() {
         });
       }
     },
-    [user, watched, showId, seasonNumber]
+    [user, watched, showId, seasonNumber, ensureFollowing]
   );
 
   if (error) {
@@ -116,6 +140,7 @@ export default function SeasonScreen() {
           seasonNumber,
           releasedEpisodes.map((episode) => episode.episode_number)
         );
+        ensureFollowing();
       }
     } catch {
       // Desfaz a atualização otimista se a API falhar.

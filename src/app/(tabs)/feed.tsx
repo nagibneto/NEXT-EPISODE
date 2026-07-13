@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -173,7 +173,7 @@ export default function FeedScreen() {
           keyExtractor={(item, index) =>
             `${item.type}:${item.user.id}:${item.tmdb_show_id}:${item.date}:${index}`
           }
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, !(items ?? []).length && styles.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             <View style={styles.center}>
@@ -184,13 +184,14 @@ export default function FeedScreen() {
               <ThemedText themeColor="textSecondary" style={styles.message}>
                 Siga amigos para ver o que eles andam assistindo e comentando.
               </ThemedText>
-              <Link href="/friends" asChild>
-                <Pressable style={[styles.friendsButton, { backgroundColor: theme.accent }]}>
-                  <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-                    Encontrar amigos
-                  </ThemedText>
-                </Pressable>
-              </Link>
+              <Pressable
+                style={[styles.friendsButton, { backgroundColor: theme.accent }]}
+                onPress={() => router.push('/friends')}>
+                <Ionicons name="person-add" size={18} color={theme.accentText} />
+                <ThemedText type="smallBold" style={[styles.friendsButtonLabel, { color: theme.accentText }]}>
+                  Encontrar amigos
+                </ThemedText>
+              </Pressable>
             </View>
           }
           renderItem={renderItem}
@@ -210,7 +211,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.four,
     gap: Spacing.two,
-    marginTop: Spacing.six,
   },
   message: {
     textAlign: 'center',
@@ -218,6 +218,10 @@ const styles = StyleSheet.create({
   list: {
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  // Faz o estado vazio ocupar a tela toda para o botão ficar no centro.
+  listEmpty: {
+    flexGrow: 1,
   },
   item: {
     flexDirection: 'row',
@@ -252,9 +256,16 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one,
   },
   friendsButton: {
-    borderRadius: 12,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: 12,
-    marginTop: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.five,
+    paddingVertical: 14,
+    marginTop: Spacing.three,
+    elevation: 2,
+  },
+  friendsButtonLabel: {
+    fontSize: 16,
   },
 });

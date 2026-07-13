@@ -214,6 +214,21 @@ export default function FriendsScreen() {
         />
       </View>
 
+      {/* TODO: habilitar quando o link de convite (deep link) estiver pronto. */}
+      <Pressable
+        disabled
+        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name="share-outline" size={18} color={theme.textSecondary} />
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.inviteLabel}>
+          Convidar amigos
+        </ThemedText>
+        <View style={[styles.soonBadge, { backgroundColor: theme.backgroundSelected }]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Em breve
+          </ThemedText>
+        </View>
+      </Pressable>
+
       {error && (
         <ThemedText type="small" themeColor="danger" style={styles.message}>
           {error}
@@ -316,5 +331,21 @@ const styles = StyleSheet.create({
   message: {
     textAlign: 'center',
     marginTop: Spacing.three,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 12,
+    gap: Spacing.two,
+  },
+  inviteLabel: {
+    flex: 1,
+  },
+  soonBadge: {
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 4,
   },
 });

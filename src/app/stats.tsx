@@ -1,6 +1,8 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -18,6 +20,8 @@ interface ShowStat {
   poster_path: string | null;
   episodes: number;
   minutes: number;
+  /** Episódios já exibidos segundo a TMDB; null quando não deu para calcular. */
+  aired: number | null;
 }
 
 interface Stats {
@@ -28,6 +32,10 @@ interface Stats {
   totalShows: number;
   totalMovies: number;
   topShows: ShowStat[];
+  /** Séries com todos os episódios já exibidos assistidos. */
+  finishedShows: ShowStat[];
+  /** Séries com episódios exibidos ainda por assistir. */
+  pendingShows: ShowStat[];
 }
 
 /** Duração típica de um episódio da série, com fallback quando a TMDB não informa. */
@@ -40,6 +48,25 @@ function episodeRuntime(details: {
     return sum / details.episode_run_time.length;
   }
   return details.last_episode_to_air?.runtime || FALLBACK_RUNTIME_MIN;
+}
+
+/**
+ * Quantos episódios da série já foram ao ar: temporadas anteriores completas
+ * (especiais fora) + posição do último episódio exibido na temporada atual.
+ * O number_of_episodes sozinho não serve porque inclui episódios anunciados
+ * que ainda não estrearam.
+ */
+function airedEpisodeCount(details: {
+  seasons: { season_number: number; episode_count: number }[];
+  last_episode_to_air: { season_number: number; episode_number: number } | null;
+  number_of_episodes: number;
+}) {
+  const last = details.last_episode_to_air;
+  if (!last) return details.number_of_episodes;
+  const previousSeasons = details.seasons
+    .filter((s) => s.season_number > 0 && s.season_number < last.season_number)
+    .reduce((acc, s) => acc + s.episode_count, 0);
+  return previousSeasons + last.episode_number;
 }
 
 function formatDuration(totalMinutes: number) {
@@ -58,6 +85,53 @@ function shortDuration(totalMinutes: number) {
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}min`;
   return `${minutes} min`;
+}
+
+/** Linha clicável de série nas seções de finalizadas/pendentes. */
+function ShowProgressRow({ show, finished }: { show: ShowStat; finished: boolean }) {
+  const theme = useTheme();
+  const poster = posterUrl(show.poster_path, 'w185');
+  const progress =
+    show.aired && show.aired > 0 ? Math.min(show.episodes / show.aired, 1) : null;
+  const subtitle = finished
+    ? `${Math.min(show.episodes, show.aired ?? show.episodes)} de ${show.aired} episódios`
+    : show.aired
+      ? `${show.episodes} de ${show.aired} episódios · faltam ${show.aired - show.episodes}`
+      : `${show.episodes} episódios assistidos`;
+  return (
+    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }} asChild>
+      <Pressable style={[styles.showRow, { backgroundColor: theme.backgroundElement }]}>
+        {poster ? (
+          <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
+        ) : (
+          <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
+        )}
+        <View style={styles.showInfo}>
+          <ThemedText type="smallBold" numberOfLines={1}>
+            {show.name}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {subtitle}
+          </ThemedText>
+          {!finished && progress !== null && (
+            <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: theme.accent, width: `${Math.round(progress * 100)}%` },
+                ]}
+              />
+            </View>
+          )}
+        </View>
+        {finished ? (
+          <Ionicons name="checkmark-circle" size={22} color={theme.accent} />
+        ) : (
+          <ThemedText themeColor="textSecondary">›</ThemedText>
+        )}
+      </Pressable>
+    </Link>
+  );
 }
 
 export default function StatsScreen() {
@@ -98,6 +172,7 @@ export default function StatsScreen() {
                 poster_path: details.poster_path,
                 episodes: count.episode_count,
                 minutes: count.episode_count * episodeRuntime(details),
+                aired: airedEpisodeCount(details),
               };
             } catch {
               return {
@@ -106,6 +181,7 @@ export default function StatsScreen() {
                 poster_path: null,
                 episodes: count.episode_count,
                 minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
+                aired: null,
               };
             }
           })
@@ -113,6 +189,14 @@ export default function StatsScreen() {
         if (cancelled) return;
         shows.sort((a, b) => b.minutes - a.minutes);
         const tvMinutes = shows.reduce((acc, show) => acc + show.minutes, 0);
+        const finishedShows = shows
+          .filter((show) => show.aired !== null && show.aired > 0 && show.episodes >= show.aired)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const finishedIds = new Set(finishedShows.map((show) => show.tmdb_show_id));
+        const pendingShows = shows
+          .filter((show) => !finishedIds.has(show.tmdb_show_id))
+          // As mais próximas de terminar primeiro.
+          .sort((a, b) => b.episodes / (b.aired || Infinity) - a.episodes / (a.aired || Infinity));
         setStats({
           totalMinutes: tvMinutes + movieMinutes,
           tvMinutes,
@@ -121,6 +205,8 @@ export default function StatsScreen() {
           totalShows: shows.length,
           totalMovies: movies.length,
           topShows: shows.slice(0, 10),
+          finishedShows,
+          pendingShows,
         });
       } catch (err) {
         if (!cancelled) {
@@ -258,26 +344,52 @@ export default function StatsScreen() {
             const poster = posterUrl(show.poster_path, 'w185');
             const hours = Math.round(show.minutes / 60);
             return (
-              <View
+              <Link
                 key={show.tmdb_show_id}
-                style={[styles.showRow, { backgroundColor: theme.backgroundElement }]}>
-                {poster ? (
-                  <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
-                ) : (
-                  <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
-                )}
-                <View style={styles.showInfo}>
-                  <ThemedText type="smallBold" numberOfLines={1}>
-                    {show.name}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {show.episodes} {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
-                    {hours > 0 ? `${hours}h` : `${Math.round(show.minutes)} min`}
-                  </ThemedText>
-                </View>
-              </View>
+                href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }}
+                asChild>
+                <Pressable style={[styles.showRow, { backgroundColor: theme.backgroundElement }]}>
+                  {poster ? (
+                    <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
+                  )}
+                  <View style={styles.showInfo}>
+                    <ThemedText type="smallBold" numberOfLines={1}>
+                      {show.name}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {show.episodes} {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
+                      {hours > 0 ? `${hours}h` : `${Math.round(show.minutes)} min`}
+                    </ThemedText>
+                  </View>
+                  <ThemedText themeColor="textSecondary">›</ThemedText>
+                </Pressable>
+              </Link>
             );
           })}
+        </>
+      )}
+
+      {stats.pendingShows.length > 0 && (
+        <>
+          <ThemedText type="smallBold" style={styles.sectionTitle}>
+            Séries pendentes ({stats.pendingShows.length})
+          </ThemedText>
+          {stats.pendingShows.map((show) => (
+            <ShowProgressRow key={show.tmdb_show_id} show={show} finished={false} />
+          ))}
+        </>
+      )}
+
+      {stats.finishedShows.length > 0 && (
+        <>
+          <ThemedText type="smallBold" style={styles.sectionTitle}>
+            Séries finalizadas ({stats.finishedShows.length})
+          </ThemedText>
+          {stats.finishedShows.map((show) => (
+            <ShowProgressRow key={show.tmdb_show_id} show={show} finished />
+          ))}
         </>
       )}
 
@@ -346,6 +458,16 @@ const styles = StyleSheet.create({
   showInfo: {
     flex: 1,
     gap: Spacing.half,
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: Spacing.half,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   note: {
     textAlign: 'center',

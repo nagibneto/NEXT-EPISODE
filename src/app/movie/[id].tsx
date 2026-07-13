@@ -155,7 +155,7 @@ export default function MovieDetailsScreen() {
               <StarRating value={myRating} onChange={handleRate} />
               {average && average.count > 0 && (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Média da comunidade: {average.average.toFixed(1)}/10 ({average.count}{' '}
+                  Média da comunidade: {(average.average / 2).toFixed(1)}/5 ({average.count}{' '}
                   {average.count === 1 ? 'voto' : 'votos'})
                 </ThemedText>
               )}

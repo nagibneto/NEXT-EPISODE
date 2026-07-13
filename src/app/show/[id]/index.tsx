@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { Link, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,7 +9,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { followShow, isFollowing, unfollowShow } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
-import { backdropUrl, getShowDetails, posterUrl, type TmdbShowDetails } from '@/lib/tmdb';
+import {
+  backdropUrl,
+  getSeasonAverageRatings,
+  getShowDetails,
+  posterUrl,
+  type TmdbShowDetails,
+} from '@/lib/tmdb';
 
 export default function ShowDetailsScreen() {
   const theme = useTheme();
@@ -18,6 +24,7 @@ export default function ShowDetailsScreen() {
   const showId = Number(id);
 
   const [show, setShow] = useState<TmdbShowDetails | null>(null);
+  const [seasonRatings, setSeasonRatings] = useState<Map<number, number>>(new Map());
   const [following, setFollowing] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,6 +39,35 @@ export default function ShowDetailsScreen() {
         .catch(() => setFollowing(false));
     }
   }, [showId, user]);
+
+  // Revalida ao voltar da temporada: marcar um episódio lá passa a seguir a
+  // série, e o botão "Seguindo" precisa refletir isso.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      isFollowing(user.id, showId)
+        .then(setFollowing)
+        .catch(() => {});
+    }, [user, showId])
+  );
+
+  useEffect(() => {
+    if (!show) return;
+    const numbers = show.seasons
+      .filter((season) => season.season_number > 0)
+      .map((season) => season.season_number);
+    if (numbers.length === 0) return;
+    let cancelled = false;
+    // A nota é um extra: se a busca falhar, a tela segue funcionando sem ela.
+    getSeasonAverageRatings(show.id, numbers)
+      .then((ratings) => {
+        if (!cancelled) setSeasonRatings(ratings);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [show]);
 
   async function toggleFollow() {
     if (!user || !show || following === null) return;
@@ -167,6 +203,11 @@ export default function ShowDetailsScreen() {
                 {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
               </ThemedText>
             </View>
+            {seasonRatings.has(season.season_number) && (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.seasonRating}>
+                ⭐ {seasonRatings.get(season.season_number)!.toFixed(1)}
+              </ThemedText>
+            )}
             <ThemedText themeColor="textSecondary">›</ThemedText>
           </Pressable>
         </Link>
@@ -243,5 +284,8 @@ const styles = StyleSheet.create({
   seasonText: {
     flex: 1,
     gap: Spacing.half,
+  },
+  seasonRating: {
+    marginRight: Spacing.two,
   },
 });

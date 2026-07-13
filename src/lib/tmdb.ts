@@ -115,6 +115,67 @@ export function getShowDetails(showId: number) {
   return get<TmdbShowDetails>(`/tv/${showId}`);
 }
 
+// ---------- Gêneros e descoberta ----------
+
+export interface TmdbGenre {
+  id: number;
+  name: string;
+}
+
+// A lista de gêneros praticamente não muda; cache pela duração do app.
+const genresCache = new Map<string, Promise<TmdbGenre[]>>();
+
+export function getGenres(media: 'tv' | 'movie') {
+  let cached = genresCache.get(media);
+  if (!cached) {
+    cached = get<{ genres: TmdbGenre[] }>(`/genre/${media}/list`)
+      .then((data) => data.genres)
+      .catch((error) => {
+        // Não guarda falhas no cache para permitir nova tentativa.
+        genresCache.delete(media);
+        throw error;
+      });
+    genresCache.set(media, cached);
+  }
+  return cached;
+}
+
+export interface DiscoverFilters {
+  genreId?: number | null;
+  /** Nota mínima na escala 0–10 do TMDB. */
+  minRating?: number | null;
+  page?: number;
+}
+
+function discoverParams(filters: DiscoverFilters) {
+  const params: Record<string, string> = {
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    page: String(filters.page ?? 1),
+  };
+  if (filters.genreId) params.with_genres = String(filters.genreId);
+  if (filters.minRating) {
+    params['vote_average.gte'] = String(filters.minRating);
+    // Sem um mínimo de votos, títulos obscuros com 1 voto nota 10 dominam a lista.
+    params['vote_count.gte'] = '200';
+  }
+  return params;
+}
+
+export function discoverShows(filters: DiscoverFilters = {}) {
+  return get<{ results: TmdbShowSummary[]; total_pages: number }>(
+    '/discover/tv',
+    discoverParams(filters)
+  );
+}
+
+export function discoverMovies(filters: DiscoverFilters = {}) {
+  return get<{ results: TmdbMovieSummary[]; total_pages: number }>(
+    '/discover/movie',
+    discoverParams(filters)
+  );
+}
+
 // Cache em memória para telas que consultam muitas séries de uma vez
 // (feed social e estatísticas). Dura enquanto o app estiver aberto.
 const showDetailsCache = new Map<number, Promise<TmdbShowDetails>>();
@@ -189,6 +250,39 @@ export function getMovieDetailsCached(movieId: number) {
 
 export function getSeasonDetails(showId: number, seasonNumber: number) {
   return get<TmdbSeasonDetails>(`/tv/${showId}/season/${seasonNumber}`);
+}
+
+/**
+ * Média das notas dos episódios de cada temporada (escala 0–10 do TMDB),
+ * considerando apenas episódios já votados (vote_average > 0).
+ * Retorna um Map de season_number → média.
+ */
+export async function getSeasonAverageRatings(showId: number, seasonNumbers: number[]) {
+  const ratings = new Map<number, number>();
+  // O append_to_response aceita no máximo 20 sub-requisições por chamada.
+  const chunks: number[][] = [];
+  for (let i = 0; i < seasonNumbers.length; i += 20) {
+    chunks.push(seasonNumbers.slice(i, i + 20));
+  }
+  const responses = await Promise.all(
+    chunks.map((chunk) =>
+      get<Record<string, unknown>>(`/tv/${showId}`, {
+        append_to_response: chunk.map((n) => `season/${n}`).join(','),
+      })
+    )
+  );
+  for (const response of responses) {
+    for (const [key, value] of Object.entries(response)) {
+      const match = /^season\/(\d+)$/.exec(key);
+      if (!match) continue;
+      const episodes = (value as TmdbSeasonDetails).episodes ?? [];
+      const rated = episodes.filter((episode) => episode.vote_average > 0);
+      if (rated.length === 0) continue;
+      const sum = rated.reduce((total, episode) => total + episode.vote_average, 0);
+      ratings.set(Number(match[1]), sum / rated.length);
+    }
+  }
+  return ratings;
 }
 
 export function getEpisodeDetails(showId: number, seasonNumber: number, episodeNumber: number) {

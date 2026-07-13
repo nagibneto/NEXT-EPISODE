@@ -4,10 +4,11 @@
  */
 
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemePreference } from '@/hooks/use-theme-preference';
 
 export function useTheme() {
-  const scheme = useColorScheme();
+  // Respeita a escolha do usuário (Sistema/Claro/Escuro) feita no login/perfil.
+  const { scheme } = useThemePreference();
 
-  return Colors[scheme === 'dark' ? 'dark' : 'light'];
+  return Colors[scheme];
 }

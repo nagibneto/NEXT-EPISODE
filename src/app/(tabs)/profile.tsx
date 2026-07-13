@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { ThemeSelector } from '@/components/theme-selector';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -252,6 +253,13 @@ export default function ProfileScreen() {
           </ThemedText>
         </Pressable>
 
+        <View style={[styles.tile, { backgroundColor: theme.backgroundElement }]}>
+          <ThemeSelector />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Tema
+          </ThemedText>
+        </View>
+
         <Pressable
           style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
           onPress={handleSignOut}>
@@ -265,6 +273,7 @@ export default function ProfileScreen() {
           disabled={deleting}
           style={[
             styles.tile,
+            styles.tileFullWidth,
             { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
           ]}
           onPress={handleDeleteAccount}>
@@ -371,6 +380,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     alignItems: 'center',
     gap: Spacing.one,
+  },
+  tileFullWidth: {
+    flexBasis: '100%',
   },
   tileLabel: {
     textAlign: 'center',

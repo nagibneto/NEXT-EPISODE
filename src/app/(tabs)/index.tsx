@@ -1,4 +1,5 @@
-import { useFocusEffect } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -26,6 +27,7 @@ type LibraryMode = 'tv' | 'movie';
 
 export default function MyShowsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
   const [mode, setMode] = useState<LibraryMode>('tv');
   const [shows, setShows] = useState<FollowedShow[] | null>(null);
@@ -112,7 +114,7 @@ export default function MyShowsScreen() {
           data={movies ?? []}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={3}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, !(movies ?? []).length && styles.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             <View style={styles.center}>
@@ -122,6 +124,14 @@ export default function MyShowsScreen() {
               <ThemedText themeColor="textSecondary" style={styles.message}>
                 Use a aba Buscar para encontrar os filmes que você já assistiu.
               </ThemedText>
+              <Pressable
+                style={[styles.searchButton, { backgroundColor: theme.accent }]}
+                onPress={() => router.push('/search')}>
+                <Ionicons name="search" size={18} color={theme.accentText} />
+                <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
+                  Buscar filmes
+                </ThemedText>
+              </Pressable>
             </View>
           }
           renderItem={({ item }) => (
@@ -138,7 +148,7 @@ export default function MyShowsScreen() {
           data={shows}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={3}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, !(shows ?? []).length && styles.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             <View style={styles.center}>
@@ -148,6 +158,14 @@ export default function MyShowsScreen() {
               <ThemedText themeColor="textSecondary" style={styles.message}>
                 Use a aba Buscar para encontrar e seguir suas séries favoritas.
               </ThemedText>
+              <Pressable
+                style={[styles.searchButton, { backgroundColor: theme.accent }]}
+                onPress={() => router.push('/search')}>
+                <Ionicons name="search" size={18} color={theme.accentText} />
+                <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
+                  Buscar séries
+                </ThemedText>
+              </Pressable>
             </View>
           }
           renderItem={({ item }) => (
@@ -169,7 +187,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.four,
     gap: Spacing.two,
-    marginTop: Spacing.six,
   },
   modeRow: {
     flexDirection: 'row',
@@ -187,7 +204,24 @@ const styles = StyleSheet.create({
   list: {
     padding: Spacing.two,
   },
+  // Faz o estado vazio ocupar a tela toda para o botão ficar no centro.
+  listEmpty: {
+    flexGrow: 1,
+  },
   message: {
     textAlign: 'center',
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.five,
+    paddingVertical: 14,
+    marginTop: Spacing.three,
+    elevation: 2,
+  },
+  searchButtonLabel: {
+    fontSize: 16,
   },
 });
