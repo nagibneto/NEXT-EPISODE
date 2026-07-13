@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -20,8 +19,6 @@ interface ShowStat {
   poster_path: string | null;
   episodes: number;
   minutes: number;
-  /** Episódios já exibidos segundo a TMDB; null quando não deu para calcular. */
-  aired: number | null;
 }
 
 interface Stats {
@@ -31,11 +28,8 @@ interface Stats {
   totalEpisodes: number;
   totalShows: number;
   totalMovies: number;
-  topShows: ShowStat[];
-  /** Séries com todos os episódios já exibidos assistidos. */
-  finishedShows: ShowStat[];
-  /** Séries com episódios exibidos ainda por assistir. */
-  pendingShows: ShowStat[];
+  /** Todas as séries assistidas, das que mais consumiram tempo para as que menos. */
+  shows: ShowStat[];
 }
 
 /** Duração típica de um episódio da série, com fallback quando a TMDB não informa. */
@@ -50,25 +44,6 @@ function episodeRuntime(details: {
   return details.last_episode_to_air?.runtime || FALLBACK_RUNTIME_MIN;
 }
 
-/**
- * Quantos episódios da série já foram ao ar: temporadas anteriores completas
- * (especiais fora) + posição do último episódio exibido na temporada atual.
- * O number_of_episodes sozinho não serve porque inclui episódios anunciados
- * que ainda não estrearam.
- */
-function airedEpisodeCount(details: {
-  seasons: { season_number: number; episode_count: number }[];
-  last_episode_to_air: { season_number: number; episode_number: number } | null;
-  number_of_episodes: number;
-}) {
-  const last = details.last_episode_to_air;
-  if (!last) return details.number_of_episodes;
-  const previousSeasons = details.seasons
-    .filter((s) => s.season_number > 0 && s.season_number < last.season_number)
-    .reduce((acc, s) => acc + s.episode_count, 0);
-  return previousSeasons + last.episode_number;
-}
-
 function formatDuration(totalMinutes: number) {
   const months = Math.floor(totalMinutes / (30 * 24 * 60));
   const days = Math.floor((totalMinutes % (30 * 24 * 60)) / (24 * 60));
@@ -77,7 +52,7 @@ function formatDuration(totalMinutes: number) {
   return { months, days, hours, minutes };
 }
 
-/** Versão curta ("3d 14h", "5h 20min", "42 min") para os quadrinhos. */
+/** Versão curta ("3d 14h", "5h 20min", "42 min") para as linhas e quadrinhos. */
 function shortDuration(totalMinutes: number) {
   const days = Math.floor(totalMinutes / (24 * 60));
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
@@ -85,53 +60,6 @@ function shortDuration(totalMinutes: number) {
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}min`;
   return `${minutes} min`;
-}
-
-/** Linha clicável de série nas seções de finalizadas/pendentes. */
-function ShowProgressRow({ show, finished }: { show: ShowStat; finished: boolean }) {
-  const theme = useTheme();
-  const poster = posterUrl(show.poster_path, 'w185');
-  const progress =
-    show.aired && show.aired > 0 ? Math.min(show.episodes / show.aired, 1) : null;
-  const subtitle = finished
-    ? `${Math.min(show.episodes, show.aired ?? show.episodes)} de ${show.aired} episódios`
-    : show.aired
-      ? `${show.episodes} de ${show.aired} episódios · faltam ${show.aired - show.episodes}`
-      : `${show.episodes} episódios assistidos`;
-  return (
-    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }} asChild>
-      <Pressable style={[styles.showRow, { backgroundColor: theme.backgroundElement }]}>
-        {poster ? (
-          <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
-        ) : (
-          <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
-        )}
-        <View style={styles.showInfo}>
-          <ThemedText type="smallBold" numberOfLines={1}>
-            {show.name}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {subtitle}
-          </ThemedText>
-          {!finished && progress !== null && (
-            <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { backgroundColor: theme.accent, width: `${Math.round(progress * 100)}%` },
-                ]}
-              />
-            </View>
-          )}
-        </View>
-        {finished ? (
-          <Ionicons name="checkmark-circle" size={22} color={theme.accent} />
-        ) : (
-          <ThemedText themeColor="textSecondary">›</ThemedText>
-        )}
-      </Pressable>
-    </Link>
-  );
 }
 
 export default function StatsScreen() {
@@ -172,7 +100,6 @@ export default function StatsScreen() {
                 poster_path: details.poster_path,
                 episodes: count.episode_count,
                 minutes: count.episode_count * episodeRuntime(details),
-                aired: airedEpisodeCount(details),
               };
             } catch {
               return {
@@ -181,7 +108,6 @@ export default function StatsScreen() {
                 poster_path: null,
                 episodes: count.episode_count,
                 minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
-                aired: null,
               };
             }
           })
@@ -189,14 +115,6 @@ export default function StatsScreen() {
         if (cancelled) return;
         shows.sort((a, b) => b.minutes - a.minutes);
         const tvMinutes = shows.reduce((acc, show) => acc + show.minutes, 0);
-        const finishedShows = shows
-          .filter((show) => show.aired !== null && show.aired > 0 && show.episodes >= show.aired)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        const finishedIds = new Set(finishedShows.map((show) => show.tmdb_show_id));
-        const pendingShows = shows
-          .filter((show) => !finishedIds.has(show.tmdb_show_id))
-          // As mais próximas de terminar primeiro.
-          .sort((a, b) => b.episodes / (b.aired || Infinity) - a.episodes / (a.aired || Infinity));
         setStats({
           totalMinutes: tvMinutes + movieMinutes,
           tvMinutes,
@@ -204,9 +122,7 @@ export default function StatsScreen() {
           totalEpisodes: shows.reduce((acc, show) => acc + show.episodes, 0),
           totalShows: shows.length,
           totalMovies: movies.length,
-          topShows: shows.slice(0, 10),
-          finishedShows,
-          pendingShows,
+          shows,
         });
       } catch (err) {
         if (!cancelled) {
@@ -242,6 +158,8 @@ export default function StatsScreen() {
   }
 
   const duration = formatDuration(stats.totalMinutes);
+  // A barrinha de cada série é proporcional à que mais consumiu tempo.
+  const maxMinutes = stats.shows[0]?.minutes ?? 0;
 
   return (
     <ScrollView
@@ -335,14 +253,14 @@ export default function StatsScreen() {
         </View>
       </View>
 
-      {stats.topShows.length > 0 && (
+      {stats.shows.length > 0 && (
         <>
           <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Séries que mais consumiram seu tempo
+            Tempo por série
           </ThemedText>
-          {stats.topShows.map((show) => {
+          {stats.shows.map((show) => {
             const poster = posterUrl(show.poster_path, 'w185');
-            const hours = Math.round(show.minutes / 60);
+            const share = maxMinutes > 0 ? show.minutes / maxMinutes : 0;
             return (
               <Link
                 key={show.tmdb_show_id}
@@ -359,37 +277,27 @@ export default function StatsScreen() {
                       {show.name}
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {show.episodes} {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
-                      {hours > 0 ? `${hours}h` : `${Math.round(show.minutes)} min`}
+                      {show.episodes} {show.episodes === 1 ? 'episódio' : 'episódios'}
                     </ThemedText>
+                    <View style={[styles.timeTrack, { backgroundColor: theme.backgroundSelected }]}>
+                      <View
+                        style={[
+                          styles.timeFill,
+                          {
+                            backgroundColor: theme.accent,
+                            width: `${Math.max(Math.round(share * 100), 2)}%`,
+                          },
+                        ]}
+                      />
+                    </View>
                   </View>
-                  <ThemedText themeColor="textSecondary">›</ThemedText>
+                  <ThemedText type="smallBold" style={{ color: theme.gold }}>
+                    {shortDuration(show.minutes)}
+                  </ThemedText>
                 </Pressable>
               </Link>
             );
           })}
-        </>
-      )}
-
-      {stats.pendingShows.length > 0 && (
-        <>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Séries pendentes ({stats.pendingShows.length})
-          </ThemedText>
-          {stats.pendingShows.map((show) => (
-            <ShowProgressRow key={show.tmdb_show_id} show={show} finished={false} />
-          ))}
-        </>
-      )}
-
-      {stats.finishedShows.length > 0 && (
-        <>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Séries finalizadas ({stats.finishedShows.length})
-          </ThemedText>
-          {stats.finishedShows.map((show) => (
-            <ShowProgressRow key={show.tmdb_show_id} show={show} finished />
-          ))}
         </>
       )}
 
@@ -459,13 +367,13 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  progressTrack: {
+  timeTrack: {
     height: 4,
     borderRadius: 2,
     overflow: 'hidden',
     marginTop: Spacing.half,
   },
-  progressFill: {
+  timeFill: {
     height: '100%',
     borderRadius: 2,
   },

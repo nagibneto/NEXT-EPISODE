@@ -97,11 +97,12 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
   return response.json() as Promise<T>;
 }
 
-export function searchShows(query: string, page = 1) {
+export function searchShows(query: string, page = 1, firstAirDateYear?: number) {
   return get<{ results: TmdbShowSummary[]; total_pages: number }>('/search/tv', {
     query,
     page: String(page),
     include_adult: 'false',
+    ...(firstAirDateYear ? { first_air_date_year: String(firstAirDateYear) } : {}),
   });
 }
 
@@ -213,11 +214,12 @@ export interface TmdbMovieDetails extends TmdbMovieSummary {
   tagline: string | null;
 }
 
-export function searchMovies(query: string, page = 1) {
+export function searchMovies(query: string, page = 1, primaryReleaseYear?: number) {
   return get<{ results: TmdbMovieSummary[]; total_pages: number }>('/search/movie', {
     query,
     page: String(page),
     include_adult: 'false',
+    ...(primaryReleaseYear ? { primary_release_year: String(primaryReleaseYear) } : {}),
   });
 }
 

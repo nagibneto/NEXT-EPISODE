@@ -496,6 +496,26 @@ export async function followShowsBulk(
   if (error) throw error;
 }
 
+export async function importWatchedMoviesBulk(
+  userId: string,
+  movies: { tmdb_id: number; title: string; poster_path: string | null; watched_at: string | null }[]
+) {
+  if (movies.length === 0) return;
+  for (const batch of chunk(movies, IMPORT_CHUNK_SIZE)) {
+    const { error } = await supabase.from('watched_movies').upsert(
+      batch.map((movie) => ({
+        user_id: userId,
+        tmdb_id: movie.tmdb_id,
+        title: movie.title,
+        poster_path: movie.poster_path,
+        ...(movie.watched_at ? { watched_at: movie.watched_at } : {}),
+      })),
+      { onConflict: 'user_id,tmdb_id' }
+    );
+    if (error) throw error;
+  }
+}
+
 // ---------- Amigos ----------
 
 export async function searchProfiles(query: string, excludeUserId: string): Promise<Profile[]> {

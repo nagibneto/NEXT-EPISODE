@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -21,17 +22,31 @@ import {
   type FollowedShow,
   type WatchedMovie,
 } from '@/lib/db';
+import { getShowDetailsCached } from '@/lib/tmdb';
 import { registerPushToken, syncEpisodeNotifications } from '@/lib/notifications';
 
 type LibraryMode = 'tv' | 'movie';
+type ShowStatusFilter = 'ongoing' | 'ended' | null;
+
+/** Compara ignorando maiúsculas e acentos ("josé" casa com "Jose"). */
+function normalize(text: string) {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
 
 export default function MyShowsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [mode, setMode] = useState<LibraryMode>('tv');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ShowStatusFilter>(null);
   const [shows, setShows] = useState<FollowedShow[] | null>(null);
   const [movies, setMovies] = useState<WatchedMovie[] | null>(null);
+  // tmdb_id → série já encerrada? (status "Ended"/"Canceled" na TMDB)
+  const [endedById, setEndedById] = useState<Record<number, boolean>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,11 +75,65 @@ export default function MyShowsScreen() {
     }, [load])
   );
 
+  // Busca o status de cada série na TMDB para o filtro Em andamento/Finalizadas.
+  useEffect(() => {
+    if (!shows) return;
+    let cancelled = false;
+    const missing = shows.filter((show) => endedById[show.tmdb_id] === undefined);
+    if (missing.length === 0) return;
+    (async () => {
+      const entries = await Promise.all(
+        missing.map(async (show) => {
+          try {
+            const details = await getShowDetailsCached(show.tmdb_id);
+            return [show.tmdb_id, details.status === 'Ended' || details.status === 'Canceled'] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
+      if (cancelled) return;
+      setEndedById((prev) => {
+        const next = { ...prev };
+        for (const entry of entries) {
+          if (entry) next[entry[0]] = entry[1];
+        }
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shows, endedById]);
+
   async function handleRefresh() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   }
+
+  const trimmedQuery = normalize(query.trim());
+
+  const filteredShows = useMemo(() => {
+    let list = shows ?? [];
+    if (trimmedQuery) {
+      list = list.filter((show) => normalize(show.name).includes(trimmedQuery));
+    }
+    if (statusFilter) {
+      list = list.filter((show) => {
+        const ended = endedById[show.tmdb_id];
+        if (ended === undefined) return false;
+        return statusFilter === 'ended' ? ended : !ended;
+      });
+    }
+    return list;
+  }, [shows, trimmedQuery, statusFilter, endedById]);
+
+  const filteredMovies = useMemo(() => {
+    const list = movies ?? [];
+    if (!trimmedQuery) return list;
+    return list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
+  }, [movies, trimmedQuery]);
 
   if (shows === null && !error) {
     return (
@@ -75,34 +144,78 @@ export default function MyShowsScreen() {
   }
 
   const showingMovies = mode === 'movie';
+  const filtering = !!trimmedQuery || (!showingMovies && statusFilter !== null);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.modeRow}>
-        {(
-          [
-            { value: 'tv', label: 'Séries' },
-            { value: 'movie', label: 'Filmes' },
-          ] as const
-        ).map((option) => (
-          <Pressable
-            key={option.value}
-            style={[
-              styles.modeButton,
-              {
-                backgroundColor:
-                  mode === option.value ? theme.accent : theme.backgroundElement,
-              },
-            ]}
-            onPress={() => setMode(option.value)}>
-            <ThemedText
-              type="smallBold"
-              style={{ color: mode === option.value ? theme.accentText : theme.text }}>
-              {option.label}
-            </ThemedText>
-          </Pressable>
-        ))}
+      <View style={styles.topRow}>
+        <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
+          {(
+            [
+              { value: 'tv', label: 'Séries' },
+              { value: 'movie', label: 'Filmes' },
+            ] as const
+          ).map((option) => (
+            <Pressable
+              key={option.value}
+              style={[
+                styles.segment,
+                mode === option.value && { backgroundColor: theme.accent },
+              ]}
+              onPress={() => setMode(option.value)}>
+              <ThemedText
+                type="smallBold"
+                style={{
+                  color: mode === option.value ? theme.accentText : theme.textSecondary,
+                }}>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
+          <Ionicons name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="Buscar…"
+            placeholderTextColor={theme.textSecondary}
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+          />
+        </View>
       </View>
+      {!showingMovies && (
+        <View style={styles.statusRow}>
+          {(
+            [
+              { value: 'ongoing', label: 'Em andamento' },
+              { value: 'ended', label: 'Finalizadas' },
+            ] as const
+          ).map((option) => (
+            <Pressable
+              key={option.value}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor:
+                    statusFilter === option.value ? theme.accent : theme.backgroundElement,
+                },
+              ]}
+              onPress={() =>
+                setStatusFilter(statusFilter === option.value ? null : option.value)
+              }>
+              <ThemedText
+                type="small"
+                style={{
+                  color: statusFilter === option.value ? theme.accentText : theme.text,
+                }}>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {error ? (
         <View style={styles.center}>
           <ThemedText themeColor="danger" style={styles.message}>
@@ -111,28 +224,35 @@ export default function MyShowsScreen() {
         </View>
       ) : showingMovies ? (
         <FlatList
-          data={movies ?? []}
+          data={filteredMovies}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={3}
-          contentContainerStyle={[styles.list, !(movies ?? []).length && styles.listEmpty]}
+          contentContainerStyle={[styles.list, !filteredMovies.length && styles.listEmpty]}
+          keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <ThemedText type="subtitle" style={styles.message}>
-                Nenhum filme ainda
-              </ThemedText>
+            filtering ? (
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Use a aba Buscar para encontrar os filmes que você já assistiu.
+                Nenhum filme encontrado com esse filtro.
               </ThemedText>
-              <Pressable
-                style={[styles.searchButton, { backgroundColor: theme.accent }]}
-                onPress={() => router.push('/search')}>
-                <Ionicons name="search" size={18} color={theme.accentText} />
-                <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
-                  Buscar filmes
+            ) : (
+              <View style={styles.center}>
+                <ThemedText type="subtitle" style={styles.message}>
+                  Nenhum filme ainda
                 </ThemedText>
-              </Pressable>
-            </View>
+                <ThemedText themeColor="textSecondary" style={styles.message}>
+                  Use a aba Buscar para encontrar os filmes que você já assistiu.
+                </ThemedText>
+                <Pressable
+                  style={[styles.searchButton, { backgroundColor: theme.accent }]}
+                  onPress={() => router.push('/search')}>
+                  <Ionicons name="search" size={18} color={theme.accentText} />
+                  <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
+                    Buscar filmes
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )
           }
           renderItem={({ item }) => (
             <ShowCard
@@ -145,28 +265,35 @@ export default function MyShowsScreen() {
         />
       ) : (
         <FlatList
-          data={shows}
+          data={filteredShows}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={3}
-          contentContainerStyle={[styles.list, !(shows ?? []).length && styles.listEmpty]}
+          contentContainerStyle={[styles.list, !filteredShows.length && styles.listEmpty]}
+          keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <ThemedText type="subtitle" style={styles.message}>
-                Nenhuma série ainda
-              </ThemedText>
+            filtering ? (
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Use a aba Buscar para encontrar e seguir suas séries favoritas.
+                Nenhuma série encontrada com esse filtro.
               </ThemedText>
-              <Pressable
-                style={[styles.searchButton, { backgroundColor: theme.accent }]}
-                onPress={() => router.push('/search')}>
-                <Ionicons name="search" size={18} color={theme.accentText} />
-                <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
-                  Buscar séries
+            ) : (
+              <View style={styles.center}>
+                <ThemedText type="subtitle" style={styles.message}>
+                  Nenhuma série ainda
                 </ThemedText>
-              </Pressable>
-            </View>
+                <ThemedText themeColor="textSecondary" style={styles.message}>
+                  Use a aba Buscar para encontrar e seguir suas séries favoritas.
+                </ThemedText>
+                <Pressable
+                  style={[styles.searchButton, { backgroundColor: theme.accent }]}
+                  onPress={() => router.push('/search')}>
+                  <Ionicons name="search" size={18} color={theme.accentText} />
+                  <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
+                    Buscar séries
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )
           }
           renderItem={({ item }) => (
             <ShowCard tmdbId={item.tmdb_id} name={item.name} posterPath={item.poster_path} />
@@ -188,18 +315,47 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.two,
   },
-  modeRow: {
+  topRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
     marginHorizontal: Spacing.three,
     marginTop: Spacing.three,
+    marginBottom: Spacing.two,
+  },
+  segmented: {
+    flexDirection: 'row',
+    borderRadius: 999,
+    padding: 2,
+  },
+  segment: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 6,
+  },
+  inputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginHorizontal: Spacing.three,
     marginBottom: Spacing.one,
   },
-  modeButton: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 6,
   },
   list: {
     padding: Spacing.two,
@@ -210,6 +366,8 @@ const styles = StyleSheet.create({
   },
   message: {
     textAlign: 'center',
+    marginTop: Spacing.five,
+    paddingHorizontal: Spacing.four,
   },
   searchButton: {
     flexDirection: 'row',
