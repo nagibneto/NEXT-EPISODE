@@ -26,9 +26,11 @@ import {
   getFollowedShows,
   getWatchedCounts,
   getWatchedMovies,
+  getWatchlistMovies,
   markEpisodeWatched,
   type FollowedShow,
   type WatchedMovie,
+  type WatchlistMovie,
 } from '@/lib/db';
 import { airedEpisodeCount, getShowDetailsCached, posterUrl, stillUrl } from '@/lib/tmdb';
 import { getNextUnwatchedEpisode, type NextEpisode } from '@/lib/watch-next';
@@ -46,6 +48,7 @@ interface HomeCache {
 
 const homeCacheKey = (userId: string) => `home-cache-v1:${userId}`;
 type ShowStatusFilter = 'ongoing' | 'ended' | null;
+type MovieStatusFilter = 'watched' | 'towatch' | null;
 type ViewMode = 'grid' | 'list';
 type SortMode = 'recent' | 'alpha';
 
@@ -258,10 +261,15 @@ export default function MyShowsScreen() {
   // Padrões: filtro "Em andamento" ativo e visualização em lista — quem abre a
   // watchlist normalmente quer ver o que tem para assistir a seguir.
   const [statusFilter, setStatusFilter] = useState<ShowStatusFilter>('ongoing');
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [movieFilter, setMovieFilter] = useState<MovieStatusFilter>(null);
+  // Visualização separada por aba: séries em lista (assistir a seguir) e
+  // filmes em blocos (grade de pôsteres) por padrão.
+  const [tvViewMode, setTvViewMode] = useState<ViewMode>('list');
+  const [movieViewMode, setMovieViewMode] = useState<ViewMode>('grid');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [shows, setShows] = useState<FollowedShow[] | null>(null);
   const [movies, setMovies] = useState<WatchedMovie[] | null>(null);
+  const [movieWatchlist, setMovieWatchlist] = useState<WatchlistMovie[] | null>(null);
   // tmdb_id → episódios já exibidos segundo a TMDB (null = não deu para calcular).
   const [airedById, setAiredById] = useState<Record<number, number | null>>({});
   // tmdb_id → episódios que o usuário assistiu.
@@ -290,13 +298,15 @@ export default function MyShowsScreen() {
     if (!user) return;
     try {
       setError(null);
-      const [showsData, moviesData, counts] = await Promise.all([
+      const [showsData, moviesData, watchlistData, counts] = await Promise.all([
         getFollowedShows(user.id),
         getWatchedMovies(user.id),
+        getWatchlistMovies(user.id),
         getWatchedCounts(),
       ]);
       setShows(showsData);
       setMovies(moviesData);
+      setMovieWatchlist(watchlistData);
       setWatchedById((prev) => {
         const next = Object.fromEntries(
           counts.map((count) => [count.tmdb_show_id, count.episode_count])
@@ -408,7 +418,7 @@ export default function MyShowsScreen() {
   // Calcula o "assistir a seguir" de cada série quando o modo lista está
   // ativo, em lotes para não estourar a TMDB de uma vez.
   useEffect(() => {
-    if (!user || !shows || !hydrated || viewMode !== 'list' || mode !== 'tv') return;
+    if (!user || !shows || !hydrated || tvViewMode !== 'list' || mode !== 'tv') return;
     const userId = user.id;
     const missing = shows.filter(
       (show) =>
@@ -438,7 +448,7 @@ export default function MyShowsScreen() {
         for (const show of missing) nextEpPending.current.delete(show.tmdb_id);
       }
     })();
-  }, [user, shows, hydrated, viewMode, mode, nextEpById]);
+  }, [user, shows, hydrated, tvViewMode, mode, nextEpById]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -506,18 +516,41 @@ export default function MyShowsScreen() {
     return list;
   }, [shows, trimmedQuery, statusFilter, progressFor, sortMode]);
 
+  // Assistidos + Para assistir juntos (ou só um deles, conforme o filtro).
   const filteredMovies = useMemo(() => {
-    let list = movies ?? [];
+    const watched = (movies ?? []).map((movie) => ({
+      tmdb_id: movie.tmdb_id,
+      title: movie.title,
+      poster_path: movie.poster_path,
+      date: movie.watched_at,
+    }));
+    const toWatch = (movieWatchlist ?? []).map((movie) => ({
+      tmdb_id: movie.tmdb_id,
+      title: movie.title,
+      poster_path: movie.poster_path,
+      date: movie.added_at,
+    }));
+    let list;
+    if (movieFilter === 'watched') {
+      list = watched;
+    } else if (movieFilter === 'towatch') {
+      list = toWatch;
+    } else {
+      // Marcar como assistido remove da watchlist, mas dados antigos podem
+      // ter o filme nos dois lugares — o assistido vence.
+      const watchedIds = new Set(watched.map((movie) => movie.tmdb_id));
+      list = [...watched, ...toWatch.filter((movie) => !watchedIds.has(movie.tmdb_id))];
+    }
     if (trimmedQuery) {
       list = list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
     }
-    if (sortMode === 'alpha') {
-      list = [...list].sort((a, b) =>
-        a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' })
-      );
-    }
+    list = [...list].sort((a, b) =>
+      sortMode === 'alpha'
+        ? a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' })
+        : b.date.localeCompare(a.date)
+    );
     return list;
-  }, [movies, trimmedQuery, sortMode]);
+  }, [movies, movieWatchlist, movieFilter, trimmedQuery, sortMode]);
 
   if (shows === null && !error) {
     return (
@@ -528,12 +561,16 @@ export default function MyShowsScreen() {
   }
 
   const showingMovies = mode === 'movie';
+  const viewMode = showingMovies ? movieViewMode : tvViewMode;
+  const setViewMode = showingMovies ? setMovieViewMode : setTvViewMode;
   // Com filtro ativo mostramos "nada encontrado", mas se a pessoa não tem
   // título nenhum o convite para buscar é mais útil (o filtro vem ligado por
   // padrão e não pode esconder o estado de watchlist vazia).
   const filtering =
-    (!!trimmedQuery || (!showingMovies && statusFilter !== null)) &&
-    (showingMovies ? (movies ?? []).length > 0 : (shows ?? []).length > 0);
+    (!!trimmedQuery || (showingMovies ? movieFilter !== null : statusFilter !== null)) &&
+    (showingMovies
+      ? (movies ?? []).length + (movieWatchlist ?? []).length > 0
+      : (shows ?? []).length > 0);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -549,13 +586,14 @@ export default function MyShowsScreen() {
               key={option.value}
               style={[
                 styles.segment,
-                mode === option.value && { backgroundColor: theme.accent },
+                mode === option.value && { backgroundColor: theme.gold },
               ]}
               onPress={() => setMode(option.value)}>
               <ThemedText
                 type="smallBold"
                 style={{
-                  color: mode === option.value ? theme.accentText : theme.textSecondary,
+                  // Texto escuro fixo: o amarelo é igual nos dois temas.
+                  color: mode === option.value ? '#231A00' : theme.textSecondary,
                 }}>
                 {option.label}
               </ThemedText>
@@ -575,34 +613,61 @@ export default function MyShowsScreen() {
         </View>
       </View>
       <View style={styles.toolsRow}>
-        {!showingMovies &&
-          (
-            [
-              { value: 'ongoing', label: 'Em andamento' },
-              { value: 'ended', label: 'Finalizadas' },
-            ] as const
-          ).map((option) => (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor:
-                    statusFilter === option.value ? theme.accent : theme.backgroundElement,
-                },
-              ]}
-              onPress={() =>
-                setStatusFilter(statusFilter === option.value ? null : option.value)
-              }>
-              <ThemedText
-                type="small"
-                style={{
-                  color: statusFilter === option.value ? theme.accentText : theme.text,
-                }}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          ))}
+        {showingMovies
+          ? (
+              [
+                { value: 'watched', label: 'Assistidos' },
+                { value: 'towatch', label: 'Para assistir' },
+              ] as const
+            ).map((option) => (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor:
+                      movieFilter === option.value ? theme.accent : theme.backgroundElement,
+                  },
+                ]}
+                onPress={() =>
+                  setMovieFilter(movieFilter === option.value ? null : option.value)
+                }>
+                <ThemedText
+                  type="small"
+                  style={{
+                    color: movieFilter === option.value ? theme.accentText : theme.text,
+                  }}>
+                  {option.label}
+                </ThemedText>
+              </Pressable>
+            ))
+          : (
+              [
+                { value: 'ongoing', label: 'Em andamento' },
+                { value: 'ended', label: 'Finalizadas' },
+              ] as const
+            ).map((option) => (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor:
+                      statusFilter === option.value ? theme.accent : theme.backgroundElement,
+                  },
+                ]}
+                onPress={() =>
+                  setStatusFilter(statusFilter === option.value ? null : option.value)
+                }>
+                <ThemedText
+                  type="small"
+                  style={{
+                    color: statusFilter === option.value ? theme.accentText : theme.text,
+                  }}>
+                  {option.label}
+                </ThemedText>
+              </Pressable>
+            ))}
         <View style={styles.toolsSpacer} />
         <ToolButton
           icon="grid"

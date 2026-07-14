@@ -601,6 +601,45 @@ create policy "Comentários são visíveis para todos os usuários autenticados"
     or user_id = auth.uid()
   );
 
+-- ---------- Favoritos ----------
+-- Séries e filmes marcados com a estrelinha na tela do título.
+create table if not exists public.favorites (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  media_type text not null check (media_type in ('tv', 'movie')),
+  tmdb_id integer not null,
+  title text not null,
+  poster_path text,
+  favorited_at timestamptz not null default now(),
+  -- media_type na chave: ids de série e filme são espaços distintos no TMDB.
+  primary key (user_id, media_type, tmdb_id)
+);
+
+alter table public.favorites enable row level security;
+
+drop policy if exists "Usuário gerencia os próprios favoritos" on public.favorites;
+create policy "Usuário gerencia os próprios favoritos"
+  on public.favorites for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- Filmes para assistir ----------
+-- Watchlist de filmes ("Para assistir"). Séries não precisam de tabela:
+-- entram no "Para assistir" quando são seguidas sem nenhum episódio visto.
+create table if not exists public.watchlist_movies (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  tmdb_id integer not null,
+  title text not null,
+  poster_path text,
+  added_at timestamptz not null default now(),
+  primary key (user_id, tmdb_id)
+);
+
+alter table public.watchlist_movies enable row level security;
+
+drop policy if exists "Usuário gerencia os próprios filmes para assistir" on public.watchlist_movies;
+create policy "Usuário gerencia os próprios filmes para assistir"
+  on public.watchlist_movies for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ---------- Cron das notificações remotas ----------
 -- A Edge Function supabase/functions/notify-new-episodes é executada 1x por dia.
 -- Agende no painel (Integrations → Cron) ou com pg_cron + pg_net:

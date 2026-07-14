@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { getWatchedCounts, getWatchedMovies } from '@/lib/db';
-import { getMovieDetailsCached, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
+import { airedEpisodeCount, getMovieDetailsCached, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
 
 const FALLBACK_RUNTIME_MIN = 40;
 const FALLBACK_MOVIE_RUNTIME_MIN = 110;
@@ -19,6 +20,8 @@ interface ShowStat {
   poster_path: string | null;
   episodes: number;
   minutes: number;
+  /** Tempo dos episódios já exibidos que ainda faltam assistir (0 = em dia). */
+  remainingMinutes: number;
 }
 
 interface Stats {
@@ -94,12 +97,18 @@ export default function StatsScreen() {
           counts.map(async (count) => {
             try {
               const details = await getShowDetailsCached(count.tmdb_show_id);
+              const runtime = episodeRuntime(details);
+              const remainingEpisodes = Math.max(
+                airedEpisodeCount(details) - count.episode_count,
+                0
+              );
               return {
                 tmdb_show_id: count.tmdb_show_id,
                 name: details.name,
                 poster_path: details.poster_path,
                 episodes: count.episode_count,
-                minutes: count.episode_count * episodeRuntime(details),
+                minutes: count.episode_count * runtime,
+                remainingMinutes: remainingEpisodes * runtime,
               };
             } catch {
               return {
@@ -108,6 +117,7 @@ export default function StatsScreen() {
                 poster_path: null,
                 episodes: count.episode_count,
                 minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
+                remainingMinutes: 0,
               };
             }
           })
@@ -158,8 +168,6 @@ export default function StatsScreen() {
   }
 
   const duration = formatDuration(stats.totalMinutes);
-  // A barrinha de cada série é proporcional à que mais consumiu tempo.
-  const maxMinutes = stats.shows[0]?.minutes ?? 0;
 
   return (
     <ScrollView
@@ -209,7 +217,12 @@ export default function StatsScreen() {
 
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.gold }}>
+          <ThemedText
+            type="subtitle"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+            style={{ color: theme.gold }}>
             {shortDuration(stats.tvMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -217,7 +230,12 @@ export default function StatsScreen() {
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.gold }}>
+          <ThemedText
+            type="subtitle"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+            style={{ color: theme.gold }}>
             {shortDuration(stats.movieMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -228,24 +246,39 @@ export default function StatsScreen() {
 
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.gold }}>
-            {stats.totalEpisodes}
+          <ThemedText
+            type="subtitle"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+            style={{ color: theme.gold }}>
+            {stats.totalEpisodes.toLocaleString('pt-BR')}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Episódios
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.gold }}>
-            {stats.totalShows}
+          <ThemedText
+            type="subtitle"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+            style={{ color: theme.gold }}>
+            {stats.totalShows.toLocaleString('pt-BR')}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Séries
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="subtitle" style={{ color: theme.gold }}>
-            {stats.totalMovies}
+          <ThemedText
+            type="subtitle"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+            style={{ color: theme.gold }}>
+            {stats.totalMovies.toLocaleString('pt-BR')}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Filmes
@@ -260,40 +293,65 @@ export default function StatsScreen() {
           </ThemedText>
           {stats.shows.map((show) => {
             const poster = posterUrl(show.poster_path, 'w185');
-            const share = maxMinutes > 0 ? show.minutes / maxMinutes : 0;
+            // A barra é o total já exibido da série: azul = assistido,
+            // amarelo no final = o que ainda falta.
+            const totalShowMinutes = show.minutes + show.remainingMinutes;
+            const watchedShare =
+              totalShowMinutes > 0 ? show.minutes / totalShowMinutes : 1;
             return (
               <Link
                 key={show.tmdb_show_id}
                 href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }}
                 asChild>
-                <Pressable style={[styles.showRow, { backgroundColor: theme.backgroundElement }]}>
+                {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+                <Pressable
+                  style={StyleSheet.flatten([
+                    styles.showRow,
+                    { backgroundColor: theme.backgroundElement },
+                  ])}>
                   {poster ? (
                     <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
                   ) : (
                     <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
                   )}
                   <View style={styles.showInfo}>
-                    <ThemedText type="smallBold" numberOfLines={1}>
-                      {show.name}
-                    </ThemedText>
+                    <View style={styles.showName}>
+                      <ThemedText
+                        type="smallBold"
+                        numberOfLines={1}
+                        style={{ color: theme.accent, flexShrink: 1 }}>
+                        {show.name}
+                      </ThemedText>
+                      <Ionicons name="chevron-forward" size={12} color={theme.accent} />
+                    </View>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {show.episodes} {show.episodes === 1 ? 'episódio' : 'episódios'}
+                      {show.episodes.toLocaleString('pt-BR')}{' '}
+                      {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
+                      {shortDuration(show.minutes)}
                     </ThemedText>
-                    <View style={[styles.timeTrack, { backgroundColor: theme.backgroundSelected }]}>
+                    <View style={styles.barRow}>
                       <View
-                        style={[
-                          styles.timeFill,
-                          {
-                            backgroundColor: theme.accent,
-                            width: `${Math.max(Math.round(share * 100), 2)}%`,
-                          },
-                        ]}
-                      />
+                        style={[styles.timeTrack, { backgroundColor: theme.backgroundSelected }]}>
+                        <View
+                          style={[
+                            styles.timeFill,
+                            {
+                              backgroundColor: theme.accent,
+                              width: `${Math.max(Math.round(watchedShare * 100), 2)}%`,
+                            },
+                          ]}
+                        />
+                        {show.remainingMinutes > 0 && (
+                          <View style={[styles.timeFillRest, { backgroundColor: theme.gold }]} />
+                        )}
+                      </View>
+                      {show.remainingMinutes > 0 && (
+                        <ThemedText type="small" style={[styles.remaining, { color: theme.gold }]}>
+                          faltam {shortDuration(show.remainingMinutes)}
+                        </ThemedText>
+                      )}
                     </View>
                   </View>
-                  <ThemedText type="smallBold" style={{ color: theme.gold }}>
-                    {shortDuration(show.minutes)}
-                  </ThemedText>
                 </Pressable>
               </Link>
             );
@@ -367,15 +425,35 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  timeTrack: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
+  showName: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    maxWidth: '100%',
+  },
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     marginTop: Spacing.half,
+  },
+  timeTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
   },
   timeFill: {
     height: '100%',
-    borderRadius: 2,
+  },
+  // O restinho amarelo preenche o que sobra da barra (tempo que falta).
+  timeFillRest: {
+    flex: 1,
+    height: '100%',
+  },
+  remaining: {
+    fontSize: 12,
   },
   note: {
     textAlign: 'center',

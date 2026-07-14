@@ -277,6 +277,8 @@ export async function markMovieWatched(
       .from('watched_movies')
       .upsert({ user_id: userId, ...movie }, { onConflict: 'user_id,tmdb_id' });
     if (error) throw error;
+    // Assistiu? Sai do "Para assistir" (falha aqui não desfaz a marcação).
+    await removeMovieFromWatchlist(userId, movie.tmdb_id).catch(() => {});
   } else {
     const { error } = await supabase
       .from('watched_movies')
@@ -285,6 +287,109 @@ export async function markMovieWatched(
       .eq('tmdb_id', movie.tmdb_id);
     if (error) throw error;
   }
+}
+
+// ---------- Favoritos ----------
+
+export interface FavoriteItem {
+  media_type: MediaType;
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  favorited_at: string;
+}
+
+export async function getFavorites(userId: string): Promise<FavoriteItem[]> {
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('media_type, tmdb_id, title, poster_path, favorited_at')
+    .eq('user_id', userId)
+    .order('favorited_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function isFavorite(
+  userId: string,
+  mediaType: MediaType,
+  tmdbId: number
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('favorites')
+    .select('tmdb_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('media_type', mediaType)
+    .eq('tmdb_id', tmdbId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+export async function addFavorite(
+  userId: string,
+  item: { media_type: MediaType; tmdb_id: number; title: string; poster_path: string | null }
+) {
+  const { error } = await supabase
+    .from('favorites')
+    .upsert({ user_id: userId, ...item }, { onConflict: 'user_id,media_type,tmdb_id' });
+  if (error) throw error;
+}
+
+export async function removeFavorite(userId: string, mediaType: MediaType, tmdbId: number) {
+  const { error } = await supabase
+    .from('favorites')
+    .delete()
+    .eq('user_id', userId)
+    .eq('media_type', mediaType)
+    .eq('tmdb_id', tmdbId);
+  if (error) throw error;
+}
+
+// ---------- Filmes para assistir ----------
+
+export interface WatchlistMovie {
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  added_at: string;
+}
+
+export async function getWatchlistMovies(userId: string): Promise<WatchlistMovie[]> {
+  const { data, error } = await supabase
+    .from('watchlist_movies')
+    .select('tmdb_id, title, poster_path, added_at')
+    .eq('user_id', userId)
+    .order('added_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function isMovieInWatchlist(userId: string, tmdbId: number): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('watchlist_movies')
+    .select('tmdb_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('tmdb_id', tmdbId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+export async function addMovieToWatchlist(
+  userId: string,
+  movie: { tmdb_id: number; title: string; poster_path: string | null }
+) {
+  const { error } = await supabase
+    .from('watchlist_movies')
+    .upsert({ user_id: userId, ...movie }, { onConflict: 'user_id,tmdb_id' });
+  if (error) throw error;
+}
+
+export async function removeMovieFromWatchlist(userId: string, tmdbId: number) {
+  const { error } = await supabase
+    .from('watchlist_movies')
+    .delete()
+    .eq('user_id', userId)
+    .eq('tmdb_id', tmdbId);
+  if (error) throw error;
 }
 
 // ---------- Notas de episódios ----------

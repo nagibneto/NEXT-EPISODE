@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { HeaderLogo } from '@/components/app-header';
+import { StackHeader } from '@/components/app-header';
 import { AuthProvider } from '@/hooks/use-auth';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 
@@ -13,8 +13,10 @@ function RootNavigator() {
 
   return (
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack
-        screenOptions={{ headerBackTitle: 'Voltar', headerRight: () => <HeaderLogo /> }}>
+      {/* Header próprio em JS (Voltar + título + logo): no iOS 26 o header
+          nativo envolve qualquer item em uma cápsula de vidro clicável, e o
+          logo tem que ficar solto, como no header das abas. */}
+      <Stack screenOptions={{ header: (props) => <StackHeader {...props} /> }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
@@ -29,6 +31,8 @@ function RootNavigator() {
         <Stack.Screen name="friends" options={{ title: 'Amigos' }} />
         <Stack.Screen name="blocked-users" options={{ title: 'Usuários bloqueados' }} />
         <Stack.Screen name="stats" options={{ title: 'Estatísticas' }} />
+        <Stack.Screen name="favorites" options={{ title: 'Favoritos' }} />
+        <Stack.Screen name="to-watch" options={{ title: 'Para assistir' }} />
       </Stack>
     </ThemeProvider>
   );

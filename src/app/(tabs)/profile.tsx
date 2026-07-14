@@ -219,6 +219,24 @@ export default function ProfileScreen() {
       <View style={styles.grid}>
         <Pressable
           style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/favorites')}>
+          <Ionicons name="star" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Favoritos
+          </ThemedText>
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/to-watch')}>
+          <Ionicons name="bookmark" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Para assistir
+          </ThemedText>
+        </Pressable>
+
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
           onPress={() => router.push('/stats')}>
           <Ionicons name="stats-chart" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
@@ -273,7 +291,7 @@ export default function ProfileScreen() {
           disabled={deleting}
           style={[
             styles.tile,
-            styles.tileFullWidth,
+            styles.tileHalfOnly,
             { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
           ]}
           onPress={handleDeleteAccount}>
@@ -381,8 +399,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one,
   },
-  tileFullWidth: {
-    flexBasis: '100%',
+  // Sozinho na última linha: sem grow para não esticar na largura toda
+  // (excluir conta é o botão menos usado, não precisa de destaque).
+  tileHalfOnly: {
+    flexGrow: 0,
+    flexBasis: '48%',
   },
   tileLabel: {
     textAlign: 'center',

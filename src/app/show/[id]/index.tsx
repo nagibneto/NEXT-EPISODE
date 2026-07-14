@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
 import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,10 +11,13 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  addFavorite,
   followShow,
   getWatchedEpisodes,
+  isFavorite,
   isFollowing,
   markSeasonWatched,
+  removeFavorite,
   unfollowShow,
   unmarkSeasonWatched,
 } from '@/lib/db';
@@ -39,6 +43,7 @@ export default function ShowDetailsScreen() {
   // season_number → episódios assistidos pelo usuário naquela temporada.
   const [watchedBySeason, setWatchedBySeason] = useState<Map<number, number>>(new Map());
   const [following, setFollowing] = useState<boolean | null>(null);
+  const [favorite, setFavorite] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Temporada com marcação em massa em andamento (número dela, ou null).
@@ -52,6 +57,9 @@ export default function ShowDetailsScreen() {
       isFollowing(user.id, showId)
         .then(setFollowing)
         .catch(() => setFollowing(false));
+      isFavorite(user.id, 'tv', showId)
+        .then(setFavorite)
+        .catch(() => setFavorite(false));
     }
   }, [showId, user]);
 
@@ -113,6 +121,27 @@ export default function ShowDetailsScreen() {
       setError(err instanceof Error ? err.message : 'Não foi possível atualizar.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Estrelinha do header: adiciona/remove dos favoritos, com desfazer se falhar. */
+  async function toggleFavorite() {
+    if (!user || !show || favorite === null) return;
+    const next = !favorite;
+    setFavorite(next);
+    try {
+      if (next) {
+        await addFavorite(user.id, {
+          media_type: 'tv',
+          tmdb_id: show.id,
+          title: show.name,
+          poster_path: show.poster_path,
+        });
+      } else {
+        await removeFavorite(user.id, 'tv', show.id);
+      }
+    } catch {
+      setFavorite(!next);
     }
   }
 
@@ -198,7 +227,27 @@ export default function ShowDetailsScreen() {
     <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: show.name }} />
 
-      {backdrop && <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />}
+      <View>
+        {backdrop && (
+          <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />
+        )}
+        {/* Estrelinha solta sobre o backdrop (o header nativo do iOS 26 põe
+            um círculo de vidro em volta de qualquer botão, então ela vive
+            aqui, onde controlamos o visual). */}
+        <Pressable
+          hitSlop={8}
+          disabled={favorite === null}
+          onPress={toggleFavorite}
+          style={[styles.favoriteButton, !backdrop && styles.favoriteButtonInline]}>
+          <MaterialCommunityIcons
+            name={favorite ? 'star' : 'star-outline'}
+            size={32}
+            // Sem backdrop o fundo é o da tela — branco sumiria no tema claro.
+            color={favorite ? theme.gold : backdrop ? '#ffffff' : theme.textSecondary}
+            style={backdrop ? styles.favoriteIcon : undefined}
+          />
+        </Pressable>
+      </View>
 
       <View style={styles.header}>
         {poster && <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />}
@@ -334,6 +383,25 @@ const styles = StyleSheet.create({
   },
   message: {
     textAlign: 'center',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+  },
+  // Sem backdrop não há imagem para ancorar: a estrela vira uma linha normal
+  // alinhada à direita.
+  favoriteButtonInline: {
+    position: 'relative',
+    top: 0,
+    right: 0,
+    alignSelf: 'flex-end',
+    margin: Spacing.two,
+  },
+  // Sombra para a estrela não sumir em backdrops claros.
+  favoriteIcon: {
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowRadius: 6,
   },
   backdrop: {
     width: '100%',

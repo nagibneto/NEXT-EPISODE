@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -11,12 +13,18 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  addFavorite,
+  addMovieToWatchlist,
   errorMessage,
   getEpisodeAverageRating,
   getMyEpisodeRating,
+  isFavorite,
+  isMovieInWatchlist,
   isMovieWatched,
   markMovieWatched,
   rateEpisode,
+  removeFavorite,
+  removeMovieFromWatchlist,
 } from '@/lib/db';
 import { backdropUrl, getMovieDetails, posterUrl, type TmdbMovieDetails } from '@/lib/tmdb';
 
@@ -28,6 +36,8 @@ export default function MovieDetailsScreen() {
 
   const [movie, setMovie] = useState<TmdbMovieDetails | null>(null);
   const [watched, setWatched] = useState<boolean | null>(null);
+  const [favorite, setFavorite] = useState<boolean | null>(null);
+  const [inWatchlist, setInWatchlist] = useState<boolean | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +54,12 @@ export default function MovieDetailsScreen() {
       isMovieWatched(user.id, movieId)
         .then(setWatched)
         .catch(() => setWatched(false));
+      isFavorite(user.id, 'movie', movieId)
+        .then(setFavorite)
+        .catch(() => setFavorite(false));
+      isMovieInWatchlist(user.id, movieId)
+        .then(setInWatchlist)
+        .catch(() => setInWatchlist(false));
       getMyEpisodeRating(user.id, movieId, 0, 0, 'movie')
         .then(setMyRating)
         .catch(() => {});
@@ -60,10 +76,54 @@ export default function MovieDetailsScreen() {
         !watched
       );
       setWatched(!watched);
+      // Marcar como assistido também tira o filme do "Para assistir".
+      if (!watched) setInWatchlist(false);
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível atualizar.'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Botão "Para assistir": entra/sai da watchlist de filmes. */
+  async function toggleWatchlist() {
+    if (!user || !movie || inWatchlist === null) return;
+    const next = !inWatchlist;
+    setInWatchlist(next);
+    try {
+      if (next) {
+        await addMovieToWatchlist(user.id, {
+          tmdb_id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+        });
+      } else {
+        await removeMovieFromWatchlist(user.id, movie.id);
+      }
+    } catch (err) {
+      setInWatchlist(!next);
+      setError(errorMessage(err, 'Não foi possível atualizar.'));
+    }
+  }
+
+  /** Estrelinha do header: adiciona/remove dos favoritos, com desfazer se falhar. */
+  async function toggleFavorite() {
+    if (!user || !movie || favorite === null) return;
+    const next = !favorite;
+    setFavorite(next);
+    try {
+      if (next) {
+        await addFavorite(user.id, {
+          media_type: 'movie',
+          tmdb_id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+        });
+      } else {
+        await removeFavorite(user.id, 'movie', movie.id);
+      }
+    } catch {
+      setFavorite(!next);
     }
   }
 
@@ -111,9 +171,27 @@ export default function MovieDetailsScreen() {
         lockedText="Você ainda não marcou este filme como assistido. Os comentários podem conter spoilers."
         header={
           <View style={styles.header}>
-            {backdrop && (
-              <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />
-            )}
+            <View>
+              {backdrop && (
+                <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />
+              )}
+              {/* Estrelinha solta sobre o backdrop (o header nativo do iOS 26
+                  põe um círculo de vidro em volta de qualquer botão, então ela
+                  vive aqui, onde controlamos o visual). */}
+              <Pressable
+                hitSlop={8}
+                disabled={favorite === null}
+                onPress={toggleFavorite}
+                style={[styles.favoriteButton, !backdrop && styles.favoriteButtonInline]}>
+                <MaterialCommunityIcons
+                  name={favorite ? 'star' : 'star-outline'}
+                  size={32}
+                  // Sem backdrop o fundo é o da tela — branco sumiria no tema claro.
+                  color={favorite ? theme.gold : backdrop ? '#ffffff' : theme.textSecondary}
+                  style={backdrop ? styles.favoriteIcon : undefined}
+                />
+              </Pressable>
+            </View>
             <View style={styles.headerRow}>
               {poster && <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />}
               <View style={styles.headerText}>
@@ -134,22 +212,49 @@ export default function MovieDetailsScreen() {
               </View>
             </View>
 
-            <Pressable
-              style={[
-                styles.watchedButton,
-                {
-                  backgroundColor: watched ? theme.backgroundElement : theme.accent,
-                  opacity: busy || watched === null ? 0.6 : 1,
-                },
-              ]}
-              disabled={busy || watched === null}
-              onPress={toggleWatched}>
-              <ThemedText
-                type="smallBold"
-                style={{ color: watched ? theme.text : theme.accentText }}>
-                {watched === null ? '…' : watched ? '✓ Assistido' : '+ Marcar como assistido'}
-              </ThemedText>
-            </Pressable>
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={[
+                  styles.watchedButton,
+                  {
+                    backgroundColor: watched ? theme.backgroundElement : theme.accent,
+                    opacity: busy || watched === null ? 0.6 : 1,
+                  },
+                ]}
+                disabled={busy || watched === null}
+                onPress={toggleWatched}>
+                <ThemedText
+                  type="smallBold"
+                  style={{ color: watched ? theme.text : theme.accentText }}>
+                  {watched === null ? '…' : watched ? '✓ Assistido' : '+ Marcar como assistido'}
+                </ThemedText>
+              </Pressable>
+              {/* Já assistiu? Não faz sentido oferecer o "Para assistir". */}
+              {watched === false && (
+                <Pressable
+                  style={[
+                    styles.watchedButton,
+                    styles.watchlistButton,
+                    {
+                      backgroundColor: theme.backgroundElement,
+                      opacity: inWatchlist === null ? 0.6 : 1,
+                    },
+                  ]}
+                  disabled={inWatchlist === null}
+                  onPress={toggleWatchlist}>
+                  <Ionicons
+                    name={inWatchlist ? 'bookmark' : 'bookmark-outline'}
+                    size={16}
+                    color={inWatchlist ? theme.accent : theme.text}
+                  />
+                  <ThemedText
+                    type="smallBold"
+                    style={{ color: inWatchlist ? theme.accent : theme.text }}>
+                    Para assistir
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
 
             <WatchProviders media="movie" tmdbId={movieId} />
 
@@ -213,10 +318,39 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 26,
   },
+  favoriteButton: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+  },
+  // Sem backdrop não há imagem para ancorar: a estrela vira uma linha normal
+  // alinhada à direita.
+  favoriteButtonInline: {
+    position: 'relative',
+    top: 0,
+    right: 0,
+    alignSelf: 'flex-end',
+    margin: Spacing.two,
+  },
+  // Sombra para a estrela não sumir em backdrops claros.
+  favoriteIcon: {
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowRadius: 6,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
   watchedButton: {
+    flex: 1,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
+  },
+  watchlistButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.one,
   },
   ratingCard: {
     borderRadius: 12,
