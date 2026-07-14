@@ -1,6 +1,7 @@
 import { Poppins_600SemiBold, useFonts } from '@expo-google-fonts/poppins';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { HeaderLogo } from '@/components/app-header';
 import { AuthProvider } from '@/hooks/use-auth';
@@ -39,10 +40,14 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <ThemePreferenceProvider>
-        <RootNavigator />
-      </ThemePreferenceProvider>
-    </AuthProvider>
+    // Necessário para gestos do react-native-gesture-handler (ex.: arrastar
+    // para marcar episódio como assistido na watchlist).
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ThemePreferenceProvider>
+          <RootNavigator />
+        </ThemePreferenceProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

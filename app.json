@@ -10,7 +10,9 @@
     "ios": {
       "bundleIdentifier": "com.nagibneto.nextepisode",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "pt-BR",
+        "CFBundleLocalizations": ["pt-BR"]
       }
     },
     "android": {

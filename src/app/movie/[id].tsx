@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { CommentsScreen } from '@/components/comments-screen';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
+import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -149,6 +150,8 @@ export default function MovieDetailsScreen() {
                 {watched === null ? '…' : watched ? '✓ Assistido' : '+ Marcar como assistido'}
               </ThemedText>
             </Pressable>
+
+            <WatchProviders media="movie" tmdbId={movieId} />
 
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Sua nota</ThemedText>

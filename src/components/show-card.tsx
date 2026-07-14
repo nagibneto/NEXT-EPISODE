@@ -14,9 +14,11 @@ interface ShowCardProps {
   subtitle?: string;
   /** Para onde o card leva: série (padrão) ou filme. */
   media?: 'tv' | 'movie';
+  /** Andamento na série (0–1, episódios assistidos ÷ exibidos); omitido = sem barra. */
+  progress?: number;
 }
 
-export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv' }: ShowCardProps) {
+export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv', progress }: ShowCardProps) {
   const theme = useTheme();
   const uri = posterUrl(posterPath);
 
@@ -38,6 +40,16 @@ export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv' }: S
             </ThemedText>
           </View>
         )}
+        {progress !== undefined && (
+          <View style={[styles.progressTrack, { backgroundColor: theme.backgroundElement }]}>
+            <View
+              style={[
+                styles.progressFill,
+                { backgroundColor: theme.accent, width: `${Math.round(progress * 100)}%` },
+              ]}
+            />
+          </View>
+        )}
         <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>
           {name}
         </ThemedText>
@@ -54,7 +66,11 @@ export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv' }: S
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    margin: Spacing.two,
+    // Sem o teto, uma linha com menos de 3 itens (ex.: busca com um resultado
+    // só) estica o card na largura toda. O respiro entre cards vem do padding
+    // (que conta dentro do percentual), não de margin (que estouraria a linha).
+    maxWidth: '33.33%',
+    padding: Spacing.two,
   },
   poster: {
     aspectRatio: 2 / 3,
@@ -68,5 +84,15 @@ const styles = StyleSheet.create({
   },
   name: {
     marginTop: Spacing.one,
+  },
+  progressTrack: {
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: Spacing.one,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
 });

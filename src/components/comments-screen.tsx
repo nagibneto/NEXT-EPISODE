@@ -16,6 +16,7 @@ import {
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ActionSheet } from '@/components/action-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
@@ -90,6 +91,8 @@ export function CommentsScreen({
   );
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<EpisodeComment | null>(null);
+  // Comentário com o menu de ações (sheet) aberto.
+  const [menuComment, setMenuComment] = useState<EpisodeComment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [commentsRevealed, setCommentsRevealed] = useState(false);
@@ -223,53 +226,50 @@ export function CommentsScreen({
     }
   }
 
-  function handleCommentMenu(comment: EpisodeComment) {
+  /**
+   * Alerts logo após fechar um Modal disputam com a animação de dismiss no
+   * iOS e podem nem aparecer — o atraso dá tempo do sheet sair da tela.
+   */
+  function alertAfterSheet(title: string, message?: string, buttons?: Parameters<typeof Alert.alert>[2]) {
+    setTimeout(() => Alert.alert(title, message, buttons, { cancelable: true }), 400);
+  }
+
+  function handleSpoilerFlag(comment: EpisodeComment) {
     if (!user) return;
-    Alert.alert(profileDisplayName(comment.profiles), undefined, [
-      {
-        text: 'Sinalizar como spoiler',
-        onPress: () => {
-          markCommentSpoiler(comment.id, user.id).catch(() => {});
-          Alert.alert(
-            'Sinalização enviada',
-            'Obrigado por avisar — com sinalizações suficientes o comentário será ocultado.'
-          );
+    markCommentSpoiler(comment.id, user.id).catch(() => {});
+    alertAfterSheet(
+      'Sinalização enviada',
+      'Obrigado por avisar — com sinalizações suficientes o comentário será ocultado.'
+    );
+  }
+
+  function handleReport(comment: EpisodeComment) {
+    if (!user) return;
+    reportComment(comment.id, user.id).catch(() => {});
+    alertAfterSheet('Denúncia enviada', 'Obrigado por avisar — vamos revisar.');
+  }
+
+  function handleBlock(comment: EpisodeComment) {
+    if (!user) return;
+    alertAfterSheet(
+      'Bloquear usuário',
+      'Vocês deixam de ver o conteúdo um do outro e a amizade (se houver) é desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(user.id, comment.user_id);
+              await loadComments();
+            } catch {
+              // Segue sem travar a tela se o bloqueio falhar.
+            }
+          },
         },
-      },
-      {
-        text: 'Denunciar comentário',
-        onPress: () => {
-          reportComment(comment.id, user.id).catch(() => {});
-          Alert.alert('Denúncia enviada', 'Obrigado por avisar — vamos revisar.');
-        },
-      },
-      {
-        text: 'Bloquear usuário',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert(
-            'Bloquear usuário',
-            'Vocês deixam de ver o conteúdo um do outro e a amizade (se houver) é desfeita.',
-            [
-              { text: 'Cancelar', style: 'cancel' },
-              {
-                text: 'Bloquear',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    await blockUser(user.id, comment.user_id);
-                    await loadComments();
-                  } catch {
-                    // Segue sem travar a tela se o bloqueio falhar.
-                  }
-                },
-              },
-            ]
-          );
-        },
-      },
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
+      ]
+    );
   }
 
   function renderComment(item: EpisodeComment) {
@@ -289,7 +289,7 @@ export function CommentsScreen({
               {new Date(item.created_at).toLocaleDateString('pt-BR')}
             </ThemedText>
             {user?.id !== item.user_id && (
-              <Pressable hitSlop={8} onPress={() => handleCommentMenu(item)}>
+              <Pressable hitSlop={8} onPress={() => setMenuComment(item)}>
                 <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
               </Pressable>
             )}
@@ -462,6 +462,34 @@ export function CommentsScreen({
           </View>
         </View>
       )}
+
+      <ActionSheet
+        visible={menuComment !== null}
+        title={menuComment ? profileDisplayName(menuComment.profiles) : undefined}
+        onClose={() => setMenuComment(null)}
+        options={
+          menuComment
+            ? [
+                {
+                  label: 'Sinalizar como spoiler',
+                  icon: 'eye-off-outline',
+                  onPress: () => handleSpoilerFlag(menuComment),
+                },
+                {
+                  label: 'Denunciar comentário',
+                  icon: 'flag-outline',
+                  onPress: () => handleReport(menuComment),
+                },
+                {
+                  label: 'Bloquear usuário',
+                  icon: 'ban-outline',
+                  destructive: true,
+                  onPress: () => handleBlock(menuComment),
+                },
+              ]
+            : []
+        }
+      />
     </Animated.View>
   );
 }

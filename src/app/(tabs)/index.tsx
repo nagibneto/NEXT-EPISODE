@@ -1,8 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image } from 'expo-image';
+import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -10,6 +12,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
@@ -18,15 +23,20 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
   getFollowedShows,
+  getWatchedCounts,
   getWatchedMovies,
+  markEpisodeWatched,
   type FollowedShow,
   type WatchedMovie,
 } from '@/lib/db';
-import { getShowDetailsCached } from '@/lib/tmdb';
+import { airedEpisodeCount, getShowDetailsCached, posterUrl, stillUrl } from '@/lib/tmdb';
+import { getNextUnwatchedEpisode, type NextEpisode } from '@/lib/watch-next';
 import { registerPushToken, syncEpisodeNotifications } from '@/lib/notifications';
 
 type LibraryMode = 'tv' | 'movie';
 type ShowStatusFilter = 'ongoing' | 'ended' | null;
+type ViewMode = 'grid' | 'list';
+type SortMode = 'recent' | 'alpha';
 
 /** Compara ignorando maiúsculas e acentos ("josé" casa com "Jose"). */
 function normalize(text: string) {
@@ -36,17 +46,203 @@ function normalize(text: string) {
     .toLowerCase();
 }
 
+/** Botão de ícone das ferramentas de visualização/ordenação. */
+function ToolButton({
+  icon,
+  active,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      style={[styles.toolButton, active && { backgroundColor: theme.backgroundElement }]}
+      onPress={onPress}>
+      <Ionicons name={icon} size={16} color={active ? theme.accent : theme.textSecondary} />
+    </Pressable>
+  );
+}
+
+/** Linha do modo lista de filmes: pôster pequeno + nome, levando à tela do título. */
+function LibraryListRow({
+  tmdbId,
+  name,
+  posterPath,
+}: {
+  tmdbId: number;
+  name: string;
+  posterPath: string | null;
+}) {
+  const theme = useTheme();
+  const uri = posterUrl(posterPath, 'w185');
+  return (
+    <Link href={{ pathname: '/movie/[id]', params: { id: String(tmdbId) } }} asChild>
+      {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.listRow, { backgroundColor: theme.backgroundElement }])}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.listPoster} contentFit="cover" transition={150} />
+        ) : (
+          <View style={[styles.listPoster, { backgroundColor: theme.backgroundSelected }]} />
+        )}
+        <ThemedText type="smallBold" numberOfLines={1} style={styles.listName}>
+          {name}
+        </ThemedText>
+      </Pressable>
+    </Link>
+  );
+}
+
+/**
+ * Linha "assistir a seguir" (estilo TV Time): imagem do episódio, nome da
+ * série, próximo episódio não visto e botão para marcá-lo como assistido.
+ */
+function WatchNextRow({
+  show,
+  next,
+  remainingAfter,
+  onMarkWatched,
+}: {
+  show: FollowedShow;
+  /** undefined = calculando; null = em dia. */
+  next: NextEpisode | null | undefined;
+  /** Episódios exibidos que ainda faltam depois deste. */
+  remainingAfter: number;
+  onMarkWatched: () => void;
+}) {
+  const theme = useTheme();
+  const swipeRef = useRef<SwipeableMethods>(null);
+  const image =
+    (next?.stillPath ? stillUrl(next.stillPath) : null) ?? posterUrl(show.poster_path, 'w185');
+
+  function confirmMarkWatched() {
+    if (!next) return;
+    Alert.alert(
+      'Marcar como assistido',
+      `${show.name} — T${String(next.seasonNumber).padStart(2, '0')} | E${String(
+        next.episodeNumber
+      ).padStart(2, '0')}${next.name ? ` (${next.name})` : ''}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Assisti', onPress: onMarkWatched },
+      ]
+    );
+  }
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      enabled={!!next}
+      friction={2}
+      rightThreshold={72}
+      overshootRight={false}
+      // Arrastar a linha toda da direita para a esquerda marca direto, sem
+      // modal. Só existe ação do lado direito, então qualquer abertura conta
+      // (o `direction` reportado varia entre plataformas — não dá pra filtrar).
+      onSwipeableOpen={() => {
+        swipeRef.current?.close();
+        onMarkWatched();
+      }}
+      renderRightActions={() => (
+        // Pressable de reserva: se o gesto parar no meio, tocar no painel marca.
+        <Pressable
+          style={[styles.swipeAction, { backgroundColor: theme.accent }]}
+          onPress={() => {
+            swipeRef.current?.close();
+            onMarkWatched();
+          }}>
+          <Ionicons name="checkmark" size={26} color={theme.accentText} />
+        </Pressable>
+      )}>
+    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_id) } }} asChild>
+      {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.nextRow, { backgroundColor: theme.backgroundElement }])}>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.nextStill} contentFit="cover" transition={150} />
+        ) : (
+          <View style={[styles.nextStill, { backgroundColor: theme.backgroundSelected }]} />
+        )}
+        <View style={styles.nextInfo}>
+          <View style={styles.nextShowName}>
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={{ color: theme.accent, flexShrink: 1 }}>
+              {show.name}
+            </ThemedText>
+            <Ionicons name="chevron-forward" size={12} color={theme.accent} />
+          </View>
+          {next ? (
+            <>
+              <View style={styles.nextEpisodeRow}>
+                <ThemedText type="smallBold">
+                  T{String(next.seasonNumber).padStart(2, '0')} | E
+                  {String(next.episodeNumber).padStart(2, '0')}
+                </ThemedText>
+                {remainingAfter > 0 && (
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.nextRemaining}>
+                    +{remainingAfter}
+                  </ThemedText>
+                )}
+              </View>
+              {next.name ? (
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {next.name}
+                </ThemedText>
+              ) : null}
+            </>
+          ) : next === null ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Você está em dia 🎉
+            </ThemedText>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary">
+              …
+            </ThemedText>
+          )}
+        </View>
+        {next ? (
+          <Pressable style={styles.nextCheck} hitSlop={10} onPress={confirmMarkWatched}>
+            <Ionicons name="checkmark-circle-outline" size={26} color={theme.textSecondary} />
+          </Pressable>
+        ) : next === null ? (
+          <View style={styles.nextCheck}>
+            <Ionicons name="checkmark-circle" size={26} color={theme.accent} />
+          </View>
+        ) : (
+          <View style={styles.nextCheck}>
+            <ActivityIndicator size="small" />
+          </View>
+        )}
+      </Pressable>
+    </Link>
+    </ReanimatedSwipeable>
+  );
+}
+
 export default function MyShowsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [mode, setMode] = useState<LibraryMode>('tv');
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ShowStatusFilter>(null);
+  // Padrões: filtro "Em andamento" ativo e visualização em lista — quem abre a
+  // watchlist normalmente quer ver o que tem para assistir a seguir.
+  const [statusFilter, setStatusFilter] = useState<ShowStatusFilter>('ongoing');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [shows, setShows] = useState<FollowedShow[] | null>(null);
   const [movies, setMovies] = useState<WatchedMovie[] | null>(null);
-  // tmdb_id → série já encerrada? (status "Ended"/"Canceled" na TMDB)
-  const [endedById, setEndedById] = useState<Record<number, boolean>>({});
+  // tmdb_id → episódios já exibidos segundo a TMDB (null = não deu para calcular).
+  const [airedById, setAiredById] = useState<Record<number, number | null>>({});
+  // tmdb_id → episódios que o usuário assistiu.
+  const [watchedById, setWatchedById] = useState<Record<number, number>>({});
+  // tmdb_id → próximo episódio a assistir (null = em dia; ausente = calculando).
+  const [nextEpById, setNextEpById] = useState<Record<number, NextEpisode | null>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,12 +250,16 @@ export default function MyShowsScreen() {
     if (!user) return;
     try {
       setError(null);
-      const [showsData, moviesData] = await Promise.all([
+      const [showsData, moviesData, counts] = await Promise.all([
         getFollowedShows(user.id),
         getWatchedMovies(user.id),
+        getWatchedCounts(),
       ]);
       setShows(showsData);
       setMovies(moviesData);
+      setWatchedById(
+        Object.fromEntries(counts.map((count) => [count.tmdb_show_id, count.episode_count]))
+      );
       // Reagenda notificações em segundo plano; falha não bloqueia a tela.
       syncEpisodeNotifications(user.id).catch(() => {});
       // Registra o push token para as notificações remotas (Edge Function).
@@ -75,28 +275,29 @@ export default function MyShowsScreen() {
     }, [load])
   );
 
-  // Busca o status de cada série na TMDB para o filtro Em andamento/Finalizadas.
+  // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
+  // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
   useEffect(() => {
     if (!shows) return;
     let cancelled = false;
-    const missing = shows.filter((show) => endedById[show.tmdb_id] === undefined);
+    const missing = shows.filter((show) => airedById[show.tmdb_id] === undefined);
     if (missing.length === 0) return;
     (async () => {
       const entries = await Promise.all(
         missing.map(async (show) => {
           try {
             const details = await getShowDetailsCached(show.tmdb_id);
-            return [show.tmdb_id, details.status === 'Ended' || details.status === 'Canceled'] as const;
+            return [show.tmdb_id, airedEpisodeCount(details)] as const;
           } catch {
-            return null;
+            return [show.tmdb_id, null] as const;
           }
         })
       );
       if (cancelled) return;
-      setEndedById((prev) => {
+      setAiredById((prev) => {
         const next = { ...prev };
-        for (const entry of entries) {
-          if (entry) next[entry[0]] = entry[1];
+        for (const [id, aired] of entries) {
+          next[id] = aired;
         }
         return next;
       });
@@ -104,7 +305,35 @@ export default function MyShowsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [shows, endedById]);
+  }, [shows, airedById]);
+
+  // Calcula o "assistir a seguir" de cada série quando o modo lista está
+  // ativo, em lotes para não estourar a TMDB de uma vez.
+  useEffect(() => {
+    if (!user || !shows || viewMode !== 'list' || mode !== 'tv') return;
+    let cancelled = false;
+    const missing = shows.filter((show) => nextEpById[show.tmdb_id] === undefined);
+    if (missing.length === 0) return;
+    (async () => {
+      for (let i = 0; i < missing.length; i += 6) {
+        const batch = missing.slice(i, i + 6);
+        const entries = await Promise.all(
+          batch.map(async (show) => {
+            try {
+              return [show.tmdb_id, await getNextUnwatchedEpisode(user.id, show.tmdb_id)] as const;
+            } catch {
+              return [show.tmdb_id, null] as const;
+            }
+          })
+        );
+        if (cancelled) return;
+        setNextEpById((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, shows, viewMode, mode, nextEpById]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -112,28 +341,74 @@ export default function MyShowsScreen() {
     setRefreshing(false);
   }
 
+  /** Marca o "assistir a seguir" como visto e recalcula o próximo da série. */
+  async function markNextWatched(showId: number) {
+    if (!user) return;
+    const next = nextEpById[showId];
+    if (!next) return;
+    try {
+      await markEpisodeWatched(user.id, showId, next.seasonNumber, next.episodeNumber, true);
+      setWatchedById((prev) => ({ ...prev, [showId]: (prev[showId] ?? 0) + 1 }));
+      // Remove a entrada: o efeito acima detecta e busca o próximo episódio.
+      setNextEpById((prev) => {
+        const { [showId]: _removed, ...rest } = prev;
+        return rest;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível marcar como assistido.');
+    }
+  }
+
   const trimmedQuery = normalize(query.trim());
 
+  // Progresso na série: episódios assistidos ÷ já exibidos (0–1).
+  // undefined enquanto a TMDB não respondeu ou quando não deu para calcular.
+  const progressFor = useCallback(
+    (tmdbId: number): number | undefined => {
+      const aired = airedById[tmdbId];
+      if (!aired) return undefined;
+      return Math.min((watchedById[tmdbId] ?? 0) / aired, 1);
+    },
+    [airedById, watchedById]
+  );
+
+  // A ordem vinda do banco já é dos mais novos primeiro (data de seguir/assistir).
   const filteredShows = useMemo(() => {
     let list = shows ?? [];
     if (trimmedQuery) {
       list = list.filter((show) => normalize(show.name).includes(trimmedQuery));
     }
     if (statusFilter) {
+      // "Finalizadas" = você já assistiu tudo que foi ao ar; "Em andamento" =
+      // ainda tem episódio exibido por assistir (independe de a série ter
+      // sido cancelada ou continuar no ar). Séries com progresso ainda não
+      // calculado entram em "Em andamento" para a lista não abrir vazia.
       list = list.filter((show) => {
-        const ended = endedById[show.tmdb_id];
-        if (ended === undefined) return false;
-        return statusFilter === 'ended' ? ended : !ended;
+        const progress = progressFor(show.tmdb_id);
+        if (statusFilter === 'ended') return progress !== undefined && progress >= 1;
+        return progress === undefined || progress < 1;
       });
     }
+    if (sortMode === 'alpha') {
+      list = [...list].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      );
+    }
     return list;
-  }, [shows, trimmedQuery, statusFilter, endedById]);
+  }, [shows, trimmedQuery, statusFilter, progressFor, sortMode]);
 
   const filteredMovies = useMemo(() => {
-    const list = movies ?? [];
-    if (!trimmedQuery) return list;
-    return list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
-  }, [movies, trimmedQuery]);
+    let list = movies ?? [];
+    if (trimmedQuery) {
+      list = list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
+    }
+    if (sortMode === 'alpha') {
+      list = [...list].sort((a, b) =>
+        a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' })
+      );
+    }
+    return list;
+  }, [movies, trimmedQuery, sortMode]);
 
   if (shows === null && !error) {
     return (
@@ -144,7 +419,12 @@ export default function MyShowsScreen() {
   }
 
   const showingMovies = mode === 'movie';
-  const filtering = !!trimmedQuery || (!showingMovies && statusFilter !== null);
+  // Com filtro ativo mostramos "nada encontrado", mas se a pessoa não tem
+  // título nenhum o convite para buscar é mais útil (o filtro vem ligado por
+  // padrão e não pode esconder o estado de watchlist vazia).
+  const filtering =
+    (!!trimmedQuery || (!showingMovies && statusFilter !== null)) &&
+    (showingMovies ? (movies ?? []).length > 0 : (shows ?? []).length > 0);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -185,9 +465,9 @@ export default function MyShowsScreen() {
           />
         </View>
       </View>
-      {!showingMovies && (
-        <View style={styles.statusRow}>
-          {(
+      <View style={styles.toolsRow}>
+        {!showingMovies &&
+          (
             [
               { value: 'ongoing', label: 'Em andamento' },
               { value: 'ended', label: 'Finalizadas' },
@@ -214,8 +494,29 @@ export default function MyShowsScreen() {
               </ThemedText>
             </Pressable>
           ))}
-        </View>
-      )}
+        <View style={styles.toolsSpacer} />
+        <ToolButton
+          icon="grid"
+          active={viewMode === 'grid'}
+          onPress={() => setViewMode('grid')}
+        />
+        <ToolButton
+          icon="list"
+          active={viewMode === 'list'}
+          onPress={() => setViewMode('list')}
+        />
+        <View style={[styles.toolsDivider, { backgroundColor: theme.backgroundElement }]} />
+        <ToolButton
+          icon="text"
+          active={sortMode === 'alpha'}
+          onPress={() => setSortMode('alpha')}
+        />
+        <ToolButton
+          icon="time"
+          active={sortMode === 'recent'}
+          onPress={() => setSortMode('recent')}
+        />
+      </View>
       {error ? (
         <View style={styles.center}>
           <ThemedText themeColor="danger" style={styles.message}>
@@ -224,9 +525,10 @@ export default function MyShowsScreen() {
         </View>
       ) : showingMovies ? (
         <FlatList
+          key={`movie-${viewMode}`}
           data={filteredMovies}
           keyExtractor={(item) => String(item.tmdb_id)}
-          numColumns={3}
+          numColumns={viewMode === 'grid' ? 3 : 1}
           contentContainerStyle={[styles.list, !filteredMovies.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -254,20 +556,29 @@ export default function MyShowsScreen() {
               </View>
             )
           }
-          renderItem={({ item }) => (
-            <ShowCard
-              tmdbId={item.tmdb_id}
-              name={item.title}
-              posterPath={item.poster_path}
-              media="movie"
-            />
-          )}
+          renderItem={({ item }) =>
+            viewMode === 'grid' ? (
+              <ShowCard
+                tmdbId={item.tmdb_id}
+                name={item.title}
+                posterPath={item.poster_path}
+                media="movie"
+              />
+            ) : (
+              <LibraryListRow
+                tmdbId={item.tmdb_id}
+                name={item.title}
+                posterPath={item.poster_path}
+              />
+            )
+          }
         />
       ) : (
         <FlatList
+          key={`tv-${viewMode}`}
           data={filteredShows}
           keyExtractor={(item) => String(item.tmdb_id)}
-          numColumns={3}
+          numColumns={viewMode === 'grid' ? 3 : 1}
           contentContainerStyle={[styles.list, !filteredShows.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -295,9 +606,28 @@ export default function MyShowsScreen() {
               </View>
             )
           }
-          renderItem={({ item }) => (
-            <ShowCard tmdbId={item.tmdb_id} name={item.name} posterPath={item.poster_path} />
-          )}
+          renderItem={({ item }) => {
+            if (viewMode === 'grid') {
+              return (
+                <ShowCard
+                  tmdbId={item.tmdb_id}
+                  name={item.name}
+                  posterPath={item.poster_path}
+                  progress={progressFor(item.tmdb_id)}
+                />
+              );
+            }
+            const aired = airedById[item.tmdb_id] ?? 0;
+            const watched = watchedById[item.tmdb_id] ?? 0;
+            return (
+              <WatchNextRow
+                show={item}
+                next={nextEpById[item.tmdb_id]}
+                remainingAfter={Math.max(aired - watched - 1, 0)}
+                onMarkWatched={() => markNextWatched(item.tmdb_id)}
+              />
+            );
+          }}
         />
       )}
     </View>
@@ -346,16 +676,96 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 14,
   },
-  statusRow: {
+  toolsRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.one,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.one,
   },
+  toolsSpacer: {
+    flex: 1,
+  },
+  toolsDivider: {
+    width: 1,
+    height: 20,
+  },
+  toolButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chip: {
     borderRadius: 999,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.two + Spacing.half,
     paddingVertical: 6,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: 10,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    marginHorizontal: Spacing.one,
+    marginBottom: Spacing.one,
+  },
+  listPoster: {
+    width: 24,
+    height: 36,
+    borderRadius: 4,
+  },
+  listName: {
+    flex: 1,
+  },
+  nextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    borderRadius: 12,
+    padding: Spacing.two,
+    marginHorizontal: Spacing.one,
+    marginBottom: Spacing.two,
+  },
+  nextStill: {
+    width: 96,
+    height: 60,
+    borderRadius: 8,
+  },
+  nextInfo: {
+    flex: 1,
+    gap: Spacing.one,
+    alignItems: 'flex-start',
+  },
+  nextShowName: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    maxWidth: '100%',
+  },
+  nextEpisodeRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.one,
+  },
+  nextRemaining: {
+    fontSize: 12,
+  },
+  nextCheck: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeAction: {
+    width: 88,
+    borderRadius: 12,
+    marginBottom: Spacing.two,
+    marginRight: Spacing.one,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   list: {
     padding: Spacing.two,

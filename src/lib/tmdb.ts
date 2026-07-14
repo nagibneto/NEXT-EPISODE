@@ -250,8 +250,86 @@ export function getMovieDetailsCached(movieId: number) {
   return cached;
 }
 
+/**
+ * Quantos episódios da série já foram ao ar: temporadas anteriores completas
+ * (especiais fora) + posição do último episódio exibido na temporada atual.
+ * O number_of_episodes sozinho não serve porque inclui episódios anunciados
+ * que ainda não estrearam.
+ */
+export function airedEpisodeCount(details: {
+  seasons: { season_number: number; episode_count: number }[];
+  last_episode_to_air: { season_number: number; episode_number: number } | null;
+  number_of_episodes: number;
+}) {
+  const last = details.last_episode_to_air;
+  if (!last) return details.number_of_episodes;
+  const previousSeasons = details.seasons
+    .filter((s) => s.season_number > 0 && s.season_number < last.season_number)
+    .reduce((acc, s) => acc + s.episode_count, 0);
+  return previousSeasons + last.episode_number;
+}
+
+// ---------- Onde assistir ----------
+
+export interface TmdbWatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string | null;
+  display_priority: number;
+}
+
+export interface TmdbWatchProviders {
+  /** Página do TMDB com a lista completa (crédito obrigatório ao JustWatch). */
+  link: string | null;
+  /** Plataformas de streaming por assinatura disponíveis no Brasil. */
+  flatrate: TmdbWatchProvider[];
+}
+
+export function providerLogoUrl(path: string | null) {
+  return path ? `${IMAGE_BASE}/w92${path}` : null;
+}
+
+/**
+ * Em quais streamings o título está disponível no Brasil. Os dados vêm do
+ * JustWatch via TMDB — a atribuição "JustWatch" na UI é exigência deles.
+ */
+export async function getWatchProviders(
+  media: 'tv' | 'movie',
+  id: number
+): Promise<TmdbWatchProviders> {
+  const data = await get<{
+    results: Record<string, { link?: string; flatrate?: TmdbWatchProvider[] }>;
+  }>(`/${media}/${id}/watch/providers`);
+  const br = data.results?.BR;
+  const flatrate = (br?.flatrate ?? [])
+    // O JustWatch lista variantes do mesmo serviço ("Netflix Standard with
+    // Ads", "HBO Max Amazon Channel") — só os planos/revendas principais
+    // interessam aqui.
+    .filter((p) => !/with ads|amazon channel|apple tv channel/i.test(p.provider_name))
+    .sort((a, b) => a.display_priority - b.display_priority);
+  return { link: br?.link ?? null, flatrate };
+}
+
 export function getSeasonDetails(showId: number, seasonNumber: number) {
   return get<TmdbSeasonDetails>(`/tv/${showId}/season/${seasonNumber}`);
+}
+
+// Mesmo esquema de cache das séries, para o "assistir a seguir" da watchlist,
+// que consulta uma temporada por série seguida.
+const seasonDetailsCache = new Map<string, Promise<TmdbSeasonDetails>>();
+
+export function getSeasonDetailsCached(showId: number, seasonNumber: number) {
+  const key = `${showId}-${seasonNumber}`;
+  let cached = seasonDetailsCache.get(key);
+  if (!cached) {
+    cached = getSeasonDetails(showId, seasonNumber).catch((error) => {
+      // Não guarda falhas no cache para permitir nova tentativa.
+      seasonDetailsCache.delete(key);
+      throw error;
+    });
+    seasonDetailsCache.set(key, cached);
+  }
+  return cached;
 }
 
 /**

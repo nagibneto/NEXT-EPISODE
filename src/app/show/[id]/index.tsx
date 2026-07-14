@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { followShow, isFollowing, unfollowShow } from '@/lib/db';
+import { followShow, getWatchedEpisodes, isFollowing, unfollowShow } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   backdropUrl,
@@ -25,6 +26,8 @@ export default function ShowDetailsScreen() {
 
   const [show, setShow] = useState<TmdbShowDetails | null>(null);
   const [seasonRatings, setSeasonRatings] = useState<Map<number, number>>(new Map());
+  // season_number → episódios assistidos pelo usuário naquela temporada.
+  const [watchedBySeason, setWatchedBySeason] = useState<Map<number, number>>(new Map());
   const [following, setFollowing] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,12 +44,21 @@ export default function ShowDetailsScreen() {
   }, [showId, user]);
 
   // Revalida ao voltar da temporada: marcar um episódio lá passa a seguir a
-  // série, e o botão "Seguindo" precisa refletir isso.
+  // série, e o botão "Seguindo" e as contagens por temporada precisam refletir.
   useFocusEffect(
     useCallback(() => {
       if (!user) return;
       isFollowing(user.id, showId)
         .then(setFollowing)
+        .catch(() => {});
+      getWatchedEpisodes(user.id, showId)
+        .then((episodes) => {
+          const counts = new Map<number, number>();
+          for (const episode of episodes) {
+            counts.set(episode.season_number, (counts.get(episode.season_number) ?? 0) + 1);
+          }
+          setWatchedBySeason(counts);
+        })
         .catch(() => {});
     }, [user, showId])
   );
@@ -157,6 +169,8 @@ export default function ShowDetailsScreen() {
         </ThemedText>
       </Pressable>
 
+      <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
+
       {next?.air_date && (
         <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
           <ThemedText type="smallBold" style={{ color: theme.accent }}>
@@ -199,6 +213,9 @@ export default function ShowDetailsScreen() {
             <View style={styles.seasonText}>
               <ThemedText type="smallBold">{season.name}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
+                {watchedBySeason.has(season.season_number)
+                  ? `${Math.min(watchedBySeason.get(season.season_number)!, season.episode_count)}/`
+                  : ''}
                 {season.episode_count} episódios
                 {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
               </ThemedText>
@@ -257,6 +274,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
+  },
+  providers: {
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.three,
   },
   nextEpisode: {
     margin: Spacing.three,
