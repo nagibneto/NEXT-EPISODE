@@ -32,7 +32,14 @@ export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv', pro
       asChild>
       <Pressable style={styles.card}>
         {uri ? (
-          <Image source={{ uri }} style={styles.poster} contentFit="cover" transition={150} />
+          <Image
+            source={{ uri }}
+            style={styles.poster}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            recyclingKey={String(tmdbId)}
+          />
         ) : (
           <View style={[styles.poster, styles.posterFallback, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold" themeColor="textSecondary" numberOfLines={3}>

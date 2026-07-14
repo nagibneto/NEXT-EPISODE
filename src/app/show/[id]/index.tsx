@@ -1,20 +1,30 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { followShow, getWatchedEpisodes, isFollowing, unfollowShow } from '@/lib/db';
+import {
+  followShow,
+  getWatchedEpisodes,
+  isFollowing,
+  markSeasonWatched,
+  unfollowShow,
+  unmarkSeasonWatched,
+} from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   backdropUrl,
   getSeasonAverageRatings,
+  getSeasonDetailsCached,
   getShowDetails,
   posterUrl,
+  type TmdbSeasonSummary,
   type TmdbShowDetails,
 } from '@/lib/tmdb';
 
@@ -31,6 +41,8 @@ export default function ShowDetailsScreen() {
   const [following, setFollowing] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Temporada com marcação em massa em andamento (número dela, ou null).
+  const [seasonBusy, setSeasonBusy] = useState<number | null>(null);
 
   useEffect(() => {
     getShowDetails(showId)
@@ -101,6 +113,61 @@ export default function ShowDetailsScreen() {
       setError(err instanceof Error ? err.message : 'Não foi possível atualizar.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Marca todos os episódios já exibidos da temporada, ou desmarca todos. */
+  async function setSeasonWatched(season: TmdbSeasonSummary, watchAll: boolean) {
+    if (!user || !show) return;
+    setSeasonBusy(season.season_number);
+    try {
+      if (watchAll) {
+        // Só episódios que já foram ao ar — igual à tela da temporada.
+        const details = await getSeasonDetailsCached(show.id, season.season_number);
+        const today = new Date().toISOString().slice(0, 10);
+        const released = details.episodes
+          .filter((episode) => !!episode.air_date && episode.air_date <= today)
+          .map((episode) => episode.episode_number);
+        await markSeasonWatched(user.id, show.id, season.season_number, released);
+        setWatchedBySeason((prev) => new Map(prev).set(season.season_number, released.length));
+        // Marcar assistido também passa a seguir a série, para ela aparecer
+        // na watchlist (mesmo comportamento da tela da temporada).
+        if (!following) {
+          await followShow(user.id, {
+            tmdb_id: show.id,
+            name: show.name,
+            poster_path: show.poster_path,
+          });
+          setFollowing(true);
+        }
+        syncEpisodeNotifications(user.id).catch(() => {});
+      } else {
+        await unmarkSeasonWatched(user.id, show.id, season.season_number);
+        setWatchedBySeason((prev) => {
+          const next = new Map(prev);
+          next.delete(season.season_number);
+          return next;
+        });
+      }
+    } catch (err) {
+      Alert.alert(
+        'Não foi possível atualizar',
+        err instanceof Error ? err.message : 'Tente novamente.'
+      );
+    } finally {
+      setSeasonBusy(null);
+    }
+  }
+
+  /** Toque na bolinha da temporada: marca tudo, ou confirma antes de desmarcar. */
+  function onSeasonCheckPress(season: TmdbSeasonSummary, complete: boolean) {
+    if (complete) {
+      Alert.alert('Desmarcar temporada', `Desmarcar todos os episódios de ${season.name}?`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Desmarcar', style: 'destructive', onPress: () => setSeasonWatched(season, false) },
+      ]);
+    } else {
+      setSeasonWatched(season, true);
     }
   }
 
@@ -200,35 +267,57 @@ export default function ShowDetailsScreen() {
       <ThemedText type="smallBold" style={styles.sectionTitle}>
         Temporadas
       </ThemedText>
-      {seasons.map((season) => (
-        <Link
-          key={season.id}
-          href={{
-            pathname: '/show/[id]/season/[seasonNumber]',
-            params: { id: String(show.id), seasonNumber: String(season.season_number) },
-          }}
-          asChild>
-          <Pressable
-            style={StyleSheet.flatten([styles.seasonRow, { backgroundColor: theme.backgroundElement }])}>
-            <View style={styles.seasonText}>
-              <ThemedText type="smallBold">{season.name}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {watchedBySeason.has(season.season_number)
-                  ? `${Math.min(watchedBySeason.get(season.season_number)!, season.episode_count)}/`
-                  : ''}
-                {season.episode_count} episódios
-                {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
-              </ThemedText>
-            </View>
-            {seasonRatings.has(season.season_number) && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.seasonRating}>
-                ⭐ {seasonRatings.get(season.season_number)!.toFixed(1)}
-              </ThemedText>
-            )}
-            <ThemedText themeColor="textSecondary">›</ThemedText>
-          </Pressable>
-        </Link>
-      ))}
+      {seasons.map((season) => {
+        const watchedCount = Math.min(
+          watchedBySeason.get(season.season_number) ?? 0,
+          season.episode_count
+        );
+        const complete = season.episode_count > 0 && watchedCount >= season.episode_count;
+        return (
+          <Link
+            key={season.id}
+            href={{
+              pathname: '/show/[id]/season/[seasonNumber]',
+              params: { id: String(show.id), seasonNumber: String(season.season_number) },
+            }}
+            asChild>
+            <Pressable
+              style={StyleSheet.flatten([styles.seasonRow, { backgroundColor: theme.backgroundElement }])}>
+              <View style={styles.seasonText}>
+                <ThemedText type="smallBold">{season.name}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {following || watchedBySeason.has(season.season_number)
+                    ? `${watchedCount}/`
+                    : ''}
+                  {season.episode_count} episódios
+                  {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
+                </ThemedText>
+              </View>
+              {seasonRatings.has(season.season_number) && (
+                <ThemedText type="small" themeColor="textSecondary" style={styles.seasonRating}>
+                  ⭐ {seasonRatings.get(season.season_number)!.toFixed(1)}
+                </ThemedText>
+              )}
+              <Pressable
+                hitSlop={8}
+                style={styles.seasonCheck}
+                disabled={seasonBusy !== null}
+                onPress={() => onSeasonCheckPress(season, complete)}>
+                {seasonBusy === season.season_number ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Ionicons
+                    name={complete ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={26}
+                    color={complete ? theme.accent : theme.textSecondary}
+                  />
+                )}
+              </Pressable>
+              <ThemedText themeColor="textSecondary">›</ThemedText>
+            </Pressable>
+          </Link>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -308,5 +397,12 @@ const styles = StyleSheet.create({
   },
   seasonRating: {
     marginRight: Spacing.two,
+  },
+  seasonCheck: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.one,
   },
 });

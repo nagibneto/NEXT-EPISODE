@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
@@ -34,6 +35,16 @@ import { getNextUnwatchedEpisode, type NextEpisode } from '@/lib/watch-next';
 import { registerPushToken, syncEpisodeNotifications } from '@/lib/notifications';
 
 type LibraryMode = 'tv' | 'movie';
+
+/** Última renderização da watchlist, salva para o app abrir instantâneo. */
+interface HomeCache {
+  shows?: FollowedShow[];
+  watchedById?: Record<number, number>;
+  airedById?: Record<number, number | null>;
+  nextEpById?: Record<number, NextEpisode | null>;
+}
+
+const homeCacheKey = (userId: string) => `home-cache-v1:${userId}`;
 type ShowStatusFilter = 'ongoing' | 'ended' | null;
 type ViewMode = 'grid' | 'list';
 type SortMode = 'recent' | 'alpha';
@@ -84,7 +95,14 @@ function LibraryListRow({
       <Pressable
         style={StyleSheet.flatten([styles.listRow, { backgroundColor: theme.backgroundElement }])}>
         {uri ? (
-          <Image source={{ uri }} style={styles.listPoster} contentFit="cover" transition={150} />
+          <Image
+            source={{ uri }}
+            style={styles.listPoster}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            recyclingKey={String(tmdbId)}
+          />
         ) : (
           <View style={[styles.listPoster, { backgroundColor: theme.backgroundSelected }]} />
         )}
@@ -162,7 +180,14 @@ function WatchNextRow({
       <Pressable
         style={StyleSheet.flatten([styles.nextRow, { backgroundColor: theme.backgroundElement }])}>
         {image ? (
-          <Image source={{ uri: image }} style={styles.nextStill} contentFit="cover" transition={150} />
+          <Image
+            source={{ uri: image }}
+            style={styles.nextStill}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            recyclingKey={String(show.tmdb_id)}
+          />
         ) : (
           <View style={[styles.nextStill, { backgroundColor: theme.backgroundSelected }]} />
         )}
@@ -245,6 +270,21 @@ export default function MyShowsScreen() {
   const [nextEpById, setNextEpById] = useState<Record<number, NextEpisode | null>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // O cache salvo já foi lido? Antes disso os efeitos de TMDB não rodam, para
+  // a tela abrir com os dados da sessão anterior e só então revalidar.
+  const [hydrated, setHydrated] = useState(false);
+  // Séries já revalidadas na TMDB nesta sessão: valores vindos do cache são
+  // exibidos na hora, mas recalculados uma vez em segundo plano.
+  const airedFresh = useRef(new Set<number>());
+  const nextEpFresh = useRef(new Set<number>());
+  // Buscas em andamento — impede chamadas duplicadas quando o efeito
+  // re-executa no meio de um lote (as buscas nunca são canceladas).
+  const airedPending = useRef(new Set<number>());
+  const nextEpPending = useRef(new Set<number>());
+  // Conta logada no momento; lotes disparados antes de trocar de conta
+  // comparam com isso para descartar resultados da conta anterior.
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -257,9 +297,20 @@ export default function MyShowsScreen() {
       ]);
       setShows(showsData);
       setMovies(moviesData);
-      setWatchedById(
-        Object.fromEntries(counts.map((count) => [count.tmdb_show_id, count.episode_count]))
-      );
+      setWatchedById((prev) => {
+        const next = Object.fromEntries(
+          counts.map((count) => [count.tmdb_show_id, count.episode_count])
+        );
+        // Contagem mudou fora desta tela (ex.: tela da temporada)? O "assistir
+        // a seguir" guardado ficou para trás — recalcula em segundo plano.
+        for (const [id, count] of Object.entries(next)) {
+          if (prev[Number(id)] !== undefined && prev[Number(id)] !== count) {
+            nextEpFresh.current.delete(Number(id));
+            airedFresh.current.delete(Number(id));
+          }
+        }
+        return next;
+      });
       // Reagenda notificações em segundo plano; falha não bloqueia a tela.
       syncEpisodeNotifications(user.id).catch(() => {});
       // Registra o push token para as notificações remotas (Edge Function).
@@ -275,68 +326,125 @@ export default function MyShowsScreen() {
     }, [load])
   );
 
-  // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
-  // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
+  // Hidrata a tela com o cache da sessão anterior: a lista aparece completa de
+  // imediato e a revalidação (Supabase + TMDB) acontece por baixo, sem piscar.
   useEffect(() => {
-    if (!shows) return;
+    if (!user) return;
     let cancelled = false;
-    const missing = shows.filter((show) => airedById[show.tmdb_id] === undefined);
-    if (missing.length === 0) return;
-    (async () => {
-      const entries = await Promise.all(
-        missing.map(async (show) => {
-          try {
-            const details = await getShowDetailsCached(show.tmdb_id);
-            return [show.tmdb_id, airedEpisodeCount(details)] as const;
-          } catch {
-            return [show.tmdb_id, null] as const;
-          }
-        })
-      );
-      if (cancelled) return;
-      setAiredById((prev) => {
-        const next = { ...prev };
-        for (const [id, aired] of entries) {
-          next[id] = aired;
-        }
-        return next;
+    airedFresh.current = new Set();
+    nextEpFresh.current = new Set();
+    airedPending.current = new Set();
+    nextEpPending.current = new Set();
+    AsyncStorage.getItem(homeCacheKey(user.id))
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        const cached = JSON.parse(raw) as HomeCache;
+        // Dados frescos que já chegaram têm prioridade sobre o cache.
+        setShows((prev) => prev ?? cached.shows ?? null);
+        setWatchedById((prev) =>
+          Object.keys(prev).length ? prev : (cached.watchedById ?? {})
+        );
+        setAiredById((prev) => ({ ...cached.airedById, ...prev }));
+        setNextEpById((prev) => ({ ...cached.nextEpById, ...prev }));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
       });
-    })();
     return () => {
       cancelled = true;
     };
-  }, [shows, airedById]);
+  }, [user]);
 
-  // Calcula o "assistir a seguir" de cada série quando o modo lista está
-  // ativo, em lotes para não estourar a TMDB de uma vez.
+  // Salva o estado atual para a próxima abertura do app. Com debounce: durante
+  // a revalidação chegam vários lotes seguidos, e serializar a watchlist toda
+  // a cada um deixaria a interface engasgada.
   useEffect(() => {
-    if (!user || !shows || viewMode !== 'list' || mode !== 'tv') return;
-    let cancelled = false;
-    const missing = shows.filter((show) => nextEpById[show.tmdb_id] === undefined);
+    if (!user || !hydrated || !shows) return;
+    const userId = user.id;
+    const timer = setTimeout(() => {
+      const cache: HomeCache = { shows, watchedById, airedById, nextEpById };
+      AsyncStorage.setItem(homeCacheKey(userId), JSON.stringify(cache)).catch(() => {});
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [user, hydrated, shows, watchedById, airedById, nextEpById]);
+
+  // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
+  // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
+  useEffect(() => {
+    if (!shows || !hydrated) return;
+    const missing = shows.filter(
+      (show) =>
+        !airedFresh.current.has(show.tmdb_id) && !airedPending.current.has(show.tmdb_id)
+    );
     if (missing.length === 0) return;
+    for (const show of missing) airedPending.current.add(show.tmdb_id);
     (async () => {
-      for (let i = 0; i < missing.length; i += 6) {
-        const batch = missing.slice(i, i + 6);
+      try {
         const entries = await Promise.all(
-          batch.map(async (show) => {
+          missing.map(async (show) => {
             try {
-              return [show.tmdb_id, await getNextUnwatchedEpisode(user.id, show.tmdb_id)] as const;
+              const details = await getShowDetailsCached(show.tmdb_id);
+              return [show.tmdb_id, airedEpisodeCount(details)] as const;
             } catch {
               return [show.tmdb_id, null] as const;
             }
           })
         );
-        if (cancelled) return;
-        setNextEpById((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+        for (const [id] of entries) airedFresh.current.add(id);
+        setAiredById((prev) => {
+          const next = { ...prev };
+          for (const [id, aired] of entries) {
+            next[id] = aired;
+          }
+          return next;
+        });
+      } finally {
+        for (const show of missing) airedPending.current.delete(show.tmdb_id);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, shows, viewMode, mode, nextEpById]);
+  }, [shows, hydrated, airedById]);
+
+  // Calcula o "assistir a seguir" de cada série quando o modo lista está
+  // ativo, em lotes para não estourar a TMDB de uma vez.
+  useEffect(() => {
+    if (!user || !shows || !hydrated || viewMode !== 'list' || mode !== 'tv') return;
+    const userId = user.id;
+    const missing = shows.filter(
+      (show) =>
+        !nextEpFresh.current.has(show.tmdb_id) && !nextEpPending.current.has(show.tmdb_id)
+    );
+    if (missing.length === 0) return;
+    for (const show of missing) nextEpPending.current.add(show.tmdb_id);
+    (async () => {
+      try {
+        for (let i = 0; i < missing.length; i += 6) {
+          const batch = missing.slice(i, i + 6);
+          const entries = await Promise.all(
+            batch.map(async (show) => {
+              try {
+                return [show.tmdb_id, await getNextUnwatchedEpisode(userId, show.tmdb_id)] as const;
+              } catch {
+                return [show.tmdb_id, null] as const;
+              }
+            })
+          );
+          // Trocou de conta no meio? Descarta o que veio da conta anterior.
+          if (userIdRef.current !== userId) return;
+          for (const [id] of entries) nextEpFresh.current.add(id);
+          setNextEpById((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+        }
+      } finally {
+        for (const show of missing) nextEpPending.current.delete(show.tmdb_id);
+      }
+    })();
+  }, [user, shows, hydrated, viewMode, mode, nextEpById]);
 
   async function handleRefresh() {
     setRefreshing(true);
+    // Puxar para atualizar força a revalidação completa na TMDB.
+    airedFresh.current.clear();
+    nextEpFresh.current.clear();
     await load();
     setRefreshing(false);
   }
@@ -350,6 +458,7 @@ export default function MyShowsScreen() {
       await markEpisodeWatched(user.id, showId, next.seasonNumber, next.episodeNumber, true);
       setWatchedById((prev) => ({ ...prev, [showId]: (prev[showId] ?? 0) + 1 }));
       // Remove a entrada: o efeito acima detecta e busca o próximo episódio.
+      nextEpFresh.current.delete(showId);
       setNextEpById((prev) => {
         const { [showId]: _removed, ...rest } = prev;
         return rest;
@@ -529,6 +638,9 @@ export default function MyShowsScreen() {
           data={filteredMovies}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={viewMode === 'grid' ? 3 : 1}
+          // No Android o recorte de views fora da tela faz as imagens sumirem
+          // durante o scroll; a lista é curta o bastante para mantê-las vivas.
+          removeClippedSubviews={false}
           contentContainerStyle={[styles.list, !filteredMovies.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -579,6 +691,9 @@ export default function MyShowsScreen() {
           data={filteredShows}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={viewMode === 'grid' ? 3 : 1}
+          // No Android o recorte de views fora da tela faz as imagens sumirem
+          // durante o scroll; a lista é curta o bastante para mantê-las vivas.
+          removeClippedSubviews={false}
           contentContainerStyle={[styles.list, !filteredShows.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
