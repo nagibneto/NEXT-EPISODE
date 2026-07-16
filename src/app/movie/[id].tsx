@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { CastList } from '@/components/cast-list';
 import { CommentsScreen } from '@/components/comments-screen';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
@@ -256,6 +257,12 @@ export default function MovieDetailsScreen() {
               )}
             </View>
 
+            {movie.overview ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {movie.overview}
+              </ThemedText>
+            ) : null}
+
             <WatchProviders media="movie" tmdbId={movieId} />
 
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
@@ -269,11 +276,7 @@ export default function MovieDetailsScreen() {
               )}
             </View>
 
-            {movie.overview ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {movie.overview}
-              </ThemedText>
-            ) : null}
+            <CastList media="movie" tmdbId={movieId} />
 
             {error && <ThemedText themeColor="danger">{error}</ThemedText>}
           </View>

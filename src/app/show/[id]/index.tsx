@@ -5,6 +5,7 @@ import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { CastList } from '@/components/cast-list';
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
@@ -285,33 +286,37 @@ export default function ShowDetailsScreen() {
         </ThemedText>
       </Pressable>
 
-      <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
-
-      {next?.air_date && (
-        <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold" style={{ color: theme.accent }}>
-            Próximo episódio
-          </ThemedText>
-          <ThemedText type="small">
-            S{String(next.season_number).padStart(2, '0')}E
-            {String(next.episode_number).padStart(2, '0')}
-            {next.name ? ` — ${next.name}` : ''}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {new Date(`${next.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
-              weekday: 'long',
-              day: '2-digit',
-              month: 'long',
-            })}
-          </ThemedText>
-        </View>
-      )}
-
       {show.overview ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.overview}>
           {show.overview}
         </ThemedText>
       ) : null}
+
+      <View style={styles.topCardsRow}>
+        <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
+
+        {next?.air_date && (
+          <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
+            <ThemedText type="smallBold" style={{ color: theme.accent }}>
+              Próximo episódio
+            </ThemedText>
+            <ThemedText type="small">
+              S{String(next.season_number).padStart(2, '0')}E
+              {String(next.episode_number).padStart(2, '0')}
+              {next.name ? ` — ${next.name}` : ''}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {new Date(`${next.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'long',
+              })}
+            </ThemedText>
+          </View>
+        )}
+      </View>
+
+      <CastList media="tv" tmdbId={show.id} />
 
       <ThemedText type="smallBold" style={styles.sectionTitle}>
         Temporadas
@@ -432,13 +437,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  providers: {
+  topCardsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: Spacing.two,
     marginHorizontal: Spacing.three,
-    marginTop: Spacing.three,
+    marginTop: Spacing.two,
+  },
+  providers: {
+    flex: 1,
   },
   nextEpisode: {
-    margin: Spacing.three,
-    marginBottom: 0,
+    flex: 1,
     borderRadius: 12,
     padding: Spacing.three,
     gap: Spacing.half,

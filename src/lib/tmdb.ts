@@ -368,3 +368,43 @@ export async function getSeasonAverageRatings(showId: number, seasonNumbers: num
 export function getEpisodeDetails(showId: number, seasonNumber: number, episodeNumber: number) {
   return get<TmdbEpisode>(`/tv/${showId}/season/${seasonNumber}/episode/${episodeNumber}`);
 }
+
+// ---------- Elenco ----------
+
+export interface TmdbCastMember {
+  id: number;
+  name: string;
+  character: string;
+  profile_path: string | null;
+  order: number;
+}
+
+export function getShowCredits(showId: number) {
+  return get<{ cast: TmdbCastMember[] }>(`/tv/${showId}/credits`);
+}
+
+export function getMovieCredits(movieId: number) {
+  return get<{ cast: TmdbCastMember[] }>(`/movie/${movieId}/credits`);
+}
+
+// ---------- Busca por pessoas (permite achar títulos pelo nome do ator) ----------
+
+/** Título "conhecido por" de uma pessoa, no formato bruto do /search/person. */
+export type TmdbPersonKnownFor =
+  | (TmdbShowSummary & { media_type: 'tv' })
+  | (TmdbMovieSummary & { media_type: 'movie' });
+
+export interface TmdbPersonSummary {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  known_for: TmdbPersonKnownFor[];
+}
+
+export function searchPeople(query: string, page = 1) {
+  return get<{ results: TmdbPersonSummary[]; total_pages: number }>('/search/person', {
+    query,
+    page: String(page),
+    include_adult: 'false',
+  });
+}

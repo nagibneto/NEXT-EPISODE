@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Entypo from '@expo/vector-icons/Entypo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
@@ -7,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -17,6 +19,7 @@ import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
+import { GenreFilterSheet } from '@/components/genre-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -32,7 +35,15 @@ import {
   type WatchedMovie,
   type WatchlistMovie,
 } from '@/lib/db';
-import { airedEpisodeCount, getShowDetailsCached, posterUrl, stillUrl } from '@/lib/tmdb';
+import {
+  airedEpisodeCount,
+  getGenres,
+  getMovieDetailsCached,
+  getShowDetailsCached,
+  posterUrl,
+  stillUrl,
+  type TmdbGenre,
+} from '@/lib/tmdb';
 import { getNextUnwatchedEpisode, type NextEpisode } from '@/lib/watch-next';
 import { registerPushToken, syncEpisodeNotifications } from '@/lib/notifications';
 
@@ -47,10 +58,15 @@ interface HomeCache {
 }
 
 const homeCacheKey = (userId: string) => `home-cache-v1:${userId}`;
-type ShowStatusFilter = 'ongoing' | 'ended' | null;
+type ShowStatusFilter = 'notstarted' | 'ongoing' | 'ended' | null;
 type MovieStatusFilter = 'watched' | 'towatch' | null;
 type ViewMode = 'grid' | 'list';
 type SortMode = 'recent' | 'alpha';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  recent: 'Última atualização',
+  alpha: 'Ordem alfabética',
+};
 
 /** Compara ignorando maiúsculas e acentos ("josé" casa com "Jose"). */
 function normalize(text: string) {
@@ -125,6 +141,7 @@ function WatchNextRow({
   show,
   next,
   remainingAfter,
+  progress,
   onMarkWatched,
 }: {
   show: FollowedShow;
@@ -132,6 +149,8 @@ function WatchNextRow({
   next: NextEpisode | null | undefined;
   /** Episódios exibidos que ainda faltam depois deste. */
   remainingAfter: number;
+  /** Andamento na série (0–1, episódios assistidos ÷ exibidos); indefinido = sem barra. */
+  progress: number | undefined;
   onMarkWatched: () => void;
 }) {
   const theme = useTheme();
@@ -212,8 +231,8 @@ function WatchNextRow({
                   {String(next.episodeNumber).padStart(2, '0')}
                 </ThemedText>
                 {remainingAfter > 0 && (
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.nextRemaining}>
-                    +{remainingAfter}
+                  <ThemedText type="small" style={[styles.nextRemaining, { color: theme.gold }]}>
+                    +{remainingAfter} episódio{remainingAfter > 1 ? 's' : ''}
                   </ThemedText>
                 )}
               </View>
@@ -222,6 +241,22 @@ function WatchNextRow({
                   {next.name}
                 </ThemedText>
               ) : null}
+              {progress !== undefined && (
+                <View style={styles.nextProgressRow}>
+                  <View
+                    style={[styles.nextProgressTrack, { backgroundColor: theme.backgroundSelected }]}>
+                    <View
+                      style={[
+                        styles.nextProgressFill,
+                        { backgroundColor: theme.accent, width: `${Math.round(progress * 100)}%` },
+                      ]}
+                    />
+                  </View>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.nextProgressLabel}>
+                    {Math.round(progress * 100)}%
+                  </ThemedText>
+                </View>
+              )}
             </>
           ) : next === null ? (
             <ThemedText type="small" themeColor="textSecondary">
@@ -267,6 +302,15 @@ export default function MyShowsScreen() {
   const [tvViewMode, setTvViewMode] = useState<ViewMode>('list');
   const [movieViewMode, setMovieViewMode] = useState<ViewMode>('grid');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  // Posição (medida na tela) onde o menu de ordenação deve abrir, logo abaixo
+  // do botão que o aciona — sem isso o Modal ocuparia a largura toda.
+  const [sortMenuPos, setSortMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const sortButtonRef = useRef<View>(null);
+  // Categoria/gênero TMDB selecionada para filtrar a watchlist (null = todas).
+  const [genreFilter, setGenreFilter] = useState<number | null>(null);
+  const [genreSheetOpen, setGenreSheetOpen] = useState(false);
+  const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [shows, setShows] = useState<FollowedShow[] | null>(null);
   const [movies, setMovies] = useState<WatchedMovie[] | null>(null);
   const [movieWatchlist, setMovieWatchlist] = useState<WatchlistMovie[] | null>(null);
@@ -276,6 +320,9 @@ export default function MyShowsScreen() {
   const [watchedById, setWatchedById] = useState<Record<number, number>>({});
   // tmdb_id → próximo episódio a assistir (null = em dia; ausente = calculando).
   const [nextEpById, setNextEpById] = useState<Record<number, NextEpisode | null>>({});
+  // tmdb_id → ids dos gêneros TMDB, usado pelo filtro de categoria.
+  const [showGenresById, setShowGenresById] = useState<Record<number, number[]>>({});
+  const [movieGenresById, setMovieGenresById] = useState<Record<number, number[]>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // O cache salvo já foi lido? Antes disso os efeitos de TMDB não rodam, para
@@ -285,10 +332,12 @@ export default function MyShowsScreen() {
   // exibidos na hora, mas recalculados uma vez em segundo plano.
   const airedFresh = useRef(new Set<number>());
   const nextEpFresh = useRef(new Set<number>());
+  const movieGenresFresh = useRef(new Set<number>());
   // Buscas em andamento — impede chamadas duplicadas quando o efeito
   // re-executa no meio de um lote (as buscas nunca são canceladas).
   const airedPending = useRef(new Set<number>());
   const nextEpPending = useRef(new Set<number>());
+  const movieGenresPending = useRef(new Set<number>());
   // Conta logada no momento; lotes disparados antes de trocar de conta
   // comparam com isso para descartar resultados da conta anterior.
   const userIdRef = useRef(user?.id);
@@ -336,6 +385,15 @@ export default function MyShowsScreen() {
     }, [load])
   );
 
+  // Categorias mudam de id entre séries e filmes na TMDB — recarrega a lista
+  // de gêneros e limpa o filtro selecionado ao trocar de aba.
+  useEffect(() => {
+    setGenreFilter(null);
+    getGenres(mode)
+      .then(setGenres)
+      .catch(() => setGenres([]));
+  }, [mode]);
+
   // Hidrata a tela com o cache da sessão anterior: a lista aparece completa de
   // imediato e a revalidação (Supabase + TMDB) acontece por baixo, sem piscar.
   useEffect(() => {
@@ -381,6 +439,7 @@ export default function MyShowsScreen() {
 
   // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
   // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
+  // Os gêneros vêm de graça na mesma resposta e alimentam o filtro de categoria.
   useEffect(() => {
     if (!shows || !hydrated) return;
     const missing = shows.filter(
@@ -395,9 +454,9 @@ export default function MyShowsScreen() {
           missing.map(async (show) => {
             try {
               const details = await getShowDetailsCached(show.tmdb_id);
-              return [show.tmdb_id, airedEpisodeCount(details)] as const;
+              return [show.tmdb_id, airedEpisodeCount(details), details.genres.map((g) => g.id)] as const;
             } catch {
-              return [show.tmdb_id, null] as const;
+              return [show.tmdb_id, null, [] as number[]] as const;
             }
           })
         );
@@ -409,11 +468,53 @@ export default function MyShowsScreen() {
           }
           return next;
         });
+        setShowGenresById((prev) => {
+          const next = { ...prev };
+          for (const [id, , genreIds] of entries) {
+            next[id] = genreIds;
+          }
+          return next;
+        });
       } finally {
         for (const show of missing) airedPending.current.delete(show.tmdb_id);
       }
     })();
   }, [shows, hydrated, airedById]);
+
+  // Busca os gêneros de cada filme (assistido ou na watchlist) para o filtro
+  // de categoria, em lotes — só quando a aba Filmes está ativa.
+  useEffect(() => {
+    if (!hydrated || mode !== 'movie') return;
+    const ids = new Set<number>();
+    for (const movie of movies ?? []) ids.add(movie.tmdb_id);
+    for (const movie of movieWatchlist ?? []) ids.add(movie.tmdb_id);
+    const missing = [...ids].filter(
+      (id) => !movieGenresFresh.current.has(id) && !movieGenresPending.current.has(id)
+    );
+    if (missing.length === 0) return;
+    for (const id of missing) movieGenresPending.current.add(id);
+    (async () => {
+      try {
+        for (let i = 0; i < missing.length; i += 6) {
+          const batch = missing.slice(i, i + 6);
+          const entries = await Promise.all(
+            batch.map(async (id) => {
+              try {
+                const details = await getMovieDetailsCached(id);
+                return [id, details.genres.map((g) => g.id)] as const;
+              } catch {
+                return [id, []] as const;
+              }
+            })
+          );
+          for (const [id] of entries) movieGenresFresh.current.add(id);
+          setMovieGenresById((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+        }
+      } finally {
+        for (const id of missing) movieGenresPending.current.delete(id);
+      }
+    })();
+  }, [hydrated, mode, movies, movieWatchlist]);
 
   // Calcula o "assistir a seguir" de cada série quando o modo lista está
   // ativo, em lotes para não estourar a TMDB de uma vez.
@@ -478,6 +579,14 @@ export default function MyShowsScreen() {
     }
   }
 
+  /** Abre o menu de ordenação ancorado logo abaixo do botão que o acionou. */
+  function openSortMenu() {
+    sortButtonRef.current?.measureInWindow((x, y, _width, height) => {
+      setSortMenuPos({ top: y + height + 4, left: x });
+    });
+    setSortMenuOpen(true);
+  }
+
   const trimmedQuery = normalize(query.trim());
 
   // Progresso na série: episódios assistidos ÷ já exibidos (0–1).
@@ -497,15 +606,22 @@ export default function MyShowsScreen() {
     if (trimmedQuery) {
       list = list.filter((show) => normalize(show.name).includes(trimmedQuery));
     }
+    if (genreFilter !== null) {
+      list = list.filter((show) => (showGenresById[show.tmdb_id] ?? []).includes(genreFilter));
+    }
     if (statusFilter) {
-      // "Finalizadas" = você já assistiu tudo que foi ao ar; "Em andamento" =
-      // ainda tem episódio exibido por assistir (independe de a série ter
-      // sido cancelada ou continuar no ar). Séries com progresso ainda não
-      // calculado entram em "Em andamento" para a lista não abrir vazia.
+      // "Finalizadas" = você já assistiu tudo que foi ao ar; "Não iniciado" =
+      // nenhum episódio assistido ainda; "Em andamento" = já começou mas
+      // ainda tem episódio exibido por assistir. Séries com progresso ainda
+      // não calculado entram em "Em andamento" para a lista não abrir vazia.
       list = list.filter((show) => {
         const progress = progressFor(show.tmdb_id);
+        const watched = watchedById[show.tmdb_id] ?? 0;
         if (statusFilter === 'ended') return progress !== undefined && progress >= 1;
-        return progress === undefined || progress < 1;
+        if (statusFilter === 'notstarted') {
+          return progress !== undefined && progress < 1 && watched === 0;
+        }
+        return progress === undefined || (progress < 1 && watched > 0);
       });
     }
     if (sortMode === 'alpha') {
@@ -514,7 +630,16 @@ export default function MyShowsScreen() {
       );
     }
     return list;
-  }, [shows, trimmedQuery, statusFilter, progressFor, sortMode]);
+  }, [
+    shows,
+    trimmedQuery,
+    genreFilter,
+    showGenresById,
+    statusFilter,
+    progressFor,
+    watchedById,
+    sortMode,
+  ]);
 
   // Assistidos + Para assistir juntos (ou só um deles, conforme o filtro).
   const filteredMovies = useMemo(() => {
@@ -544,13 +669,24 @@ export default function MyShowsScreen() {
     if (trimmedQuery) {
       list = list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
     }
+    if (genreFilter !== null) {
+      list = list.filter((movie) => (movieGenresById[movie.tmdb_id] ?? []).includes(genreFilter));
+    }
     list = [...list].sort((a, b) =>
       sortMode === 'alpha'
         ? a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' })
         : b.date.localeCompare(a.date)
     );
     return list;
-  }, [movies, movieWatchlist, movieFilter, trimmedQuery, sortMode]);
+  }, [
+    movies,
+    movieWatchlist,
+    movieFilter,
+    trimmedQuery,
+    genreFilter,
+    movieGenresById,
+    sortMode,
+  ]);
 
   if (shows === null && !error) {
     return (
@@ -567,44 +703,52 @@ export default function MyShowsScreen() {
   // título nenhum o convite para buscar é mais útil (o filtro vem ligado por
   // padrão e não pode esconder o estado de watchlist vazia).
   const filtering =
-    (!!trimmedQuery || (showingMovies ? movieFilter !== null : statusFilter !== null)) &&
+    (!!trimmedQuery ||
+      genreFilter !== null ||
+      (showingMovies ? movieFilter !== null : statusFilter !== null)) &&
     (showingMovies
       ? (movies ?? []).length + (movieWatchlist ?? []).length > 0
       : (shows ?? []).length > 0);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.topRow}>
-        <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
-          {(
-            [
-              { value: 'tv', label: 'Séries' },
-              { value: 'movie', label: 'Filmes' },
-            ] as const
-          ).map((option) => (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.segment,
-                mode === option.value && { backgroundColor: theme.gold },
-              ]}
-              onPress={() => setMode(option.value)}>
-              <ThemedText
-                type="smallBold"
-                style={{
-                  // Texto escuro fixo: o amarelo é igual nos dois temas.
-                  color: mode === option.value ? '#231A00' : theme.textSecondary,
-                }}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          ))}
+      <View style={styles.searchRow}>
+        <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
+          <Pressable
+            style={[styles.modeButtonWide, mode === 'tv' && { backgroundColor: theme.gold }]}
+            onPress={() => setMode('tv')}>
+            <Ionicons
+              name="tv"
+              size={14}
+              // Ícone/texto escuro fixo: o amarelo é igual nos dois temas.
+              color={mode === 'tv' ? '#231A00' : theme.textSecondary}
+            />
+            <ThemedText
+              type="small"
+              style={{ color: mode === 'tv' ? '#231A00' : theme.textSecondary }}>
+              Séries
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButtonWide, mode === 'movie' && { backgroundColor: theme.gold }]}
+            onPress={() => setMode('movie')}>
+            <Entypo
+              name="clapperboard"
+              size={14}
+              color={mode === 'movie' ? '#231A00' : theme.textSecondary}
+            />
+            <ThemedText
+              type="small"
+              style={{ color: mode === 'movie' ? '#231A00' : theme.textSecondary }}>
+              Filmes
+            </ThemedText>
+          </Pressable>
         </View>
         <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
           <Ionicons name="search" size={16} color={theme.textSecondary} />
           <TextInput
             style={[styles.input, { color: theme.text }]}
-            placeholder="Buscar…"
+            placeholder={showingMovies ? 'Buscar filmes…' : 'Buscar séries…'}
             placeholderTextColor={theme.textSecondary}
             value={query}
             onChangeText={setQuery}
@@ -612,62 +756,125 @@ export default function MyShowsScreen() {
           />
         </View>
       </View>
-      <View style={styles.toolsRow}>
+      <View style={[styles.statusSegmented, { backgroundColor: theme.backgroundElement }]}>
         {showingMovies
           ? (
               [
-                { value: 'watched', label: 'Assistidos' },
-                { value: 'towatch', label: 'Para assistir' },
+                { value: 'watched', label: 'Assistidos', icon: 'checkmark-circle' },
+                { value: 'towatch', label: 'Para assistir', icon: 'bookmark' },
               ] as const
             ).map((option) => (
               <Pressable
                 key={option.value}
                 style={[
-                  styles.chip,
-                  {
-                    backgroundColor:
-                      movieFilter === option.value ? theme.accent : theme.backgroundElement,
-                  },
+                  styles.statusSegment,
+                  movieFilter === option.value && { backgroundColor: theme.accent },
                 ]}
                 onPress={() =>
                   setMovieFilter(movieFilter === option.value ? null : option.value)
                 }>
+                <Ionicons
+                  name={option.icon}
+                  size={13}
+                  color={movieFilter === option.value ? theme.accentText : theme.textSecondary}
+                />
                 <ThemedText
                   type="small"
-                  style={{
-                    color: movieFilter === option.value ? theme.accentText : theme.text,
-                  }}>
+                  numberOfLines={1}
+                  style={[
+                    styles.statusSegmentText,
+                    { color: movieFilter === option.value ? theme.accentText : theme.textSecondary },
+                  ]}>
                   {option.label}
                 </ThemedText>
               </Pressable>
             ))
           : (
               [
-                { value: 'ongoing', label: 'Em andamento' },
-                { value: 'ended', label: 'Finalizadas' },
+                { value: 'ongoing', label: 'Em andamento', icon: 'play-circle' },
+                { value: 'notstarted', label: 'Não iniciado', icon: 'ellipse-outline' },
+                { value: 'ended', label: 'Finalizadas', icon: 'checkmark-circle' },
               ] as const
             ).map((option) => (
               <Pressable
                 key={option.value}
                 style={[
-                  styles.chip,
-                  {
-                    backgroundColor:
-                      statusFilter === option.value ? theme.accent : theme.backgroundElement,
-                  },
+                  styles.statusSegment,
+                  statusFilter === option.value && { backgroundColor: theme.accent },
                 ]}
                 onPress={() =>
                   setStatusFilter(statusFilter === option.value ? null : option.value)
                 }>
+                <Ionicons
+                  name={option.icon}
+                  size={13}
+                  color={statusFilter === option.value ? theme.accentText : theme.textSecondary}
+                />
                 <ThemedText
                   type="small"
-                  style={{
-                    color: statusFilter === option.value ? theme.accentText : theme.text,
-                  }}>
+                  numberOfLines={1}
+                  style={[
+                    styles.statusSegmentText,
+                    { color: statusFilter === option.value ? theme.accentText : theme.textSecondary },
+                  ]}>
                   {option.label}
                 </ThemedText>
               </Pressable>
             ))}
+      </View>
+      <View style={styles.toolsRow}>
+        {/* "Ordenar por" desativado por enquanto — suspeita é que ninguém vai
+            usar; a ordenação padrão (mais recentes) continua valendo.
+        <Pressable
+          ref={sortButtonRef}
+          style={[
+            styles.sortButton,
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: sortMenuOpen ? theme.accent : theme.backgroundSelected,
+            },
+          ]}
+          onPress={openSortMenu}>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.sortButtonText}>
+            Ordenar por:{' '}
+          </ThemedText>
+          <ThemedText type="small" style={[styles.sortButtonText, { color: theme.accent }]}>
+            {SORT_LABELS[sortMode]}
+          </ThemedText>
+          <Ionicons
+            name="chevron-down"
+            size={12}
+            color={sortMenuOpen ? theme.accent : theme.textSecondary}
+          />
+        </Pressable>
+        */}
+        <Pressable
+          style={[
+            styles.sortButton,
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: genreFilter !== null ? theme.accent : theme.backgroundSelected,
+              gap: Spacing.one + 2,
+            },
+          ]}
+          onPress={() => setGenreSheetOpen(true)}>
+          <Ionicons
+            name="filter"
+            size={13}
+            color={genreFilter !== null ? theme.accent : theme.textSecondary}
+          />
+          <ThemedText
+            type="small"
+            style={[
+              styles.sortButtonText,
+              { color: genreFilter !== null ? theme.accent : theme.text },
+            ]}>
+            Categorias
+          </ThemedText>
+        </Pressable>
         <View style={styles.toolsSpacer} />
         <ToolButton
           icon="grid"
@@ -679,18 +886,57 @@ export default function MyShowsScreen() {
           active={viewMode === 'list'}
           onPress={() => setViewMode('list')}
         />
-        <View style={[styles.toolsDivider, { backgroundColor: theme.backgroundElement }]} />
-        <ToolButton
-          icon="text"
-          active={sortMode === 'alpha'}
-          onPress={() => setSortMode('alpha')}
-        />
-        <ToolButton
-          icon="time"
-          active={sortMode === 'recent'}
-          onPress={() => setSortMode('recent')}
-        />
       </View>
+      <GenreFilterSheet
+        visible={genreSheetOpen}
+        genres={genres}
+        selectedId={genreFilter}
+        onSelect={setGenreFilter}
+        onClose={() => setGenreSheetOpen(false)}
+      />
+      {/* Menu do "Ordenar por" — comentado junto com o botão que o abre.
+      <Modal
+        visible={sortMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortMenuOpen(false)}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSortMenuOpen(false)}>
+          {sortMenuPos && (
+            <View
+              style={[
+                styles.sortMenu,
+                {
+                  backgroundColor: theme.backgroundElement,
+                  top: sortMenuPos.top,
+                  left: sortMenuPos.left,
+                },
+              ]}>
+              {(
+                [
+                  { value: 'recent', label: 'Última atualização' },
+                  { value: 'alpha', label: 'Ordem alfabética' },
+                ] as const
+              ).map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={styles.sortOption}
+                  onPress={() => {
+                    setSortMode(option.value);
+                    setSortMenuOpen(false);
+                  }}>
+                  <ThemedText type="small" style={{ color: theme.text }}>
+                    {option.label}
+                  </ThemedText>
+                  {sortMode === option.value && (
+                    <Ionicons name="checkmark" size={14} color={theme.accent} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </Pressable>
+      </Modal>
+      */}
       {error ? (
         <View style={styles.center}>
           <ThemedText themeColor="danger" style={styles.message}>
@@ -804,6 +1050,7 @@ export default function MyShowsScreen() {
                 show={item}
                 next={nextEpById[item.tmdb_id]}
                 remainingAfter={Math.max(aired - watched - 1, 0)}
+                progress={progressFor(item.tmdb_id)}
                 onMarkWatched={() => markNextWatched(item.tmdb_id)}
               />
             );
@@ -825,23 +1072,13 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.two,
   },
-  topRow: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
     marginHorizontal: Spacing.three,
     marginTop: Spacing.three,
     marginBottom: Spacing.two,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: 999,
-    padding: 2,
-  },
-  segment: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 6,
   },
   inputWrap: {
     flex: 1,
@@ -853,8 +1090,42 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 14,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    borderRadius: 999,
+    padding: 2,
+  },
+  modeButtonWide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two + Spacing.half,
+    paddingVertical: 7,
+  },
+  statusSegmented: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 2,
+    marginHorizontal: Spacing.three,
+    marginBottom: Spacing.two,
+  },
+  statusSegment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.one,
+    paddingVertical: 8,
+  },
+  statusSegmentText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   toolsRow: {
     flexDirection: 'row',
@@ -866,10 +1137,6 @@ const styles = StyleSheet.create({
   toolsSpacer: {
     flex: 1,
   },
-  toolsDivider: {
-    width: 1,
-    height: 20,
-  },
   toolButton: {
     width: 28,
     height: 28,
@@ -877,10 +1144,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chip: {
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
     borderRadius: 999,
-    paddingHorizontal: Spacing.two + Spacing.half,
+    borderWidth: 1.5,
+    paddingHorizontal: Spacing.two,
     paddingVertical: 6,
+  },
+  sortButtonText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  sortMenu: {
+    position: 'absolute',
+    borderRadius: 10,
+    paddingVertical: Spacing.one,
+    minWidth: 170,
+    elevation: 4,
+  },
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   listRow: {
     flexDirection: 'row',
@@ -905,7 +1195,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     borderRadius: 12,
-    padding: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one + 2,
     marginHorizontal: Spacing.one,
     marginBottom: Spacing.two,
   },
@@ -916,7 +1207,7 @@ const styles = StyleSheet.create({
   },
   nextInfo: {
     flex: 1,
-    gap: Spacing.one,
+    gap: 2,
     alignItems: 'flex-start',
   },
   nextShowName: {
@@ -932,6 +1223,26 @@ const styles = StyleSheet.create({
   },
   nextRemaining: {
     fontSize: 12,
+  },
+  nextProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: Spacing.one,
+    marginTop: 0,
+  },
+  nextProgressTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  nextProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  nextProgressLabel: {
+    fontSize: 11,
   },
   nextCheck: {
     width: 32,

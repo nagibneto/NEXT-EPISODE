@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
-import { AppHeaderTitle, HeaderLogo } from '@/components/app-header';
+import { AppHeaderTitle, HeaderActions } from '@/components/app-header';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -32,6 +32,7 @@ export default function TabsLayout() {
           title: 'Watchlist',
           headerTitle: () => <AppHeaderTitle />,
           headerTitleAlign: 'left',
+          headerRight: () => <HeaderActions />,
           tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,
         }}
       />
@@ -39,7 +40,9 @@ export default function TabsLayout() {
         name="search"
         options={{
           title: 'Buscar',
-          headerRight: () => <HeaderLogo />,
+          headerTitle: () => <AppHeaderTitle title="Buscar" />,
+          headerTitleAlign: 'left',
+          headerRight: () => <HeaderActions />,
           tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
         }}
       />
@@ -47,7 +50,9 @@ export default function TabsLayout() {
         name="upcoming"
         options={{
           title: 'Próximos',
-          headerRight: () => <HeaderLogo />,
+          headerTitle: () => <AppHeaderTitle title="Próximos" />,
+          headerTitleAlign: 'left',
+          headerRight: () => <HeaderActions />,
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
         }}
       />
@@ -55,7 +60,9 @@ export default function TabsLayout() {
         name="feed"
         options={{
           title: 'Feed',
-          headerRight: () => <HeaderLogo />,
+          headerTitle: () => <AppHeaderTitle title="Feed" />,
+          headerTitleAlign: 'left',
+          headerRight: () => <HeaderActions />,
           tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
         }}
       />
@@ -63,7 +70,9 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Perfil',
-          headerRight: () => <HeaderLogo />,
+          headerTitle: () => <AppHeaderTitle title="Perfil" />,
+          headerTitleAlign: 'left',
+          headerRight: () => <HeaderActions showAvatar={false} />,
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />

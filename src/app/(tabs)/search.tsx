@@ -1,3 +1,4 @@
+import Entypo from '@expo/vector-icons/Entypo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -21,6 +22,7 @@ import {
   getPopularMovies,
   getPopularShows,
   searchMovies,
+  searchPeople,
   searchShows,
   type TmdbGenre,
   type TmdbMovieSummary,
@@ -34,6 +36,8 @@ interface SearchResult {
   name: string;
   poster_path: string | null;
   year?: string;
+  /** Preenchido quando o resultado veio de uma busca por ator, não pelo título. */
+  viaActor?: string;
 }
 
 function fromShow(show: TmdbShowSummary): SearchResult {
@@ -52,6 +56,33 @@ function fromMovie(movie: TmdbMovieSummary): SearchResult {
     poster_path: movie.poster_path,
     year: movie.release_date ? movie.release_date.slice(0, 4) : undefined,
   };
+}
+
+/**
+ * Quando a busca por título não é suficiente, procura por atores com esse
+ * nome e junta os títulos em que eles são conhecidos — só na primeira
+ * página, para não complicar a paginação.
+ */
+async function searchByCast(query: string, media: SearchMode, seenIds: Set<number>) {
+  try {
+    const { results } = await searchPeople(query);
+    const extra: SearchResult[] = [];
+    for (const person of results) {
+      for (const item of person.known_for) {
+        if (seenIds.has(item.id)) continue;
+        if (media === 'tv' && item.media_type === 'tv') {
+          seenIds.add(item.id);
+          extra.push({ ...fromShow(item), viaActor: person.name });
+        } else if (media === 'movie' && item.media_type === 'movie') {
+          seenIds.add(item.id);
+          extra.push({ ...fromMovie(item), viaActor: person.name });
+        }
+      }
+    }
+    return extra;
+  } catch {
+    return [];
+  }
 }
 
 const MIN_RATING_OPTIONS = [6, 7, 8] as const;
@@ -122,14 +153,22 @@ export default function SearchScreen() {
           : hasFilters
             ? await discoverShows({ genreId, minRating, page: pageNumber })
             : await getPopularShows(pageNumber);
-        return { items: data.results.map(fromShow), totalPages: data.total_pages };
+        const items = data.results.map(fromShow);
+        if (trimmed && pageNumber === 1) {
+          items.push(...(await searchByCast(trimmed, 'tv', new Set(items.map((i) => i.id)))));
+        }
+        return { items, totalPages: data.total_pages };
       }
       const data = trimmed
         ? await searchMovies(trimmed, pageNumber)
         : hasFilters
           ? await discoverMovies({ genreId, minRating, page: pageNumber })
           : await getPopularMovies(pageNumber);
-      return { items: data.results.map(fromMovie), totalPages: data.total_pages };
+      const items = data.results.map(fromMovie);
+      if (trimmed && pageNumber === 1) {
+        items.push(...(await searchByCast(trimmed, 'movie', new Set(items.map((i) => i.id)))));
+      }
+      return { items, totalPages: data.total_pages };
     },
     [query, mode, genreId, minRating]
   );
@@ -187,38 +226,48 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <TextInput
-        style={[styles.input, { backgroundColor: theme.backgroundElement, color: theme.text }]}
-        placeholder={mode === 'tv' ? 'Buscar séries…' : 'Buscar filmes…'}
-        placeholderTextColor={theme.textSecondary}
-        value={query}
-        onChangeText={setQuery}
-        autoCorrect={false}
-      />
+      <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          style={[styles.input, { color: theme.text }]}
+          placeholder={mode === 'tv' ? 'Buscar séries…' : 'Buscar filmes…'}
+          placeholderTextColor={theme.textSecondary}
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+        />
+      </View>
       <View style={styles.filterRow}>
-        <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
-          {(
-            [
-              { value: 'tv', label: 'Séries' },
-              { value: 'movie', label: 'Filmes' },
-            ] as const
-          ).map((option) => (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.segment,
-                mode === option.value && { backgroundColor: theme.accent },
-              ]}
-              onPress={() => setMode(option.value)}>
-              <ThemedText
-                type="smallBold"
-                style={{
-                  color: mode === option.value ? theme.accentText : theme.textSecondary,
-                }}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          ))}
+        <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
+          <Pressable
+            style={[styles.modeButtonWide, mode === 'tv' && { backgroundColor: theme.gold }]}
+            onPress={() => setMode('tv')}>
+            <Ionicons
+              name="tv"
+              size={14}
+              // Ícone/texto escuro fixo: o amarelo é igual nos dois temas.
+              color={mode === 'tv' ? '#231A00' : theme.textSecondary}
+            />
+            <ThemedText
+              type="small"
+              style={{ color: mode === 'tv' ? '#231A00' : theme.textSecondary }}>
+              Séries
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButtonWide, mode === 'movie' && { backgroundColor: theme.gold }]}
+            onPress={() => setMode('movie')}>
+            <Entypo
+              name="clapperboard"
+              size={14}
+              color={mode === 'movie' ? '#231A00' : theme.textSecondary}
+            />
+            <ThemedText
+              type="small"
+              style={{ color: mode === 'movie' ? '#231A00' : theme.textSecondary }}>
+              Filmes
+            </ThemedText>
+          </Pressable>
         </View>
         {!query.trim() && (
           <View style={styles.ratingGroup}>
@@ -287,7 +336,7 @@ export default function SearchScreen() {
               tmdbId={item.id}
               name={item.name}
               posterPath={item.poster_path}
-              subtitle={item.year}
+              subtitle={item.viaActor ? `Elenco: ${item.viaActor}` : item.year}
               media={mode}
             />
           )}
@@ -301,14 +350,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  input: {
-    borderRadius: 12,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 12,
-    fontSize: 16,
-    margin: Spacing.three,
-    marginBottom: Spacing.two,
-  },
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -317,15 +358,33 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
   },
-  segmented: {
+  modeToggle: {
     flexDirection: 'row',
     borderRadius: 999,
     padding: 2,
   },
-  segment: {
+  modeButtonWide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two + Spacing.half,
+    paddingVertical: 7,
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
     borderRadius: 999,
     paddingHorizontal: Spacing.three,
-    paddingVertical: 6,
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.three,
+    marginBottom: Spacing.two,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
   },
   ratingGroup: {
     flexDirection: 'row',

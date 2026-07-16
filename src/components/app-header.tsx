@@ -1,14 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/use-auth';
+import { getProfile, profileDisplayName, type Profile } from '@/lib/db';
 
-/** Logo + nome do app, usado como título da aba Watchlist. */
-export function AppHeaderTitle() {
+/** Logo + título, usado no header de todas as abas (nome muda por aba). */
+export function AppHeaderTitle({ title = 'Next Episode' }: { title?: string }) {
   const theme = useTheme();
   return (
     <View style={styles.row}>
@@ -17,7 +22,7 @@ export function AppHeaderTitle() {
         style={styles.logo}
         resizeMode="contain"
       />
-      <ThemedText style={[styles.name, { color: theme.text }]}>Next Episode</ThemedText>
+      <ThemedText style={[styles.name, { color: theme.text }]}>{title}</ThemedText>
     </View>
   );
 }
@@ -31,6 +36,41 @@ export function HeaderLogo() {
       style={[styles.logo, styles.logoRight]}
       resizeMode="contain"
     />
+  );
+}
+
+/**
+ * Sino de notificações + avatar do perfil, exibidos no header das abas.
+ * Na própria aba Perfil o avatar some — mostrar o avatar de quem já está
+ * na tela do perfil seria redundante.
+ */
+export function HeaderActions({ showAvatar = true }: { showAvatar?: boolean }) {
+  const theme = useTheme();
+  const router = useRouter();
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getProfile(user.id)
+      .then(setProfile)
+      .catch(() => {});
+  }, [user]);
+
+  return (
+    <View style={styles.actionsRow}>
+      <Pressable hitSlop={8} style={styles.bellButton} onPress={() => router.push('/notifications')}>
+        <Ionicons name="notifications-outline" size={22} color={theme.text} />
+      </Pressable>
+      {showAvatar && (
+        <Pressable hitSlop={4} onPress={() => router.push('/profile')}>
+          <UserAvatar
+            avatarId={profile?.avatar_id ?? null}
+            name={profile ? profileDisplayName(profile) : (user?.email ?? '?')}
+          />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
@@ -79,6 +119,16 @@ const styles = StyleSheet.create({
   },
   logoRight: {
     marginRight: Spacing.three,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    marginRight: Spacing.three,
+  },
+  bellButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stackHeaderRow: {
     flexDirection: 'row',
