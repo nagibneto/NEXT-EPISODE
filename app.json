@@ -12,7 +12,10 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "pt-BR",
-        "CFBundleLocalizations": ["pt-BR"]
+        "CFBundleLocalizations": ["pt-BR"],
+        "SKAdNetworkItems": [
+          { "SKAdNetworkIdentifier": "ludvb6z3bs.skadnetwork" }
+        ]
       }
     },
     "android": {
@@ -46,13 +49,6 @@
           "backgroundColor": "#0A0A0C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 180
-        }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713"
         }
       ]
     ],

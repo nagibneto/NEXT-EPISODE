@@ -1,7 +1,7 @@
 # Premium e anúncios — passos manuais
 
 O código do premium (assinatura via RevenueCat), do rewatch, dos avatares
-exclusivos e dos anúncios (AdMob) já está no app. Este documento lista o que
+exclusivos e dos anúncios (AppLovin MAX) já está no app. Este documento lista o que
 precisa ser feito **fora do código** para tudo funcionar, na ordem.
 
 ## 1. Banco (Supabase)
@@ -49,24 +49,30 @@ idempotente). Isso cria:
    supabase functions deploy revenuecat-webhook --no-verify-jwt
    ```
 
-## 4. AdMob (https://apps.admob.com)
+## 4. AppLovin MAX (https://dash.applovin.com)
 
-1. Crie o app iOS no AdMob e copie o **App ID** (formato
-   `ca-app-pub-XXXX~YYYY`). Troque no `app.json`, no plugin
-   `react-native-google-mobile-ads` — os que estão lá são os **de teste do
-   Google** e não geram receita.
-2. Crie uma unidade de **banner** e copie o id (`ca-app-pub-XXXX/ZZZZ`) para
-   o `.env`: `EXPO_PUBLIC_ADMOB_BANNER_IOS=...`
-   (em `__DEV__` o app sempre usa o banner de teste, então isso só importa no
-   build de produção).
-3. O app serve **apenas anúncios não personalizados**
-   (`requestNonPersonalizedAdsOnly`), então não há prompt de rastreamento
-   (ATT). Se um dia quiser anúncios personalizados, será preciso adicionar
-   `expo-tracking-transparency` e o texto de permissão.
+> Histórico: o plano original era AdMob, mas a conta do Google foi encerrada
+> em definitivo (herança de um AdSense desativado em 2019). A versão AdMob do
+> código ficou no commit "Premium + ads" da branch ads_start; se o Google um
+> dia voltar atrás, o AdMob pode entrar como demanda *dentro* do MAX.
+
+1. Conta criada com nextepisode.suporte@gmail.com (aprovação via
+   account-approval@applovin.com com o link da App Store).
+2. **SDK key** (Account → Keys) → `.env`: `EXPO_PUBLIC_APPLOVIN_SDK_KEY=...`
+3. **Ad unit** de banner iOS (MAX → Ad Units) → `.env`:
+   `EXPO_PUBLIC_APPLOVIN_BANNER_IOS=...`
+4. Registrar os dois valores também nos ambientes do EAS
+   (`eas env:create ...` para development/preview/production).
+5. Sem prompt de rastreamento (ATT): o MAX serve anúncios contextuais sem
+   IDFA. Antes do release, gerar a lista completa de SKAdNetworkItems no
+   painel do MAX (Ad Units → SKAdNetwork IDs) e colar no `app.json` — hoje só
+   o id da própria AppLovin está lá.
+6. Para testar em dev: MAX → Mediation Debugger / Test Mode com o IDFV do
+   aparelho, ou aguardar a conta ativa servir anúncios reais.
 
 ## 5. Build novo
 
-RevenueCat e AdMob são módulos nativos: é preciso gerar um build novo (não
+RevenueCat e AppLovin MAX são módulos nativos: é preciso gerar um build novo (não
 basta update OTA):
 
 ```sh
@@ -97,5 +103,5 @@ Ao enviar a versão:
 
 - Sem `EXPO_PUBLIC_REVENUECAT_*`: a tela premium abre, mas mostra "planos
   indisponíveis"; ninguém vira premium.
-- Sem `EXPO_PUBLIC_ADMOB_BANNER_*` em produção: nenhum anúncio aparece.
+- Sem `EXPO_PUBLIC_APPLOVIN_*`: nenhum anúncio aparece.
 - No web e no Expo Go os dois SDKs são ignorados sem quebrar o app.

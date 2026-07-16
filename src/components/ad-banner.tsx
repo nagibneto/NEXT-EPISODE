@@ -1,11 +1,15 @@
 /**
- * Banner do AdMob exibido para quem não é premium.
+ * Banner do AppLovin MAX exibido para quem não é premium.
  *
- * Serve apenas anúncios NÃO personalizados (requestNonPersonalizedAdsOnly),
- * o que dispensa o prompt de App Tracking Transparency da Apple.
+ * Sem o prompt de App Tracking Transparency o MAX serve anúncios contextuais
+ * (sem IDFA), que é o comportamento que queremos por ora.
  *
  * O módulo nativo não existe no web nem no Expo Go, então o require é
  * protegido e o componente simplesmente não renderiza nada nesses ambientes.
+ * Sem a SDK key / ad unit no ambiente, idem — o app funciona sem anúncios.
+ *
+ * (A versão anterior usava AdMob; ficou no commit "Premium + ads" caso um dia
+ * o Google reabra a conta — aí o AdMob pode entrar como demanda dentro do MAX.)
  */
 
 import { useEffect, useState } from 'react';
@@ -13,20 +17,22 @@ import { Platform, View } from 'react-native';
 
 import { usePremium } from '@/hooks/use-premium';
 
-let ads: typeof import('react-native-google-mobile-ads') | null = null;
+let max: typeof import('react-native-applovin-max') | null = null;
 if (Platform.OS !== 'web') {
   try {
     // Import condicional: o módulo nativo não existe no web nem no Expo Go.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    ads = require('react-native-google-mobile-ads');
+    max = require('react-native-applovin-max');
   } catch {
-    ads = null;
+    max = null;
   }
 }
 
+const sdkKey = process.env.EXPO_PUBLIC_APPLOVIN_SDK_KEY;
+
 const adUnitId = Platform.select({
-  ios: process.env.EXPO_PUBLIC_ADMOB_BANNER_IOS,
-  android: process.env.EXPO_PUBLIC_ADMOB_BANNER_ANDROID,
+  ios: process.env.EXPO_PUBLIC_APPLOVIN_BANNER_IOS,
+  android: process.env.EXPO_PUBLIC_APPLOVIN_BANNER_ANDROID,
 });
 
 let initialized = false;
@@ -35,13 +41,12 @@ export function AdBanner() {
   const { isPremium, loading } = usePremium();
   const [ready, setReady] = useState(initialized);
 
-  const enabled = Boolean(ads) && !isPremium && !loading && (Boolean(adUnitId) || __DEV__);
+  const enabled =
+    Boolean(max) && Boolean(sdkKey) && Boolean(adUnitId) && !isPremium && !loading;
 
   useEffect(() => {
     if (!enabled || initialized) return;
-    ads!
-      .default()
-      .initialize()
+    max!.AppLovinMAX.initialize(sdkKey!)
       .then(() => {
         initialized = true;
         setReady(true);
@@ -49,17 +54,19 @@ export function AdBanner() {
       .catch(() => {});
   }, [enabled]);
 
-  if (!enabled || !ready || !ads) return null;
+  if (!enabled || !ready || !max) return null;
 
-  const { BannerAd, BannerAdSize, TestIds } = ads;
-  const unitId = __DEV__ ? TestIds.ADAPTIVE_BANNER : adUnitId!;
+  const { AdView, AdFormat } = max;
 
   return (
     <View style={{ alignItems: 'center' }}>
-      <BannerAd
-        unitId={unitId}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+      {/* Banner fixo 320x50 (adaptive desligado para a altura ser previsível
+          em cima da tab bar). */}
+      <AdView
+        adUnitId={adUnitId!}
+        adFormat={AdFormat.BANNER}
+        adaptiveBannerEnabled={false}
+        style={{ width: '100%', height: 50 }}
       />
     </View>
   );
