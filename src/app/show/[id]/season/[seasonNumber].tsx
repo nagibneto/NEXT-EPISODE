@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Link, Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
@@ -8,11 +8,13 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { usePremium } from '@/hooks/use-premium';
 import {
   followShowsBulk,
   getWatchedEpisodes,
   markEpisodeWatched,
   markSeasonWatched,
+  rewatchEpisodes,
   unmarkSeasonWatched,
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
@@ -20,13 +22,16 @@ import { getSeasonDetails, getShowDetailsCached, stillUrl, type TmdbSeasonDetail
 
 export default function SeasonScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
+  const { isPremium } = usePremium();
   const params = useLocalSearchParams<{ id: string; seasonNumber: string }>();
   const showId = Number(params.id);
   const seasonNumber = Number(params.seasonNumber);
 
   const [season, setSeason] = useState<TmdbSeasonDetails | null>(null);
-  const [watched, setWatched] = useState<Set<number>>(new Set());
+  // episódio → quantas vezes foi visto (ausente = não visto).
+  const [watched, setWatched] = useState<Map<number, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [markingSeason, setMarkingSeason] = useState(false);
   // Evita repetir o upsert de "seguir" a cada episódio marcado nesta tela.
@@ -61,10 +66,10 @@ export default function SeasonScreen() {
       getWatchedEpisodes(user.id, showId)
         .then((episodes) => {
           setWatched(
-            new Set(
+            new Map(
               episodes
                 .filter((episode) => episode.season_number === seasonNumber)
-                .map((episode) => episode.episode_number)
+                .map((episode) => [episode.episode_number, episode.watch_count])
             )
           );
         })
@@ -75,12 +80,13 @@ export default function SeasonScreen() {
   const toggleWatched = useCallback(
     async (episodeNumber: number) => {
       if (!user) return;
-      const isWatched = watched.has(episodeNumber);
+      const previousCount = watched.get(episodeNumber);
+      const isWatched = previousCount !== undefined;
       // Atualização otimista: reflete o toque na hora e desfaz se a API falhar.
       setWatched((current) => {
-        const next = new Set(current);
+        const next = new Map(current);
         if (isWatched) next.delete(episodeNumber);
-        else next.add(episodeNumber);
+        else next.set(episodeNumber, 1);
         return next;
       });
       try {
@@ -88,14 +94,30 @@ export default function SeasonScreen() {
         if (!isWatched) ensureFollowing();
       } catch {
         setWatched((current) => {
-          const next = new Set(current);
-          if (isWatched) next.add(episodeNumber);
+          const next = new Map(current);
+          if (isWatched) next.set(episodeNumber, previousCount);
           else next.delete(episodeNumber);
           return next;
         });
       }
     },
     [user, watched, showId, seasonNumber, ensureFollowing]
+  );
+
+  /** "Vi de novo" (premium): +1 no episódio já assistido. */
+  const rewatchEpisode = useCallback(
+    async (episodeNumber: number) => {
+      if (!user) return;
+      const previousCount = watched.get(episodeNumber);
+      if (previousCount === undefined) return;
+      setWatched((current) => new Map(current).set(episodeNumber, previousCount + 1));
+      try {
+        await rewatchEpisodes(user.id, showId, seasonNumber, [episodeNumber]);
+      } catch {
+        setWatched((current) => new Map(current).set(episodeNumber, previousCount));
+      }
+    },
+    [user, watched, showId, seasonNumber]
   );
 
   if (error) {
@@ -130,10 +152,17 @@ export default function SeasonScreen() {
     const previous = watched;
     try {
       if (allWatched) {
-        setWatched(new Set());
+        setWatched(new Map());
         await unmarkSeasonWatched(user.id, showId, seasonNumber);
       } else {
-        setWatched(new Set(releasedEpisodes.map((episode) => episode.episode_number)));
+        setWatched(
+          new Map(
+            releasedEpisodes.map((episode) => [
+              episode.episode_number,
+              watched.get(episode.episode_number) ?? 1,
+            ])
+          )
+        );
         await markSeasonWatched(
           user.id,
           showId,
@@ -150,6 +179,40 @@ export default function SeasonScreen() {
     }
   }
 
+  /**
+   * "Vi a temporada de novo": +1 em todos os episódios lançados. Aparece
+   * quando a temporada inteira já foi vista; sem premium, abre o paywall.
+   */
+  async function rewatchSeason() {
+    if (!user || markingSeason) return;
+    if (!isPremium) {
+      router.push('/paywall');
+      return;
+    }
+    setMarkingSeason(true);
+    const previous = watched;
+    try {
+      setWatched(
+        new Map(
+          releasedEpisodes.map((episode) => [
+            episode.episode_number,
+            (watched.get(episode.episode_number) ?? 0) + 1,
+          ])
+        )
+      );
+      await rewatchEpisodes(
+        user.id,
+        showId,
+        seasonNumber,
+        releasedEpisodes.map((episode) => episode.episode_number)
+      );
+    } catch {
+      setWatched(previous);
+    } finally {
+      setMarkingSeason(false);
+    }
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: season.name }} />
@@ -159,33 +222,52 @@ export default function SeasonScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           releasedEpisodes.length > 0 ? (
-            <Pressable
-              style={[
-                styles.seasonButton,
-                {
-                  backgroundColor: allWatched ? theme.backgroundElement : theme.accent,
-                  opacity: markingSeason ? 0.6 : 1,
-                },
-              ]}
-              disabled={markingSeason}
-              onPress={toggleSeasonWatched}>
-              <Ionicons
-                name={allWatched ? 'close-circle-outline' : 'checkmark-done'}
-                size={18}
-                color={allWatched ? theme.text : theme.accentText}
-              />
-              <ThemedText
-                type="smallBold"
-                style={{ color: allWatched ? theme.text : theme.accentText }}>
-                {allWatched ? 'Desmarcar temporada' : 'Marcar temporada como assistida'}
-              </ThemedText>
-            </Pressable>
+            <View style={styles.seasonButtons}>
+              <Pressable
+                style={[
+                  styles.seasonButton,
+                  {
+                    backgroundColor: allWatched ? theme.backgroundElement : theme.accent,
+                    opacity: markingSeason ? 0.6 : 1,
+                  },
+                ]}
+                disabled={markingSeason}
+                onPress={toggleSeasonWatched}>
+                <Ionicons
+                  name={allWatched ? 'close-circle-outline' : 'checkmark-done'}
+                  size={18}
+                  color={allWatched ? theme.text : theme.accentText}
+                />
+                <ThemedText
+                  type="smallBold"
+                  style={{ color: allWatched ? theme.text : theme.accentText }}>
+                  {allWatched ? 'Desmarcar tudo' : 'Marcar temporada como assistida'}
+                </ThemedText>
+              </Pressable>
+              {/* Temporada já vista inteira: dá para rever (+1 em tudo; premium). */}
+              {allWatched && (
+                <Pressable
+                  style={[
+                    styles.seasonButton,
+                    { backgroundColor: theme.backgroundElement, opacity: markingSeason ? 0.6 : 1 },
+                  ]}
+                  disabled={markingSeason}
+                  onPress={rewatchSeason}>
+                  <Ionicons name="repeat" size={18} color={theme.accent} />
+                  <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                    Reassistido tudo
+                  </ThemedText>
+                  {!isPremium && <Ionicons name="lock-closed" size={14} color={theme.accent} />}
+                </Pressable>
+              )}
+            </View>
           ) : null
         }
         renderItem={({ item }) => {
           const released = !!item.air_date && item.air_date <= today;
           const still = stillUrl(item.still_path);
-          const isWatched = watched.has(item.episode_number);
+          const watchCount = watched.get(item.episode_number);
+          const isWatched = watchCount !== undefined;
           return (
             <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
               <Link
@@ -218,16 +300,34 @@ export default function SeasonScreen() {
                 </Pressable>
               </Link>
               {released && (
-                <Pressable
-                  hitSlop={8}
-                  style={styles.watchedButton}
-                  onPress={() => toggleWatched(item.episode_number)}>
-                  <Ionicons
-                    name={isWatched ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={28}
-                    color={isWatched ? theme.accent : theme.textSecondary}
-                  />
-                </Pressable>
+                <>
+                  {/* "Vi de novo": +1 no contador (premium; sem premium abre o paywall). */}
+                  {isWatched && (
+                    <Pressable
+                      hitSlop={8}
+                      style={styles.rewatchButton}
+                      onPress={() =>
+                        isPremium ? rewatchEpisode(item.episode_number) : router.push('/paywall')
+                      }>
+                      <Ionicons name="repeat" size={22} color={theme.textSecondary} />
+                      {watchCount !== undefined && watchCount > 1 && (
+                        <ThemedText type="smallBold" style={{ color: theme.accent, fontSize: 12 }}>
+                          {watchCount}x
+                        </ThemedText>
+                      )}
+                    </Pressable>
+                  )}
+                  <Pressable
+                    hitSlop={8}
+                    style={styles.watchedButton}
+                    onPress={() => toggleWatched(item.episode_number)}>
+                    <Ionicons
+                      name={isWatched ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={28}
+                      color={isWatched ? theme.accent : theme.textSecondary}
+                    />
+                  </Pressable>
+                </>
               )}
             </View>
           );
@@ -277,7 +377,20 @@ const styles = StyleSheet.create({
   watchedButton: {
     paddingHorizontal: Spacing.two,
   },
+  rewatchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.half,
+    paddingLeft: Spacing.two,
+  },
+  // Lado a lado quando a temporada está completa (Desmarcar + Vi de novo).
+  seasonButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginBottom: Spacing.one,
+  },
   seasonButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

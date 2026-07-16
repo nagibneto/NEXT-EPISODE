@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
@@ -10,7 +10,8 @@ import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { AVATAR_IDS, avatarSource } from '@/lib/avatars';
+import { usePremium } from '@/hooks/use-premium';
+import { AVATAR_IDS, avatarSource, isPremiumAvatar } from '@/lib/avatars';
 import {
   deleteAccount,
   getProfile,
@@ -25,6 +26,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { isPremium } = usePremium();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [choosingAvatar, setChoosingAvatar] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -44,6 +46,12 @@ export default function ProfileScreen() {
 
   async function handleChooseAvatar(avatarId: number) {
     if (!user) return;
+    // Avatar premium sem assinatura: mostra o paywall em vez de salvar.
+    if (isPremiumAvatar(avatarId) && !isPremium) {
+      setChoosingAvatar(false);
+      router.push('/paywall');
+      return;
+    }
     const previous = profile?.avatar_id ?? null;
     // Atualização otimista: mostra o avatar novo na hora e desfaz se falhar.
     setProfile((prev) => (prev ? { ...prev, avatar_id: avatarId } : prev));
@@ -116,62 +124,69 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
-        <View style={styles.avatarRow}>
+        {/* Avatar grande à esquerda, textos à direita: aproveita a largura do cartão. */}
+        <View style={styles.cardRow}>
           <Pressable hitSlop={4} onPress={() => setChoosingAvatar(true)}>
             <UserAvatar
               avatarId={profile?.avatar_id}
               name={profile ? profileDisplayName(profile) : '?'}
-              size={64}
+              size={88}
+              premium={isPremium}
             />
             <View style={[styles.avatarEditBadge, { backgroundColor: theme.accent }]}>
               <Ionicons name="pencil" size={12} color={theme.accentText} />
             </View>
           </Pressable>
-        </View>
-        {editing ? (
-          <View style={styles.editRow}>
-            <TextInput
-              style={[
-                styles.nicknameInput,
-                { backgroundColor: theme.backgroundSelected, color: theme.text },
-              ]}
-              placeholder="Seu apelido"
-              placeholderTextColor={theme.textSecondary}
-              maxLength={40}
-              autoFocus
-              value={nickname}
-              onChangeText={setNickname}
-              onSubmitEditing={handleSaveNickname}
-            />
-            <Pressable
-              hitSlop={8}
-              disabled={saving}
-              onPress={handleSaveNickname}
-              style={[styles.iconButton, { backgroundColor: theme.accent, opacity: saving ? 0.6 : 1 }]}>
-              <Ionicons name="checkmark" size={18} color={theme.accentText} />
-            </Pressable>
-            <Pressable hitSlop={8} onPress={() => setEditing(false)}>
-              <Ionicons name="close" size={22} color={theme.textSecondary} />
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.nameRow}>
-            <ThemedText type="subtitle">
-              {profile ? profileDisplayName(profile) : '…'}
+          <View style={styles.cardInfo}>
+            {editing ? (
+              <View style={styles.editRow}>
+                <TextInput
+                  style={[
+                    styles.nicknameInput,
+                    { backgroundColor: theme.backgroundSelected, color: theme.text },
+                  ]}
+                  placeholder="Seu apelido"
+                  placeholderTextColor={theme.textSecondary}
+                  maxLength={40}
+                  autoFocus
+                  value={nickname}
+                  onChangeText={setNickname}
+                  onSubmitEditing={handleSaveNickname}
+                />
+                <Pressable
+                  hitSlop={8}
+                  disabled={saving}
+                  onPress={handleSaveNickname}
+                  style={[
+                    styles.iconButton,
+                    { backgroundColor: theme.accent, opacity: saving ? 0.6 : 1 },
+                  ]}>
+                  <Ionicons name="checkmark" size={18} color={theme.accentText} />
+                </Pressable>
+                <Pressable hitSlop={8} onPress={() => setEditing(false)}>
+                  <Ionicons name="close" size={22} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.nameRow}>
+                <ThemedText type="subtitle" style={styles.nameText} numberOfLines={2}>
+                  {profile ? profileDisplayName(profile) : '…'}
+                </ThemedText>
+                <Pressable hitSlop={8} onPress={startEditing}>
+                  <Ionicons name="pencil" size={18} color={theme.accent} />
+                </Pressable>
+              </View>
+            )}
+            {profile && (
+              <ThemedText type="small" themeColor="textSecondary">
+                @{profile.username}
+              </ThemedText>
+            )}
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {user?.email}
             </ThemedText>
-            <Pressable hitSlop={8} onPress={startEditing}>
-              <Ionicons name="pencil" size={18} color={theme.accent} />
-            </Pressable>
           </View>
-        )}
-        {profile && (
-          <ThemedText type="small" themeColor="textSecondary">
-            @{profile.username}
-          </ThemedText>
-        )}
-        <ThemedText type="small" themeColor="textSecondary">
-          {user?.email}
-        </ThemedText>
+        </View>
         {error && (
           <ThemedText type="small" themeColor="danger">
             {error}
@@ -192,31 +207,53 @@ export default function ProfileScreen() {
             <ThemedText type="subtitle" style={styles.avatarModalTitle}>
               Escolha seu avatar
             </ThemedText>
-            <View style={styles.avatarGrid}>
-              {AVATAR_IDS.map((avatarId) => {
-                const selected = profile?.avatar_id === avatarId;
-                return (
-                  <Pressable
-                    key={avatarId}
-                    style={[
-                      styles.avatarOption,
-                      selected && { borderColor: theme.accent, borderWidth: 3 },
-                    ]}
-                    onPress={() => handleChooseAvatar(avatarId)}>
-                    <Image
-                      source={avatarSource(avatarId)!}
-                      style={styles.avatarOptionImage}
-                      contentFit="cover"
-                    />
-                  </Pressable>
-                );
-              })}
-            </View>
+            <ScrollView style={styles.avatarScroll}>
+              <View style={styles.avatarGrid}>
+                {AVATAR_IDS.map((avatarId) => {
+                  const selected = profile?.avatar_id === avatarId;
+                  const locked = isPremiumAvatar(avatarId) && !isPremium;
+                  return (
+                    <Pressable
+                      key={avatarId}
+                      style={[
+                        styles.avatarOption,
+                        selected && { borderColor: theme.accent, borderWidth: 3 },
+                      ]}
+                      onPress={() => handleChooseAvatar(avatarId)}>
+                      <Image
+                        source={avatarSource(avatarId)!}
+                        style={[styles.avatarOptionImage, locked && styles.avatarLockedImage]}
+                        contentFit="cover"
+                      />
+                      {locked && (
+                        <View style={styles.avatarLockBadge}>
+                          <Ionicons name="lock-closed" size={14} color="#ffffff" />
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {!isPremium && (
+                <ThemedText type="small" themeColor="textSecondary" style={styles.avatarHint}>
+                  Avatares com cadeado são exclusivos do premium.
+                </ThemedText>
+              )}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
 
       <View style={styles.grid}>
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/paywall')}>
+          <Ionicons name="sparkles" size={22} color={theme.gold} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            {isPremium ? 'Você é premium' : 'Seja premium'}
+          </ThemedText>
+        </Pressable>
+
         <Pressable
           style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
           onPress={() => router.push('/favorites')}>
@@ -320,9 +357,20 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.one,
   },
-  avatarRow: {
+  cardRow: {
     flexDirection: 'row',
-    marginBottom: Spacing.one,
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  cardInfo: {
+    flex: 1,
+    gap: Spacing.half,
+  },
+  // O "subtitle" (32px) fica grande demais dividindo a linha com o avatar.
+  nameText: {
+    fontSize: 22,
+    lineHeight: 28,
+    flexShrink: 1,
   },
   avatarEditBadge: {
     position: 'absolute',
@@ -347,6 +395,25 @@ const styles = StyleSheet.create({
   },
   avatarModalTitle: {
     textAlign: 'center',
+  },
+  // Com 36 avatares o modal não cabe na tela: a grade rola por dentro.
+  avatarScroll: {
+    maxHeight: 400,
+  },
+  avatarHint: {
+    textAlign: 'center',
+    marginTop: Spacing.two,
+  },
+  avatarLockedImage: {
+    opacity: 0.45,
+  },
+  avatarLockBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderRadius: 999,
+    padding: 4,
   },
   avatarGrid: {
     flexDirection: 'row',

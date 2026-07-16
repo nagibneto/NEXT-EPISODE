@@ -469,6 +469,10 @@ create policy "Usuário gerencia os próprios push tokens"
 
 -- ---------- Estatísticas ----------
 -- Conta episódios assistidos por série sem esbarrar no limite de linhas da API.
+-- (Redefinida mais abaixo, na seção Rewatch, para somar também as revisões —
+-- aqui fica a versão básica porque watch_count ainda não existe neste ponto
+-- em bancos criados do zero.)
+drop function if exists public.get_watched_counts();
 create or replace function public.get_watched_counts()
 returns table (tmdb_show_id integer, episode_count bigint)
 language sql
@@ -639,6 +643,129 @@ drop policy if exists "Usuário gerencia os próprios filmes para assistir" on p
 create policy "Usuário gerencia os próprios filmes para assistir"
   on public.watchlist_movies for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- Premium (assinatura) ----------
+-- Status mantido pelo webhook do RevenueCat (supabase/functions/revenuecat-webhook),
+-- que roda com service_role. O cliente nunca escreve nessas colunas.
+alter table public.profiles
+  add column if not exists is_premium boolean not null default false;
+
+alter table public.profiles
+  add column if not exists premium_expires_at timestamptz;
+
+-- Impede o próprio usuário de se marcar como premium pela API.
+revoke update (is_premium, premium_expires_at) on table public.profiles from authenticated;
+
+-- Avatares 13-36 são exclusivos de assinantes (o check antigo ia só até 12).
+alter table public.profiles drop constraint if exists profiles_avatar_id_check;
+alter table public.profiles
+  add constraint profiles_avatar_id_check check (avatar_id between 1 and 36);
+
+-- Não-premium não pode ESCOLHER avatar premium; quem já tinha um (assinatura
+-- expirada) pode manter, só não pode trocar por outro premium.
+create or replace function public.enforce_premium_avatar()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.avatar_id is distinct from old.avatar_id
+     and new.avatar_id between 13 and 36
+     and not new.is_premium then
+    raise exception 'Avatar exclusivo para assinantes premium';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_premium_avatar on public.profiles;
+create trigger enforce_premium_avatar
+  before update on public.profiles
+  for each row execute function public.enforce_premium_avatar();
+
+-- ---------- Rewatch (premium) ----------
+-- Quantas vezes o usuário viu cada episódio/filme. 1 = comportamento antigo;
+-- valores maiores são exclusivos de assinantes premium.
+alter table public.watched_episodes
+  add column if not exists watch_count integer not null default 1 check (watch_count >= 1);
+
+alter table public.watched_movies
+  add column if not exists watch_count integer not null default 1 check (watch_count >= 1);
+
+create or replace function public.enforce_premium_rewatch()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.watch_count > 1 and not exists (
+    select 1 from public.profiles
+    where id = new.user_id and is_premium
+  ) then
+    raise exception 'Marcar mais de uma vez requer assinatura premium';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_premium_rewatch on public.watched_episodes;
+create trigger enforce_premium_rewatch
+  before insert or update on public.watched_episodes
+  for each row execute function public.enforce_premium_rewatch();
+
+drop trigger if exists enforce_premium_rewatch on public.watched_movies;
+create trigger enforce_premium_rewatch
+  before insert or update on public.watched_movies
+  for each row execute function public.enforce_premium_rewatch();
+
+-- "Vi de novo": incrementa o contador de forma atômica (upsert + 1).
+-- Roda com os direitos do chamador, então RLS e o trigger acima continuam
+-- valendo — não-premium recebe erro ao tentar passar de 1.
+create or replace function public.rewatch_episodes(
+  p_show_id integer,
+  p_season integer,
+  p_episodes integer[]
+)
+returns void
+language sql
+as $$
+  insert into public.watched_episodes (user_id, tmdb_show_id, season_number, episode_number)
+  select auth.uid(), p_show_id, p_season, episode
+  from unnest(p_episodes) as episode
+  on conflict (user_id, tmdb_show_id, season_number, episode_number)
+  do update set watch_count = watched_episodes.watch_count + 1, watched_at = now();
+$$;
+
+create or replace function public.rewatch_movie(
+  p_tmdb_id integer,
+  p_title text,
+  p_poster_path text
+)
+returns integer
+language sql
+as $$
+  insert into public.watched_movies (user_id, tmdb_id, title, poster_path)
+  values (auth.uid(), p_tmdb_id, p_title, p_poster_path)
+  on conflict (user_id, tmdb_id)
+  do update set watch_count = watched_movies.watch_count + 1, watched_at = now()
+  returning watch_count;
+$$;
+
+-- Estatísticas com rewatch: além do nº de episódios distintos, devolve o
+-- total de visualizações (view_count = soma dos watch_count), para o tempo
+-- assistido contar as revisões. Substitui a versão básica definida acima.
+drop function if exists public.get_watched_counts();
+create or replace function public.get_watched_counts()
+returns table (tmdb_show_id integer, episode_count bigint, view_count bigint)
+language sql
+security invoker
+set search_path = public
+as $$
+  select tmdb_show_id, count(*) as episode_count, sum(watch_count) as view_count
+  from public.watched_episodes
+  where user_id = auth.uid()
+  group by tmdb_show_id
+  order by view_count desc;
+$$;
 
 -- ---------- Cron das notificações remotas ----------
 -- A Edge Function supabase/functions/notify-new-episodes é executada 1x por dia.

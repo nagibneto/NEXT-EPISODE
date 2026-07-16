@@ -154,7 +154,12 @@ export default function FriendsScreen() {
   function renderProfile({ item }: { item: Profile }) {
     return (
       <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
-        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
+        <UserAvatar
+          avatarId={item.avatar_id}
+          name={profileDisplayName(item)}
+          size={40}
+          premium={item.is_premium}
+        />
         <View style={styles.rowInfo}>
           <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -170,7 +175,12 @@ export default function FriendsScreen() {
     const busy = busyIds.has(item.id);
     return (
       <View key={item.id} style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
-        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
+        <UserAvatar
+          avatarId={item.avatar_id}
+          name={profileDisplayName(item)}
+          size={40}
+          premium={item.is_premium}
+        />
         <View style={styles.rowInfo}>
           <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">

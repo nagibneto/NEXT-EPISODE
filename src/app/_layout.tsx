@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { StackHeader } from '@/components/app-header';
 import { AuthProvider } from '@/hooks/use-auth';
+import { PremiumProvider } from '@/hooks/use-premium';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 
 /** Separado do RootLayout porque precisa ler o contexto de preferência de tema. */
@@ -33,6 +34,10 @@ function RootNavigator() {
         <Stack.Screen name="stats" options={{ title: 'Estatísticas' }} />
         <Stack.Screen name="favorites" options={{ title: 'Favoritos' }} />
         <Stack.Screen name="to-watch" options={{ title: 'Para assistir' }} />
+        <Stack.Screen
+          name="paywall"
+          options={{ title: 'Premium', presentation: 'modal' }}
+        />
       </Stack>
     </ThemeProvider>
   );
@@ -48,9 +53,11 @@ export default function RootLayout() {
     // para marcar episódio como assistido na watchlist).
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <ThemePreferenceProvider>
-          <RootNavigator />
-        </ThemePreferenceProvider>
+        <PremiumProvider>
+          <ThemePreferenceProvider>
+            <RootNavigator />
+          </ThemePreferenceProvider>
+        </PremiumProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

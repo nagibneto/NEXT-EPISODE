@@ -84,17 +84,22 @@ export default function StatsScreen() {
         const movieMinutes = (
           await Promise.all(
             movies.map(async (movie) => {
+              // Reassistidos contam: 2x o filme = 2x a duração.
+              const views = movie.watch_count ?? 1;
               try {
                 const details = await getMovieDetailsCached(movie.tmdb_id);
-                return details.runtime || FALLBACK_MOVIE_RUNTIME_MIN;
+                return (details.runtime || FALLBACK_MOVIE_RUNTIME_MIN) * views;
               } catch {
-                return FALLBACK_MOVIE_RUNTIME_MIN;
+                return FALLBACK_MOVIE_RUNTIME_MIN * views;
               }
             })
           )
         ).reduce((acc, minutes) => acc + minutes, 0);
         const shows = await Promise.all(
           counts.map(async (count) => {
+            // Tempo assistido conta as revisões; o "faltam assistir" continua
+            // usando episódios distintos (rever não diminui o que falta).
+            const views = count.view_count ?? count.episode_count;
             try {
               const details = await getShowDetailsCached(count.tmdb_show_id);
               const runtime = episodeRuntime(details);
@@ -107,7 +112,7 @@ export default function StatsScreen() {
                 name: details.name,
                 poster_path: details.poster_path,
                 episodes: count.episode_count,
-                minutes: count.episode_count * runtime,
+                minutes: views * runtime,
                 remainingMinutes: remainingEpisodes * runtime,
               };
             } catch {
@@ -116,7 +121,7 @@ export default function StatsScreen() {
                 name: `Série #${count.tmdb_show_id}`,
                 poster_path: null,
                 episodes: count.episode_count,
-                minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
+                minutes: views * FALLBACK_RUNTIME_MIN,
                 remainingMinutes: 0,
               };
             }

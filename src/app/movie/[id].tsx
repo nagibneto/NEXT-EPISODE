@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -12,30 +12,36 @@ import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { usePremium } from '@/hooks/use-premium';
 import {
   addFavorite,
   addMovieToWatchlist,
   errorMessage,
   getEpisodeAverageRating,
+  getMovieWatchCount,
   getMyEpisodeRating,
   isFavorite,
   isMovieInWatchlist,
-  isMovieWatched,
   markMovieWatched,
   rateEpisode,
   removeFavorite,
   removeMovieFromWatchlist,
+  rewatchMovie,
 } from '@/lib/db';
 import { backdropUrl, getMovieDetails, posterUrl, type TmdbMovieDetails } from '@/lib/tmdb';
 
 export default function MovieDetailsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
+  const { isPremium } = usePremium();
   const { id } = useLocalSearchParams<{ id: string }>();
   const movieId = Number(id);
 
   const [movie, setMovie] = useState<TmdbMovieDetails | null>(null);
-  const [watched, setWatched] = useState<boolean | null>(null);
+  // Quantas vezes o filme foi visto: null = carregando, 0 = não assistido.
+  const [watchCount, setWatchCount] = useState<number | null>(null);
+  const watched = watchCount === null ? null : watchCount > 0;
   const [favorite, setFavorite] = useState<boolean | null>(null);
   const [inWatchlist, setInWatchlist] = useState<boolean | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
@@ -51,9 +57,9 @@ export default function MovieDetailsScreen() {
       .then(setAverage)
       .catch(() => {});
     if (user) {
-      isMovieWatched(user.id, movieId)
-        .then(setWatched)
-        .catch(() => setWatched(false));
+      getMovieWatchCount(user.id, movieId)
+        .then(setWatchCount)
+        .catch(() => setWatchCount(0));
       isFavorite(user.id, 'movie', movieId)
         .then(setFavorite)
         .catch(() => setFavorite(false));
@@ -75,9 +81,31 @@ export default function MovieDetailsScreen() {
         { tmdb_id: movie.id, title: movie.title, poster_path: movie.poster_path },
         !watched
       );
-      setWatched(!watched);
+      setWatchCount(watched ? 0 : 1);
       // Marcar como assistido também tira o filme do "Para assistir".
       if (!watched) setInWatchlist(false);
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível atualizar.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** "Vi de novo" (premium): soma +1 no contador; sem premium abre o paywall. */
+  async function handleRewatch() {
+    if (!user || !movie || busy) return;
+    if (!isPremium) {
+      router.push('/paywall');
+      return;
+    }
+    setBusy(true);
+    try {
+      const count = await rewatchMovie(user.id, {
+        tmdb_id: movie.id,
+        title: movie.title,
+        poster_path: movie.poster_path,
+      });
+      setWatchCount(count);
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível atualizar.'));
     } finally {
@@ -226,9 +254,32 @@ export default function MovieDetailsScreen() {
                 <ThemedText
                   type="smallBold"
                   style={{ color: watched ? theme.text : theme.accentText }}>
-                  {watched === null ? '…' : watched ? '✓ Assistido' : '+ Marcar como assistido'}
+                  {watched === null
+                    ? '…'
+                    : !watched
+                      ? '+ Marcar como assistido'
+                      : watchCount && watchCount > 1
+                        ? `✓ Assistido ${watchCount}x`
+                        : '✓ Assistido'}
                 </ThemedText>
               </Pressable>
+              {/* Já assistiu? Dá para marcar que viu de novo (premium). */}
+              {watched === true && (
+                <Pressable
+                  style={[
+                    styles.watchedButton,
+                    styles.watchlistButton,
+                    { backgroundColor: theme.backgroundElement, opacity: busy ? 0.6 : 1 },
+                  ]}
+                  disabled={busy}
+                  onPress={handleRewatch}>
+                  <Ionicons name="repeat" size={16} color={theme.accent} />
+                  <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                    Vi de novo
+                  </ThemedText>
+                  {!isPremium && <Ionicons name="lock-closed" size={12} color={theme.accent} />}
+                </Pressable>
+              )}
               {/* Já assistiu? Não faz sentido oferecer o "Para assistir". */}
               {watched === false && (
                 <Pressable

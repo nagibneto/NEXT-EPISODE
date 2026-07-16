@@ -117,6 +117,7 @@ export default function FeedScreen() {
                 avatarId={item.user.avatar_id}
                 name={profileDisplayName(item.user)}
                 size={24}
+                premium={item.user.is_premium}
               />
               <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
             </View>

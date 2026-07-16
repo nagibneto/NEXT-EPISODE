@@ -281,6 +281,7 @@ export function CommentsScreen({
               avatarId={item.profiles?.avatar_id}
               name={profileDisplayName(item.profiles)}
               size={28}
+              premium={item.profiles?.is_premium}
             />
             <ThemedText type="smallBold">{profileDisplayName(item.profiles)}</ThemedText>
           </View>

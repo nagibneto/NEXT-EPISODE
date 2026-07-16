@@ -29,8 +29,10 @@ export interface Profile {
   id: string;
   username: string;
   display_name: string | null;
-  /** Índice do avatar escolhido (1–12, ver src/lib/avatars.ts); null = sem avatar. */
+  /** Índice do avatar escolhido (1–36, ver src/lib/avatars.ts); null = sem avatar. */
   avatar_id: number | null;
+  /** Assinatura premium ativa (mantido pelo webhook do RevenueCat). */
+  is_premium?: boolean;
 }
 
 /** Séries e filmes compartilham as tabelas de notas/comentários; isto distingue os dois. */
@@ -63,7 +65,12 @@ export interface EpisodeComment {
   parent_id: string | null;
   like_count: number;
   liked_by_me: boolean;
-  profiles: { username: string; display_name: string | null; avatar_id: number | null } | null;
+  profiles: {
+    username: string;
+    display_name: string | null;
+    avatar_id: number | null;
+    is_premium?: boolean;
+  } | null;
 }
 
 // ---------- Perfil ----------
@@ -71,7 +78,7 @@ export interface EpisodeComment {
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_id')
+    .select('id, username, display_name, avatar_id, is_premium')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -146,10 +153,10 @@ export async function unfollowShow(userId: string, tmdbId: number) {
 export async function getWatchedEpisodes(
   userId: string,
   tmdbShowId: number
-): Promise<{ season_number: number; episode_number: number }[]> {
+): Promise<{ season_number: number; episode_number: number; watch_count: number }[]> {
   const { data, error } = await supabase
     .from('watched_episodes')
-    .select('season_number, episode_number')
+    .select('season_number, episode_number, watch_count')
     .eq('user_id', userId)
     .eq('tmdb_show_id', tmdbShowId);
   if (error) throw error;
@@ -223,6 +230,26 @@ export async function markSeasonWatched(
   if (error) throw error;
 }
 
+/**
+ * "Vi de novo" (premium): soma +1 no contador dos episódios, criando a
+ * marcação para os que ainda não estavam vistos. O banco recusa contagens
+ * acima de 1 para quem não é premium (trigger enforce_premium_rewatch).
+ */
+export async function rewatchEpisodes(
+  userId: string,
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumbers: number[]
+) {
+  if (episodeNumbers.length === 0) return;
+  const { error } = await supabase.rpc('rewatch_episodes', {
+    p_show_id: tmdbShowId,
+    p_season: seasonNumber,
+    p_episodes: episodeNumbers,
+  });
+  if (error) throw error;
+}
+
 /** Desmarca todos os episódios de uma temporada. */
 export async function unmarkSeasonWatched(
   userId: string,
@@ -245,12 +272,14 @@ export interface WatchedMovie {
   title: string;
   poster_path: string | null;
   watched_at: string;
+  /** Quantas vezes foi visto (revisões premium contam de novo). */
+  watch_count: number;
 }
 
 export async function getWatchedMovies(userId: string): Promise<WatchedMovie[]> {
   const { data, error } = await supabase
     .from('watched_movies')
-    .select('tmdb_id, title, poster_path, watched_at')
+    .select('tmdb_id, title, poster_path, watched_at, watch_count')
     .eq('user_id', userId)
     .order('watched_at', { ascending: false });
   if (error) throw error;
@@ -265,6 +294,32 @@ export async function isMovieWatched(userId: string, tmdbId: number): Promise<bo
     .eq('tmdb_id', tmdbId);
   if (error) throw error;
   return (count ?? 0) > 0;
+}
+
+/** Quantas vezes o usuário viu o filme (0 = não assistiu). */
+export async function getMovieWatchCount(userId: string, tmdbId: number): Promise<number> {
+  const { data, error } = await supabase
+    .from('watched_movies')
+    .select('watch_count')
+    .eq('user_id', userId)
+    .eq('tmdb_id', tmdbId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.watch_count ?? 0;
+}
+
+/** "Vi de novo" (premium): soma +1 no contador do filme e devolve o novo total. */
+export async function rewatchMovie(
+  userId: string,
+  movie: { tmdb_id: number; title: string; poster_path: string | null }
+): Promise<number> {
+  const { data, error } = await supabase.rpc('rewatch_movie', {
+    p_tmdb_id: movie.tmdb_id,
+    p_title: movie.title,
+    p_poster_path: movie.poster_path,
+  });
+  if (error) throw error;
+  return data ?? 1;
 }
 
 export async function markMovieWatched(
@@ -468,7 +523,7 @@ export async function getEpisodeComments(
   // PostgREST recusa o embed sem essa dica.
   const { data, error } = await supabase
     .from('episode_comments')
-    .select('id, user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at, parent_id, profiles!episode_comments_user_id_fkey(username, display_name, avatar_id)')
+    .select('id, user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at, parent_id, profiles!episode_comments_user_id_fkey(username, display_name, avatar_id, is_premium)')
     .eq('media_type', mediaType)
     .eq('tmdb_show_id', tmdbShowId)
     .eq('season_number', seasonNumber)
@@ -629,7 +684,7 @@ export async function searchProfiles(query: string, excludeUserId: string): Prom
   if (!term) return [];
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_id')
+    .select('id, username, display_name, avatar_id, is_premium')
     .or(`username.ilike.%${term}%,display_name.ilike.%${term}%`)
     .neq('id', excludeUserId)
     .limit(20);
@@ -641,7 +696,7 @@ export async function searchProfiles(query: string, excludeUserId: string): Prom
 export async function getFriends(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id)')
+    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id, is_premium)')
     .eq('follower_id', userId)
     .eq('status', 'accepted');
   if (error) throw error;
@@ -652,7 +707,7 @@ export async function getFriends(userId: string): Promise<Profile[]> {
 export async function getIncomingFriendRequests(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_follower_id_fkey(id, username, display_name, avatar_id)')
+    .select('profiles!user_follows_follower_id_fkey(id, username, display_name, avatar_id, is_premium)')
     .eq('followed_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -663,7 +718,7 @@ export async function getIncomingFriendRequests(userId: string): Promise<Profile
 export async function getOutgoingFriendRequests(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('user_follows')
-    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id)')
+    .select('profiles!user_follows_followed_id_fkey(id, username, display_name, avatar_id, is_premium)')
     .eq('follower_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -876,7 +931,10 @@ export async function deletePushToken(userId: string, token: string) {
 
 export interface WatchedCount {
   tmdb_show_id: number;
+  /** Episódios distintos assistidos. */
   episode_count: number;
+  /** Total de visualizações (revisões premium contam de novo). */
+  view_count: number;
 }
 
 export async function getWatchedCounts(): Promise<WatchedCount[]> {
