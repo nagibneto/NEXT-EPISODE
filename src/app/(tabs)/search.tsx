@@ -1,9 +1,11 @@
 import Entypo from '@expo/vector-icons/Entypo';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { GenreFilterSheet } from '@/components/genre-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -21,12 +24,15 @@ import {
   getGenres,
   getPopularMovies,
   getPopularShows,
+  getStreamingProviders,
+  providerLogoUrl,
   searchMovies,
   searchPeople,
   searchShows,
   type TmdbGenre,
   type TmdbMovieSummary,
   type TmdbShowSummary,
+  type TmdbWatchProvider,
 } from '@/lib/tmdb';
 
 type SearchMode = 'tv' | 'movie';
@@ -85,7 +91,7 @@ async function searchByCast(query: string, media: SearchMode, seenIds: Set<numbe
   }
 }
 
-const MIN_RATING_OPTIONS = [6, 7, 8] as const;
+const MIN_RATING_OPTIONS = [5, 6, 7, 8, 9] as const;
 
 /** Chip de filtro no formato pílula, usado para gêneros e nota mínima. */
 function FilterChip({
@@ -127,7 +133,10 @@ export default function SearchScreen() {
   const [error, setError] = useState<string | null>(null);
   const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [genreId, setGenreId] = useState<number | null>(null);
+  const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [minRating, setMinRating] = useState<number | null>(null);
+  const [providers, setProviders] = useState<TmdbWatchProvider[]>([]);
+  const [providerId, setProviderId] = useState<number | null>(null);
   // Invalida respostas de requisições antigas quando query/modo/filtros mudam,
   // para uma busca lenta não sobrescrever a lista da busca atual.
   const requestId = useRef(0);
@@ -138,20 +147,24 @@ export default function SearchScreen() {
     setResults(null);
     setGenreId(null);
     setMinRating(null);
+    setProviderId(null);
     getGenres(mode)
       .then(setGenres)
       .catch(() => setGenres([]));
+    getStreamingProviders(mode)
+      .then(setProviders)
+      .catch(() => setProviders([]));
   }, [mode]);
 
   const fetchResults = useCallback(
     async (pageNumber: number) => {
       const trimmed = query.trim();
-      const hasFilters = genreId !== null || minRating !== null;
+      const hasFilters = genreId !== null || minRating !== null || providerId !== null;
       if (mode === 'tv') {
         const data = trimmed
           ? await searchShows(trimmed, pageNumber)
           : hasFilters
-            ? await discoverShows({ genreId, minRating, page: pageNumber })
+            ? await discoverShows({ genreId, minRating, providerId, page: pageNumber })
             : await getPopularShows(pageNumber);
         const items = data.results.map(fromShow);
         if (trimmed && pageNumber === 1) {
@@ -162,7 +175,7 @@ export default function SearchScreen() {
       const data = trimmed
         ? await searchMovies(trimmed, pageNumber)
         : hasFilters
-          ? await discoverMovies({ genreId, minRating, page: pageNumber })
+          ? await discoverMovies({ genreId, minRating, providerId, page: pageNumber })
           : await getPopularMovies(pageNumber);
       const items = data.results.map(fromMovie);
       if (trimmed && pageNumber === 1) {
@@ -170,7 +183,7 @@ export default function SearchScreen() {
       }
       return { items, totalPages: data.total_pages };
     },
-    [query, mode, genreId, minRating]
+    [query, mode, genreId, minRating, providerId]
   );
 
   useEffect(() => {
@@ -222,10 +235,15 @@ export default function SearchScreen() {
     }
   }
 
-  const hasFilters = genreId !== null || minRating !== null;
+  const hasFilters = genreId !== null || minRating !== null || providerId !== null;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    // Pressable de fundo: tocar em qualquer área "morta" da tela fecha o
+    // teclado (toques em botões/cards são capturados pelos filhos antes).
+    <Pressable
+      style={[styles.container, { backgroundColor: theme.background }]}
+      accessible={false}
+      onPress={Keyboard.dismiss}>
       <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
         <Ionicons name="search" size={16} color={theme.textSecondary} />
         <TextInput
@@ -236,6 +254,11 @@ export default function SearchScreen() {
           onChangeText={setQuery}
           autoCorrect={false}
         />
+        {query.length > 0 && (
+          <Pressable hitSlop={8} onPress={() => setQuery('')}>
+            <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
+          </Pressable>
+        )}
       </View>
       <View style={styles.filterRow}>
         <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
@@ -272,42 +295,96 @@ export default function SearchScreen() {
         {!query.trim() && (
           <View style={styles.ratingGroup}>
             <Ionicons name="star" size={14} color={theme.gold} />
-            {MIN_RATING_OPTIONS.map((value) => (
-              <FilterChip
-                key={value}
-                label={`${value}+`}
-                compact
-                selected={minRating === value}
-                onPress={() => setMinRating(minRating === value ? null : value)}
-              />
-            ))}
+            {/* View de largura fixa limita o visível a ~3 chips; o ScrollView
+                dentro dela rola o restante. */}
+            <View style={styles.ratingScroll}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.ratingRow}
+                keyboardShouldPersistTaps="handled">
+                {MIN_RATING_OPTIONS.map((value) => (
+                  <FilterChip
+                    key={value}
+                    label={`${value}+`}
+                    compact
+                    selected={minRating === value}
+                    onPress={() => setMinRating(minRating === value ? null : value)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
           </View>
         )}
       </View>
       {!query.trim() && (
         <>
-          {genres.length > 0 && (
+          {/* Categorias abre o mesmo bottom sheet da watchlist; ao lado, a
+              faixa de streamings do Brasil rola na horizontal. */}
+          <View style={styles.discoverRow}>
+            <Pressable
+              style={[
+                styles.categoriesButton,
+                {
+                  backgroundColor: theme.backgroundElement,
+                  borderColor: genreId !== null ? theme.accent : theme.backgroundSelected,
+                },
+              ]}
+              onPress={() => setGenreSheetOpen(true)}>
+              <Ionicons
+                name="filter"
+                size={13}
+                color={genreId !== null ? theme.accent : theme.textSecondary}
+              />
+              <ThemedText
+                type="small"
+                style={{ color: genreId !== null ? theme.accent : theme.text }}>
+                Categorias
+              </ThemedText>
+            </Pressable>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.genreScroll}
-              contentContainerStyle={styles.genreRow}
+              style={styles.providerScroll}
+              contentContainerStyle={styles.providerRow}
               keyboardShouldPersistTaps="handled">
-              {genres.map((genre) => (
-                <FilterChip
-                  key={genre.id}
-                  label={genre.name}
-                  selected={genreId === genre.id}
-                  onPress={() => setGenreId(genreId === genre.id ? null : genre.id)}
-                />
-              ))}
+              {providers.map((provider) => {
+                const selected = providerId === provider.provider_id;
+                const logo = providerLogoUrl(provider.logo_path);
+                return (
+                  <Pressable
+                    key={provider.provider_id}
+                    style={[
+                      styles.providerChip,
+                      { backgroundColor: selected ? theme.accent : theme.backgroundElement },
+                    ]}
+                    onPress={() => setProviderId(selected ? null : provider.provider_id)}>
+                    {logo && (
+                      <Image source={{ uri: logo }} style={styles.providerLogo} contentFit="cover" />
+                    )}
+                    <ThemedText
+                      type="small"
+                      style={{ color: selected ? theme.accentText : theme.text }}>
+                      {provider.provider_name}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
-          )}
+          </View>
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>
             {hasFilters ? 'Resultados do filtro' : 'Populares no momento'}
+            {providerId !== null ? ' · dados JustWatch' : ''}
           </ThemedText>
         </>
       )}
+      <GenreFilterSheet
+        visible={genreSheetOpen}
+        genres={genres}
+        selectedId={genreId}
+        onSelect={setGenreId}
+        onClose={() => setGenreSheetOpen(false)}
+      />
       {error ? (
         <ThemedText themeColor="danger" style={styles.message}>
           {error}
@@ -321,6 +398,7 @@ export default function SearchScreen() {
           numColumns={3}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={
@@ -342,7 +420,7 @@ export default function SearchScreen() {
           )}
         />
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -391,21 +469,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.one,
   },
+  ratingScroll: {
+    // Largura de ~3 chips de nota; o resto aparece arrastando para o lado.
+    width: 118,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  ratingRow: {
+    gap: Spacing.one,
+    alignItems: 'center',
+    paddingRight: Spacing.one,
+  },
   sectionTitle: {
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
   },
-  genreScroll: {
-    // ScrollView tem flexShrink 1 por padrão; sem zerar, a lista de
-    // resultados abaixo esmaga a faixa e corta os chips ao meio.
-    flexGrow: 0,
-    flexShrink: 0,
+  discoverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
   },
-  genreRow: {
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.three,
+  categoriesButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.one + 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.two + Spacing.half,
+    paddingVertical: 6,
+  },
+  providerScroll: {
+    // flex 1 ocupa o resto da linha ao lado do botão Categorias. Cuidado:
+    // flexGrow explícito vence o do shorthand flex e zeraria a largura.
+    flex: 1,
+    minWidth: 0,
+  },
+  providerRow: {
+    gap: Spacing.two,
+    alignItems: 'center',
+    paddingRight: Spacing.one,
+  },
+  providerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    borderRadius: 999,
+    paddingLeft: 4,
+    paddingRight: Spacing.two + Spacing.half,
+    paddingVertical: 4,
+  },
+  providerLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
   },
   chip: {
     borderRadius: 999,

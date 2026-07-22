@@ -145,6 +145,8 @@ export interface DiscoverFilters {
   genreId?: number | null;
   /** Nota mínima na escala 0–10 do TMDB. */
   minRating?: number | null;
+  /** Streaming (id de watch provider do TMDB) onde o título está disponível no Brasil. */
+  providerId?: number | null;
   page?: number;
 }
 
@@ -157,8 +159,15 @@ function discoverParams(filters: DiscoverFilters) {
   if (filters.genreId) params.with_genres = String(filters.genreId);
   if (filters.minRating) {
     params['vote_average.gte'] = String(filters.minRating);
-    // Sem um mínimo de votos, títulos obscuros com 1 voto nota 10 dominam a lista.
-    params['vote_count.gte'] = '200';
+    // Sem um mínimo de votos, títulos obscuros com 1 voto nota 10 dominam a
+    // lista. Acima de 9 quase nada tem 200+ votos (a comunidade raramente dá
+    // média tão alta), então o corte relaxa para não devolver lista vazia.
+    params['vote_count.gte'] = filters.minRating >= 9 ? '50' : '200';
+  }
+  if (filters.providerId) {
+    params.with_watch_providers = String(filters.providerId);
+    // O filtro de provider só funciona amarrado a uma região.
+    params.watch_region = 'BR';
   }
   return params;
 }
@@ -308,6 +317,40 @@ export async function getWatchProviders(
     .filter((p) => !/with ads|amazon channel|apple tv channel/i.test(p.provider_name))
     .sort((a, b) => a.display_priority - b.display_priority);
   return { link: br?.link ?? null, flatrate };
+}
+
+// Como os gêneros, a lista de streamings do país quase não muda; cache pela
+// duração do app (uma entrada para séries, outra para filmes).
+const streamingProvidersCache = new Map<string, Promise<TmdbWatchProvider[]>>();
+
+/**
+ * Todos os streamings com catálogo no Brasil, ordenados por relevância
+ * (dados JustWatch via TMDB — a atribuição "JustWatch" na UI é exigência deles).
+ */
+export function getStreamingProviders(media: 'tv' | 'movie') {
+  let cached = streamingProvidersCache.get(media);
+  if (!cached) {
+    cached = get<{
+      results: (TmdbWatchProvider & { display_priorities?: Record<string, number> })[];
+    }>(`/watch/providers/${media}`, { watch_region: 'BR' })
+      .then((data) =>
+        data.results
+          // Mesmo critério do getWatchProviders: variantes/revendas fora.
+          .filter((p) => !/with ads|amazon channel|apple tv channel/i.test(p.provider_name))
+          .sort(
+            (a, b) =>
+              (a.display_priorities?.BR ?? a.display_priority) -
+              (b.display_priorities?.BR ?? b.display_priority)
+          )
+      )
+      .catch((error) => {
+        // Não guarda falhas no cache para permitir nova tentativa.
+        streamingProvidersCache.delete(media);
+        throw error;
+      });
+    streamingProvidersCache.set(media, cached);
+  }
+  return cached;
 }
 
 export function getSeasonDetails(showId: number, seasonNumber: number) {

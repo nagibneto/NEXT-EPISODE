@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   Modal,
   Pressable,
   RefreshControl,
@@ -154,6 +155,7 @@ function WatchNextRow({
   onMarkWatched: () => void;
 }) {
   const theme = useTheme();
+  const router = useRouter();
   const swipeRef = useRef<SwipeableMethods>(null);
   const image =
     (next?.stillPath ? stillUrl(next.stillPath) : null) ?? posterUrl(show.poster_path, 'w185');
@@ -197,7 +199,22 @@ function WatchNextRow({
           <Ionicons name="checkmark" size={26} color={theme.accentText} />
         </Pressable>
       )}>
-    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_id) } }} asChild>
+    <Link
+      // Com próximo episódio conhecido, a linha abre o episódio; sem ele
+      // (em dia ou ainda calculando), abre a série.
+      href={
+        next
+          ? {
+              pathname: '/episode/[showId]/[seasonNumber]/[episodeNumber]',
+              params: {
+                showId: String(show.tmdb_id),
+                seasonNumber: String(next.seasonNumber),
+                episodeNumber: String(next.episodeNumber),
+              },
+            }
+          : { pathname: '/show/[id]', params: { id: String(show.tmdb_id) } }
+      }
+      asChild>
       {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
       <Pressable
         style={StyleSheet.flatten([styles.nextRow, { backgroundColor: theme.backgroundElement }])}>
@@ -214,7 +231,13 @@ function WatchNextRow({
           <View style={[styles.nextStill, { backgroundColor: theme.backgroundSelected }]} />
         )}
         <View style={styles.nextInfo}>
-          <View style={styles.nextShowName}>
+          {/* Tocar no nome da série (com o chevron) continua abrindo a série. */}
+          <Pressable
+            style={styles.nextShowName}
+            hitSlop={6}
+            onPress={() =>
+              router.push({ pathname: '/show/[id]', params: { id: String(show.tmdb_id) } })
+            }>
             <ThemedText
               type="smallBold"
               numberOfLines={1}
@@ -222,7 +245,7 @@ function WatchNextRow({
               {show.name}
             </ThemedText>
             <Ionicons name="chevron-forward" size={12} color={theme.accent} />
-          </View>
+          </Pressable>
           {next ? (
             <>
               <View style={styles.nextEpisodeRow}>
@@ -711,7 +734,12 @@ export default function MyShowsScreen() {
       : (shows ?? []).length > 0);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    // Pressable de fundo: tocar em qualquer área "morta" da tela fecha o
+    // teclado (toques em botões/linhas são capturados pelos filhos antes).
+    <Pressable
+      style={[styles.container, { backgroundColor: theme.background }]}
+      accessible={false}
+      onPress={Keyboard.dismiss}>
       <View style={styles.searchRow}>
         <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
           <Pressable
@@ -754,6 +782,11 @@ export default function MyShowsScreen() {
             onChangeText={setQuery}
             autoCorrect={false}
           />
+          {query.length > 0 && (
+            <Pressable hitSlop={8} onPress={() => setQuery('')}>
+              <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
+            </Pressable>
+          )}
         </View>
       </View>
       <View style={[styles.statusSegmented, { backgroundColor: theme.backgroundElement }]}>
@@ -954,6 +987,7 @@ export default function MyShowsScreen() {
           removeClippedSubviews={false}
           contentContainerStyle={[styles.list, !filteredMovies.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             filtering ? (
@@ -1007,6 +1041,7 @@ export default function MyShowsScreen() {
           removeClippedSubviews={false}
           contentContainerStyle={[styles.list, !filteredShows.length && styles.listEmpty]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             filtering ? (
@@ -1057,7 +1092,7 @@ export default function MyShowsScreen() {
           }}
         />
       )}
-    </View>
+    </Pressable>
   );
 }
 
