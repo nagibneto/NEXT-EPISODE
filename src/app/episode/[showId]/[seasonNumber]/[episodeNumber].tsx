@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -35,6 +35,7 @@ export default function EpisodeScreen() {
   const episodeNumber = Number(params.episodeNumber);
 
   const [episode, setEpisode] = useState<TmdbEpisode | null>(null);
+  const [showName, setShowName] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [watched, setWatched] = useState<boolean | null>(null);
@@ -47,6 +48,9 @@ export default function EpisodeScreen() {
     getEpisodeDetails(showId, seasonNumber, episodeNumber)
       .then(setEpisode)
       .catch((err) => setError(errorMessage(err, 'Erro ao carregar o episódio.')));
+    getShowDetailsCached(showId)
+      .then((show) => setShowName(show.name))
+      .catch(() => {});
     getEpisodeAverageRating(showId, seasonNumber, episodeNumber)
       .then(setAverage)
       .catch(() => {});
@@ -140,6 +144,16 @@ export default function EpisodeScreen() {
         lockedText="Você ainda não marcou este episódio como assistido. Os comentários podem conter spoilers."
         header={
           <View style={styles.header}>
+            {showName && (
+              <Link href={{ pathname: '/show/[id]', params: { id: String(showId) } }} asChild>
+                <Pressable style={styles.showLink} hitSlop={6}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.accent }}>
+                    {showName}
+                  </ThemedText>
+                  <Ionicons name="chevron-forward" size={12} color={theme.accent} />
+                </Pressable>
+              </Link>
+            )}
             {still && <Image source={{ uri: still }} style={styles.still} contentFit="cover" />}
             <ThemedText type="smallBold" style={styles.title}>
               {code} — {episode.name}
@@ -214,6 +228,12 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: Spacing.two,
+  },
+  showLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-start',
   },
   still: {
     width: '100%',
