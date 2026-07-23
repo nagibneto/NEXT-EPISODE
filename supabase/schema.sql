@@ -469,13 +469,18 @@ create policy "Usuário gerencia os próprios push tokens"
 
 -- ---------- Estatísticas ----------
 -- Conta episódios assistidos por série sem esbarrar no limite de linhas da API.
+-- last_watched_at alimenta a ordenação da watchlist (série marcada mais
+-- recentemente sobe para o topo, ver src/app/(tabs)/index.tsx).
+-- O tipo de retorno mudou (ganhou last_watched_at): "create or replace" não
+-- troca o shape de OUT parameters, por isso o drop antes.
+drop function if exists public.get_watched_counts();
 create or replace function public.get_watched_counts()
-returns table (tmdb_show_id integer, episode_count bigint)
+returns table (tmdb_show_id integer, episode_count bigint, last_watched_at timestamptz)
 language sql
 security invoker
 set search_path = public
 as $$
-  select tmdb_show_id, count(*) as episode_count
+  select tmdb_show_id, count(*) as episode_count, max(watched_at) as last_watched_at
   from public.watched_episodes
   where user_id = auth.uid()
   group by tmdb_show_id

@@ -877,15 +877,20 @@ export async function deletePushToken(userId: string, token: string) {
 export interface WatchedCount {
   tmdb_show_id: number;
   episode_count: number;
+  /** Quando o episódio mais recente da série foi marcado como assistido. */
+  last_watched_at: string | null;
 }
 
 export async function getWatchedCounts(): Promise<WatchedCount[]> {
   const { data, error } = await supabase.rpc('get_watched_counts');
   if (error) throw error;
-  return (data ?? []).map((row: { tmdb_show_id: number; episode_count: number | string }) => ({
-    tmdb_show_id: row.tmdb_show_id,
-    episode_count: Number(row.episode_count),
-  }));
+  return (data ?? []).map(
+    (row: { tmdb_show_id: number; episode_count: number | string; last_watched_at: string | null }) => ({
+      tmdb_show_id: row.tmdb_show_id,
+      episode_count: Number(row.episode_count),
+      last_watched_at: row.last_watched_at,
+    })
+  );
 }
 
 export async function importWatchedEpisodesBulk(

@@ -56,6 +56,8 @@ interface HomeCache {
   watchedById?: Record<number, number>;
   airedById?: Record<number, number | null>;
   nextEpById?: Record<number, NextEpisode | null>;
+  lastWatchedAtById?: Record<number, string | null>;
+  lastAirDateById?: Record<number, string | null>;
 }
 
 const homeCacheKey = (userId: string) => `home-cache-v1:${userId}`;
@@ -343,6 +345,10 @@ export default function MyShowsScreen() {
   const [watchedById, setWatchedById] = useState<Record<number, number>>({});
   // tmdb_id → próximo episódio a assistir (null = em dia; ausente = calculando).
   const [nextEpById, setNextEpById] = useState<Record<number, NextEpisode | null>>({});
+  // tmdb_id → quando o usuário marcou o episódio mais recente dessa série.
+  const [lastWatchedAtById, setLastWatchedAtById] = useState<Record<number, string | null>>({});
+  // tmdb_id → data do último episódio lançado pela série, segundo a TMDB.
+  const [lastAirDateById, setLastAirDateById] = useState<Record<number, string | null>>({});
   // tmdb_id → ids dos gêneros TMDB, usado pelo filtro de categoria.
   const [showGenresById, setShowGenresById] = useState<Record<number, number[]>>({});
   const [movieGenresById, setMovieGenresById] = useState<Record<number, number[]>>({});
@@ -393,6 +399,9 @@ export default function MyShowsScreen() {
         }
         return next;
       });
+      setLastWatchedAtById(
+        Object.fromEntries(counts.map((count) => [count.tmdb_show_id, count.last_watched_at]))
+      );
       // Reagenda notificações em segundo plano; falha não bloqueia a tela.
       syncEpisodeNotifications(user.id).catch(() => {});
       // Registra o push token para as notificações remotas (Edge Function).
@@ -437,6 +446,10 @@ export default function MyShowsScreen() {
         );
         setAiredById((prev) => ({ ...cached.airedById, ...prev }));
         setNextEpById((prev) => ({ ...cached.nextEpById, ...prev }));
+        setLastAirDateById((prev) => ({ ...cached.lastAirDateById, ...prev }));
+        setLastWatchedAtById((prev) =>
+          Object.keys(prev).length ? prev : (cached.lastWatchedAtById ?? {})
+        );
       })
       .catch(() => {})
       .finally(() => {
@@ -454,11 +467,18 @@ export default function MyShowsScreen() {
     if (!user || !hydrated || !shows) return;
     const userId = user.id;
     const timer = setTimeout(() => {
-      const cache: HomeCache = { shows, watchedById, airedById, nextEpById };
+      const cache: HomeCache = {
+        shows,
+        watchedById,
+        airedById,
+        nextEpById,
+        lastWatchedAtById,
+        lastAirDateById,
+      };
       AsyncStorage.setItem(homeCacheKey(userId), JSON.stringify(cache)).catch(() => {});
     }, 1000);
     return () => clearTimeout(timer);
-  }, [user, hydrated, shows, watchedById, airedById, nextEpById]);
+  }, [user, hydrated, shows, watchedById, airedById, nextEpById, lastWatchedAtById, lastAirDateById]);
 
   // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
   // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
@@ -477,9 +497,14 @@ export default function MyShowsScreen() {
           missing.map(async (show) => {
             try {
               const details = await getShowDetailsCached(show.tmdb_id);
-              return [show.tmdb_id, airedEpisodeCount(details), details.genres.map((g) => g.id)] as const;
+              return [
+                show.tmdb_id,
+                airedEpisodeCount(details),
+                details.genres.map((g) => g.id),
+                details.last_episode_to_air?.air_date ?? null,
+              ] as const;
             } catch {
-              return [show.tmdb_id, null, [] as number[]] as const;
+              return [show.tmdb_id, null, [] as number[], null] as const;
             }
           })
         );
@@ -495,6 +520,13 @@ export default function MyShowsScreen() {
           const next = { ...prev };
           for (const [id, , genreIds] of entries) {
             next[id] = genreIds;
+          }
+          return next;
+        });
+        setLastAirDateById((prev) => {
+          const next = { ...prev };
+          for (const [id, , , lastAirDate] of entries) {
+            next[id] = lastAirDate;
           }
           return next;
         });
@@ -591,6 +623,7 @@ export default function MyShowsScreen() {
     try {
       await markEpisodeWatched(user.id, showId, next.seasonNumber, next.episodeNumber, true);
       setWatchedById((prev) => ({ ...prev, [showId]: (prev[showId] ?? 0) + 1 }));
+      setLastWatchedAtById((prev) => ({ ...prev, [showId]: new Date().toISOString() }));
       // Remove a entrada: o efeito acima detecta e busca o próximo episódio.
       nextEpFresh.current.delete(showId);
       setNextEpById((prev) => {
@@ -623,7 +656,20 @@ export default function MyShowsScreen() {
     [airedById, watchedById]
   );
 
-  // A ordem vinda do banco já é dos mais novos primeiro (data de seguir/assistir).
+  // Data de atividade da série: a mais recente entre o último episódio que
+  // ela lançou e o último episódio que o usuário marcou como assistido. É o
+  // que decide a ordem padrão da watchlist — séries em lançamento ficam no
+  // topo, mas marcar um episódio de qualquer série a leva pra frente na hora.
+  const activityDateFor = useCallback(
+    (show: FollowedShow) => {
+      const watchedMs = Date.parse(lastWatchedAtById[show.tmdb_id] ?? '');
+      const airedMs = Date.parse(lastAirDateById[show.tmdb_id] ?? '');
+      const best = Math.max(watchedMs, airedMs);
+      return Number.isFinite(best) ? best : Date.parse(show.followed_at);
+    },
+    [lastWatchedAtById, lastAirDateById]
+  );
+
   const filteredShows = useMemo(() => {
     let list = shows ?? [];
     if (trimmedQuery) {
@@ -651,6 +697,8 @@ export default function MyShowsScreen() {
       list = [...list].sort((a, b) =>
         a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
       );
+    } else {
+      list = [...list].sort((a, b) => activityDateFor(b) - activityDateFor(a));
     }
     return list;
   }, [
@@ -662,6 +710,7 @@ export default function MyShowsScreen() {
     progressFor,
     watchedById,
     sortMode,
+    activityDateFor,
   ]);
 
   // Assistidos + Para assistir juntos (ou só um deles, conforme o filtro).

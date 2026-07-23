@@ -1,7 +1,8 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { CommentsScreen } from '@/components/comments-screen';
 import { StarRating } from '@/components/star-rating';
@@ -11,12 +12,15 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
   errorMessage,
+  followShowsBulk,
   getEpisodeAverageRating,
   getMyEpisodeRating,
   isEpisodeWatched,
+  markEpisodeWatched,
   rateEpisode,
 } from '@/lib/db';
-import { getEpisodeDetails, stillUrl, type TmdbEpisode } from '@/lib/tmdb';
+import { syncEpisodeNotifications } from '@/lib/notifications';
+import { getEpisodeDetails, getShowDetailsCached, stillUrl, type TmdbEpisode } from '@/lib/tmdb';
 
 export default function EpisodeScreen() {
   const theme = useTheme();
@@ -34,7 +38,10 @@ export default function EpisodeScreen() {
   const [myRating, setMyRating] = useState<number | null>(null);
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [watched, setWatched] = useState<boolean | null>(null);
+  const [togglingWatched, setTogglingWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Evita repetir o upsert de "seguir" a cada vez que o episódio é marcado nesta tela.
+  const followEnsured = useRef(false);
 
   useEffect(() => {
     getEpisodeDetails(showId, seasonNumber, episodeNumber)
@@ -62,6 +69,41 @@ export default function EpisodeScreen() {
       setAverage(avg);
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível salvar a nota.'));
+    }
+  }
+
+  /**
+   * Marcar o episódio como assistido também passa a seguir a série, para ela
+   * aparecer na watchlist. O upsert ignora duplicados, então é seguro chamar
+   * mesmo que o usuário já siga.
+   */
+  const ensureFollowing = useCallback(async () => {
+    if (!user || followEnsured.current) return;
+    try {
+      const show = await getShowDetailsCached(showId);
+      await followShowsBulk(user.id, [
+        { tmdb_id: show.id, name: show.name, poster_path: show.poster_path },
+      ]);
+      followEnsured.current = true;
+      syncEpisodeNotifications(user.id).catch(() => {});
+    } catch {
+      // Seguir é efeito colateral: falhar aqui não deve desfazer o "assistido".
+    }
+  }, [user, showId]);
+
+  async function toggleWatched() {
+    if (!user || watched === null) return;
+    const isWatched = watched;
+    setTogglingWatched(true);
+    setWatched(!isWatched);
+    try {
+      await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, !isWatched);
+      if (!isWatched) ensureFollowing();
+    } catch (err) {
+      setWatched(isWatched);
+      setError(errorMessage(err, 'Não foi possível marcar como assistido.'));
+    } finally {
+      setTogglingWatched(false);
     }
   }
 
@@ -119,6 +161,28 @@ export default function EpisodeScreen() {
               </ThemedText>
             ) : null}
 
+            {user && watched !== null && (
+              <Pressable
+                disabled={togglingWatched}
+                style={[
+                  styles.watchedButton,
+                  {
+                    backgroundColor: watched ? theme.backgroundElement : theme.accent,
+                    opacity: togglingWatched ? 0.6 : 1,
+                  },
+                ]}
+                onPress={toggleWatched}>
+                <Ionicons
+                  name={watched ? 'close-circle-outline' : 'checkmark-done'}
+                  size={18}
+                  color={watched ? theme.text : theme.accentText}
+                />
+                <ThemedText type="smallBold" style={{ color: watched ? theme.text : theme.accentText }}>
+                  {watched ? 'Desmarcar como assistido' : 'Marcar como assistido'}
+                </ThemedText>
+              </Pressable>
+            )}
+
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Sua nota</ThemedText>
               <StarRating value={myRating} onChange={handleRate} />
@@ -165,5 +229,13 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
     marginTop: Spacing.two,
+  },
+  watchedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    borderRadius: 12,
+    paddingVertical: 12,
   },
 });
