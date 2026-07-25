@@ -2,11 +2,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 import { CommentsScreen } from '@/components/comments-screen';
+import { SkippedEpisodesSheet } from '@/components/skipped-episodes-sheet';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -19,11 +20,14 @@ import {
   getMyEpisodeRating,
   isEpisodeWatched,
   markEpisodeWatched,
-  markSeasonWatched,
   rateEpisode,
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
-import { getSkippedEpisodes, type SkippedEpisode } from '@/lib/watch-next';
+import {
+  getSkippedEpisodes,
+  markSkippedEpisodesWatched,
+  type SkippedEpisode,
+} from '@/lib/watch-next';
 import {
   getEpisodeDetails,
   getShowDetailsCached,
@@ -53,6 +57,7 @@ export default function EpisodeScreen() {
   const [watched, setWatched] = useState<boolean | null>(null);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [skippedPrompt, setSkippedPrompt] = useState<SkippedEpisode[] | null>(null);
   // Evita repetir o upsert de "seguir" a cada vez que o episódio é marcado nesta tela.
   const followEnsured = useRef(false);
 
@@ -130,17 +135,7 @@ export default function EpisodeScreen() {
       await markEpisodeWatched(userId, showId, seasonNumber, episodeNumber, nextWatched);
       if (nextWatched) ensureFollowing();
       if (extraSkipped.length > 0) {
-        const bySeason = new Map<number, number[]>();
-        for (const episode of extraSkipped) {
-          const list = bySeason.get(episode.seasonNumber) ?? [];
-          list.push(episode.episodeNumber);
-          bySeason.set(episode.seasonNumber, list);
-        }
-        await Promise.all(
-          Array.from(bySeason.entries()).map(([season, episodeNumbers]) =>
-            markSeasonWatched(userId, showId, season, episodeNumbers)
-          )
-        );
+        await markSkippedEpisodesWatched(userId, showId, extraSkipped);
       }
     } catch (err) {
       setWatched(!nextWatched);
@@ -168,14 +163,7 @@ export default function EpisodeScreen() {
     setTogglingWatched(false);
 
     if (skipped.length > 0) {
-      Alert.alert(
-        'Episódios anteriores não assistidos',
-        'Você está marcando um episódio avançado e deixou episódios para trás como não assistidos. Quer deixá-los marcados como assistidos também?',
-        [
-          { text: 'Só este', style: 'cancel', onPress: () => commitWatched(userId, true) },
-          { text: 'Marcar todos', onPress: () => commitWatched(userId, true, skipped) },
-        ]
-      );
+      setSkippedPrompt(skipped);
       return;
     }
 
@@ -368,6 +356,17 @@ export default function EpisodeScreen() {
             </View>
           </GestureDetector>
         }
+      />
+      <SkippedEpisodesSheet
+        visible={skippedPrompt !== null}
+        count={skippedPrompt?.length ?? 0}
+        onClose={() => setSkippedPrompt(null)}
+        onSkip={() => {
+          if (user) commitWatched(user.id, true);
+        }}
+        onMarkAll={() => {
+          if (user && skippedPrompt) commitWatched(user.id, true, skippedPrompt);
+        }}
       />
     </>
   );

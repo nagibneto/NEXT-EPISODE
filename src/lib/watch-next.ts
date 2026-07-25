@@ -3,7 +3,7 @@
  * primeiro episódio já exibido que o usuário ainda não assistiu.
  */
 
-import { getWatchedEpisodes } from './db';
+import { getWatchedEpisodes, markSeasonWatched } from './db';
 import { getSeasonDetailsCached, getShowDetailsCached } from './tmdb';
 
 export interface NextEpisode {
@@ -115,4 +115,23 @@ export async function getSkippedEpisodes(
     }
   }
   return skipped;
+}
+
+/** Marca em lote os episódios pulados devolvidos por getSkippedEpisodes, agrupando por temporada. */
+export async function markSkippedEpisodesWatched(
+  userId: string,
+  showId: number,
+  skipped: SkippedEpisode[]
+) {
+  const bySeason = new Map<number, number[]>();
+  for (const episode of skipped) {
+    const list = bySeason.get(episode.seasonNumber) ?? [];
+    list.push(episode.episodeNumber);
+    bySeason.set(episode.seasonNumber, list);
+  }
+  await Promise.all(
+    Array.from(bySeason.entries()).map(([season, episodeNumbers]) =>
+      markSeasonWatched(userId, showId, season, episodeNumbers)
+    )
+  );
 }

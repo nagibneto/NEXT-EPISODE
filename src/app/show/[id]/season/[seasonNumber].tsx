@@ -4,6 +4,7 @@ import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { SkippedEpisodesSheet } from '@/components/skipped-episodes-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -18,6 +19,11 @@ import {
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import { getSeasonDetails, getShowDetailsCached, stillUrl, type TmdbSeasonDetails } from '@/lib/tmdb';
+import {
+  getSkippedEpisodes,
+  markSkippedEpisodesWatched,
+  type SkippedEpisode,
+} from '@/lib/watch-next';
 
 export default function SeasonScreen() {
   const theme = useTheme();
@@ -30,6 +36,11 @@ export default function SeasonScreen() {
   const [watched, setWatched] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [markingSeason, setMarkingSeason] = useState(false);
+  // Episódio sendo marcado que deixou episódios anteriores pulados, aguardando confirmação.
+  const [skippedPrompt, setSkippedPrompt] = useState<{
+    episodeNumber: number;
+    skipped: SkippedEpisode[];
+  } | null>(null);
   // Evita repetir o upsert de "seguir" a cada episódio marcado nesta tela.
   const followEnsured = useRef(false);
 
@@ -100,30 +111,56 @@ export default function SeasonScreen() {
     });
   }, [showId, seasonNumber]);
 
-  const toggleWatched = useCallback(
-    async (episodeNumber: number) => {
+  const commitWatched = useCallback(
+    async (episodeNumber: number, nextWatched: boolean, extraSkipped: SkippedEpisode[] = []) => {
       if (!user) return;
-      const isWatched = watched.has(episodeNumber);
       // Atualização otimista: reflete o toque na hora e desfaz se a API falhar.
       setWatched((current) => {
         const next = new Set(current);
-        if (isWatched) next.delete(episodeNumber);
-        else next.add(episodeNumber);
+        if (nextWatched) next.add(episodeNumber);
+        else next.delete(episodeNumber);
         return next;
       });
       try {
-        await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, !isWatched);
-        if (!isWatched) ensureFollowing();
+        await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, nextWatched);
+        if (nextWatched) ensureFollowing();
+        if (extraSkipped.length > 0) {
+          await markSkippedEpisodesWatched(user.id, showId, extraSkipped);
+        }
       } catch {
         setWatched((current) => {
           const next = new Set(current);
-          if (isWatched) next.add(episodeNumber);
-          else next.delete(episodeNumber);
+          if (nextWatched) next.delete(episodeNumber);
+          else next.add(episodeNumber);
           return next;
         });
       }
     },
-    [user, watched, showId, seasonNumber, ensureFollowing]
+    [user, showId, seasonNumber, ensureFollowing]
+  );
+
+  const toggleWatched = useCallback(
+    async (episodeNumber: number) => {
+      if (!user) return;
+      const isWatched = watched.has(episodeNumber);
+
+      if (isWatched) {
+        commitWatched(episodeNumber, false);
+        return;
+      }
+
+      // Marcando como assistido: avisa se ficaram episódios anteriores pulados.
+      const skipped = await getSkippedEpisodes(user.id, showId, seasonNumber, episodeNumber).catch(
+        () => []
+      );
+      if (skipped.length > 0) {
+        setSkippedPrompt({ episodeNumber, skipped });
+        return;
+      }
+
+      commitWatched(episodeNumber, true);
+    },
+    [user, watched, showId, seasonNumber, commitWatched]
   );
 
   if (error) {
@@ -259,6 +296,17 @@ export default function SeasonScreen() {
               )}
             </View>
           );
+        }}
+      />
+      <SkippedEpisodesSheet
+        visible={skippedPrompt !== null}
+        count={skippedPrompt?.skipped.length ?? 0}
+        onClose={() => setSkippedPrompt(null)}
+        onSkip={() => {
+          if (skippedPrompt) commitWatched(skippedPrompt.episodeNumber, true);
+        }}
+        onMarkAll={() => {
+          if (skippedPrompt) commitWatched(skippedPrompt.episodeNumber, true, skippedPrompt.skipped);
         }}
       />
     </View>

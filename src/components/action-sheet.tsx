@@ -10,6 +10,8 @@ export interface ActionSheetOption {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   destructive?: boolean;
+  /** Destaca a opção como a ação sugerida (cor de destaque, texto em negrito). */
+  accent?: boolean;
   onPress: () => void;
 }
 
@@ -65,10 +67,12 @@ export function ActionSheet({
                 <Ionicons
                   name={option.icon}
                   size={20}
-                  color={option.destructive ? theme.danger : theme.text}
+                  color={option.destructive ? theme.danger : option.accent ? theme.accent : theme.text}
                 />
               ) : null}
-              <ThemedText themeColor={option.destructive ? 'danger' : 'text'}>
+              <ThemedText
+                type={option.accent ? 'smallBold' : 'default'}
+                themeColor={option.destructive ? 'danger' : option.accent ? 'accent' : 'text'}>
                 {option.label}
               </ThemedText>
             </Pressable>
