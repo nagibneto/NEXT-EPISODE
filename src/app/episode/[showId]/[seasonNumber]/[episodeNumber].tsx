@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
@@ -19,9 +19,11 @@ import {
   getMyEpisodeRating,
   isEpisodeWatched,
   markEpisodeWatched,
+  markSeasonWatched,
   rateEpisode,
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
+import { getSkippedEpisodes, type SkippedEpisode } from '@/lib/watch-next';
 import {
   getEpisodeDetails,
   getShowDetailsCached,
@@ -117,20 +119,67 @@ export default function EpisodeScreen() {
     }
   }, [user, showId]);
 
-  async function toggleWatched() {
-    if (!user || watched === null) return;
-    const isWatched = watched;
+  /**
+   * Efetiva a marcação: o episódio atual e, se o usuário confirmou no aviso
+   * de episódios pulados, os episódios anteriores deixados como não vistos.
+   */
+  async function commitWatched(userId: string, nextWatched: boolean, extraSkipped: SkippedEpisode[] = []) {
     setTogglingWatched(true);
-    setWatched(!isWatched);
+    setWatched(nextWatched);
     try {
-      await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, !isWatched);
-      if (!isWatched) ensureFollowing();
+      await markEpisodeWatched(userId, showId, seasonNumber, episodeNumber, nextWatched);
+      if (nextWatched) ensureFollowing();
+      if (extraSkipped.length > 0) {
+        const bySeason = new Map<number, number[]>();
+        for (const episode of extraSkipped) {
+          const list = bySeason.get(episode.seasonNumber) ?? [];
+          list.push(episode.episodeNumber);
+          bySeason.set(episode.seasonNumber, list);
+        }
+        await Promise.all(
+          Array.from(bySeason.entries()).map(([season, episodeNumbers]) =>
+            markSeasonWatched(userId, showId, season, episodeNumbers)
+          )
+        );
+      }
     } catch (err) {
-      setWatched(isWatched);
+      setWatched(!nextWatched);
       setError(errorMessage(err, 'Não foi possível marcar como assistido.'));
     } finally {
       setTogglingWatched(false);
     }
+  }
+
+  async function toggleWatched() {
+    if (!user || watched === null) return;
+    const userId = user.id;
+    const isWatched = watched;
+
+    if (isWatched) {
+      commitWatched(userId, false);
+      return;
+    }
+
+    // Marcando como assistido: avisa se ficaram episódios anteriores pulados.
+    setTogglingWatched(true);
+    const skipped = await getSkippedEpisodes(userId, showId, seasonNumber, episodeNumber).catch(
+      () => []
+    );
+    setTogglingWatched(false);
+
+    if (skipped.length > 0) {
+      Alert.alert(
+        'Episódios anteriores não assistidos',
+        'Você está marcando um episódio avançado e deixou episódios para trás como não assistidos. Quer deixá-los marcados como assistidos também?',
+        [
+          { text: 'Só este', style: 'cancel', onPress: () => commitWatched(userId, true) },
+          { text: 'Marcar todos', onPress: () => commitWatched(userId, true, skipped) },
+        ]
+      );
+      return;
+    }
+
+    commitWatched(userId, true);
   }
 
   if (error && !episode) {

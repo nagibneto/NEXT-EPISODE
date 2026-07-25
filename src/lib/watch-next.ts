@@ -74,3 +74,45 @@ export async function getNextUnwatchedEpisode(
 
   return null;
 }
+
+export interface SkippedEpisode {
+  seasonNumber: number;
+  episodeNumber: number;
+}
+
+/**
+ * Episódios já exibidos, anteriores ao (temporada, episódio) informado, que
+ * o usuário ainda não marcou como assistidos. Usado para avisar quando ele
+ * marca um episódio avançado e "pula" episódios pra trás.
+ */
+export async function getSkippedEpisodes(
+  userId: string,
+  showId: number,
+  beforeSeasonNumber: number,
+  beforeEpisodeNumber: number
+): Promise<SkippedEpisode[]> {
+  const [details, watched] = await Promise.all([
+    getShowDetailsCached(showId),
+    getWatchedEpisodes(userId, showId),
+  ]);
+
+  const watchedSet = new Set(watched.map((e) => `${e.season_number}-${e.episode_number}`));
+  const today = new Date().toISOString().slice(0, 10);
+  const seasons = details.seasons
+    .filter((season) => season.season_number > 0 && season.season_number <= beforeSeasonNumber)
+    .sort((a, b) => a.season_number - b.season_number);
+
+  const skipped: SkippedEpisode[] = [];
+  for (const season of seasons) {
+    const seasonDetails = await getSeasonDetailsCached(showId, season.season_number);
+    for (const episode of seasonDetails.episodes) {
+      if (season.season_number === beforeSeasonNumber && episode.episode_number >= beforeEpisodeNumber) {
+        continue;
+      }
+      if (!episode.air_date || episode.air_date > today) continue;
+      if (watchedSet.has(`${episode.season_number}-${episode.episode_number}`)) continue;
+      skipped.push({ seasonNumber: episode.season_number, episodeNumber: episode.episode_number });
+    }
+  }
+  return skipped;
+}
