@@ -143,6 +143,38 @@ export async function unfollowShow(userId: string, tmdbId: number) {
 
 // ---------- Episódios assistidos ----------
 
+/**
+ * Notifica telas abertas (temporada, watchlist) assim que uma escrita de
+ * "assistido" é confirmada no banco. Evita que um refetch disparado por
+ * navegação (ex.: voltar da tela do episódio para a temporada) chegue antes
+ * da escrita e mostre o estado antigo — o refetch por foco é sujeito a essa
+ * corrida, o evento não, porque só dispara depois da escrita terminar.
+ */
+type WatchedChangeListener = (
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumbers: number[] | 'all',
+  watched: boolean
+) => void;
+
+const watchedChangeListeners = new Set<WatchedChangeListener>();
+
+export function onEpisodeWatchedChange(listener: WatchedChangeListener) {
+  watchedChangeListeners.add(listener);
+  return () => {
+    watchedChangeListeners.delete(listener);
+  };
+}
+
+function emitEpisodeWatchedChange(
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumbers: number[] | 'all',
+  watched: boolean
+) {
+  for (const listener of watchedChangeListeners) listener(tmdbShowId, seasonNumber, episodeNumbers, watched);
+}
+
 export async function getWatchedEpisodes(
   userId: string,
   tmdbShowId: number
@@ -198,6 +230,7 @@ export async function markEpisodeWatched(
       .eq('episode_number', episodeNumber);
     if (error) throw error;
   }
+  emitEpisodeWatchedChange(tmdbShowId, seasonNumber, [episodeNumber], watched);
 }
 
 /**
@@ -221,6 +254,7 @@ export async function markSeasonWatched(
     { onConflict: 'user_id,tmdb_show_id,season_number,episode_number', ignoreDuplicates: true }
   );
   if (error) throw error;
+  emitEpisodeWatchedChange(tmdbShowId, seasonNumber, episodeNumbers, true);
 }
 
 /** Desmarca todos os episódios de uma temporada. */
@@ -236,6 +270,7 @@ export async function unmarkSeasonWatched(
     .eq('tmdb_show_id', tmdbShowId)
     .eq('season_number', seasonNumber);
   if (error) throw error;
+  emitEpisodeWatchedChange(tmdbShowId, seasonNumber, 'all', false);
 }
 
 // ---------- Filmes assistidos ----------

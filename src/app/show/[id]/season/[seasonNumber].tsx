@@ -13,6 +13,7 @@ import {
   getWatchedEpisodes,
   markEpisodeWatched,
   markSeasonWatched,
+  onEpisodeWatchedChange,
   unmarkSeasonWatched,
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
@@ -77,6 +78,27 @@ export default function SeasonScreen() {
         .catch(() => {});
     }, [showId, seasonNumber, user])
   );
+
+  // Sincroniza na hora com marcações feitas em outras telas (ex.: detalhes do
+  // episódio). Diferente do refetch por foco acima, isto não corre risco de
+  // chegar antes da escrita: o evento só dispara depois dela terminar.
+  useEffect(() => {
+    return onEpisodeWatchedChange((changedShowId, changedSeason, episodeNumbers, isWatched) => {
+      if (changedShowId !== showId || changedSeason !== seasonNumber) return;
+      setWatched((current) => {
+        const next = new Set(current);
+        if (episodeNumbers === 'all') {
+          next.clear();
+        } else {
+          for (const episodeNumber of episodeNumbers) {
+            if (isWatched) next.add(episodeNumber);
+            else next.delete(episodeNumber);
+          }
+        }
+        return next;
+      });
+    });
+  }, [showId, seasonNumber]);
 
   const toggleWatched = useCallback(
     async (episodeNumber: number) => {

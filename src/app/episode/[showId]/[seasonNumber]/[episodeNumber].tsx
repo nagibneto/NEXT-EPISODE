@@ -3,6 +3,8 @@ import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 import { CommentsScreen } from '@/components/comments-screen';
 import { StarRating } from '@/components/star-rating';
@@ -53,6 +55,15 @@ export default function EpisodeScreen() {
   const followEnsured = useRef(false);
 
   useEffect(() => {
+    // Reseta ao trocar de episódio (Anterior/Próximo, arrastar): sem isso a
+    // tela ficaria mostrando o estado "assistido" do episódio antigo até a
+    // busca do novo terminar, arriscando marcar o episódio errado se o
+    // usuário tocar no botão nesse intervalo.
+    setEpisode(null);
+    setWatched(null);
+    setMyRating(null);
+    setAverage(null);
+    setError(null);
     getEpisodeDetails(showId, seasonNumber, episodeNumber)
       .then(setEpisode)
       .catch((err) => setError(errorMessage(err, 'Erro ao carregar o episódio.')));
@@ -174,6 +185,21 @@ export default function EpisodeScreen() {
     });
   }
 
+  // Só ativa em arrastos predominantemente horizontais, para não competir
+  // com o scroll vertical da lista de comentários.
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((event) => {
+      const fastFling = Math.abs(event.velocityX) > 800 && Math.abs(event.translationX) > 20;
+      if (!fastFling && Math.abs(event.translationX) < 70) return;
+      if (event.translationX < 0 && nextEpisode) {
+        runOnJS(goToEpisode)(nextEpisode);
+      } else if (event.translationX > 0 && previousEpisode) {
+        runOnJS(goToEpisode)(previousEpisode);
+      }
+    });
+
   return (
     <>
       <Stack.Screen options={{ title: code }} />
@@ -185,112 +211,120 @@ export default function EpisodeScreen() {
         watched={watched}
         lockedText="Você ainda não marcou este episódio como assistido. Os comentários podem conter spoilers."
         header={
-          <View style={styles.header}>
-            {showName && (
-              <Link href={{ pathname: '/show/[id]', params: { id: String(showId) } }} asChild>
-                <Pressable style={styles.showLink} hitSlop={6}>
-                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.accent }}>
-                    {showName}
-                  </ThemedText>
-                  <Ionicons name="chevron-forward" size={12} color={theme.accent} />
-                </Pressable>
-              </Link>
-            )}
-            {still && <Image source={{ uri: still }} style={styles.still} contentFit="cover" />}
-            <ThemedText type="smallBold" style={styles.title}>
-              {code} — {episode.name}
-            </ThemedText>
-            {episode.air_date && (
-              <ThemedText type="small" themeColor="textSecondary">
-                {new Date(`${episode.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
-                  weekday: 'long',
-                  day: '2-digit',
-                  month: 'long',
-                  year: 'numeric',
-                })}
-                {episode.runtime ? ` · ${episode.runtime} min` : ''}
+          <GestureDetector gesture={swipeGesture}>
+            <View style={styles.header}>
+              {showName && (
+                <Link href={{ pathname: '/show/[id]', params: { id: String(showId) } }} asChild>
+                  <Pressable style={styles.showLink} hitSlop={6}>
+                    <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.accent }}>
+                      {showName}
+                    </ThemedText>
+                    <Ionicons name="chevron-forward" size={12} color={theme.accent} />
+                  </Pressable>
+                </Link>
+              )}
+              {still && <Image source={{ uri: still }} style={styles.still} contentFit="cover" />}
+              <ThemedText type="smallBold" style={styles.title}>
+                {code} — {episode.name}
               </ThemedText>
-            )}
-            {episode.overview ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {episode.overview}
-              </ThemedText>
-            ) : null}
-
-            <View style={styles.navRow}>
-              <Pressable
-                disabled={!previousEpisode}
-                hitSlop={6}
-                style={[
-                  styles.navButton,
-                  { backgroundColor: theme.backgroundElement, opacity: previousEpisode ? 1 : 0.35 },
-                ]}
-                onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
-                <Ionicons name="play-skip-back" size={20} color={theme.text} />
-                <ThemedText
-                  type="smallBold"
-                  numberOfLines={1}
-                  style={{ color: theme.text, fontSize: 12, lineHeight: 16 }}>
-                  Anterior
+              {episode.air_date && (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {new Date(`${episode.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                  {episode.runtime ? ` · ${episode.runtime} min` : ''}
                 </ThemedText>
-              </Pressable>
+              )}
+              {episode.overview ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {episode.overview}
+                </ThemedText>
+              ) : null}
 
-              {user && watched !== null && (
+              <View style={styles.navRow}>
                 <Pressable
-                  disabled={togglingWatched}
+                  disabled={!previousEpisode}
+                  hitSlop={6}
                   style={[
-                    styles.watchedButton,
-                    {
-                      backgroundColor: watched ? theme.accent : theme.backgroundElement,
-                      opacity: togglingWatched ? 0.6 : 1,
-                    },
+                    styles.navButton,
+                    { backgroundColor: theme.backgroundElement, opacity: previousEpisode ? 1 : 0.35 },
                   ]}
-                  onPress={toggleWatched}>
-                  <Ionicons
-                    name={watched ? 'checkmark-done' : 'close-circle-outline'}
-                    size={18}
-                    color={watched ? theme.accentText : theme.text}
-                  />
+                  onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
+                  <Ionicons name="play-skip-back" size={20} color={theme.text} />
                   <ThemedText
                     type="smallBold"
                     numberOfLines={1}
-                    style={{ color: watched ? theme.accentText : theme.text }}>
-                    {watched ? 'Assistido' : 'Não assistido'}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                    style={{ color: theme.text, fontSize: 12, lineHeight: 16, flexShrink: 1 }}>
+                    Anterior
                   </ThemedText>
                 </Pressable>
-              )}
 
-              <Pressable
-                disabled={!nextEpisode}
-                hitSlop={6}
-                style={[
-                  styles.navButton,
-                  { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
-                ]}
-                onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
-                <ThemedText
-                  type="smallBold"
-                  numberOfLines={1}
-                  style={{ color: theme.text, fontSize: 12, lineHeight: 16 }}>
-                  Próximo
-                </ThemedText>
-                <Ionicons name="play-skip-forward" size={20} color={theme.text} />
-              </Pressable>
+                {user && watched !== null && (
+                  <Pressable
+                    disabled={togglingWatched}
+                    style={[
+                      styles.watchedButton,
+                      {
+                        backgroundColor: watched ? theme.accent : theme.backgroundElement,
+                        opacity: togglingWatched ? 0.6 : 1,
+                      },
+                    ]}
+                    onPress={toggleWatched}>
+                    <Ionicons
+                      name={watched ? 'checkmark-done' : 'close-circle-outline'}
+                      size={18}
+                      color={watched ? theme.accentText : theme.text}
+                    />
+                    <ThemedText
+                      type="smallBold"
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
+                      style={{ color: watched ? theme.accentText : theme.text, flexShrink: 1 }}>
+                      {watched ? 'Assistido' : 'Não assistido'}
+                    </ThemedText>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  disabled={!nextEpisode}
+                  hitSlop={6}
+                  style={[
+                    styles.navButton,
+                    { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
+                  ]}
+                  onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
+                  <ThemedText
+                    type="smallBold"
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                    style={{ color: theme.text, fontSize: 12, lineHeight: 16, flexShrink: 1 }}>
+                    Próximo
+                  </ThemedText>
+                  <Ionicons name="play-skip-forward" size={20} color={theme.text} />
+                </Pressable>
+              </View>
+
+              <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
+                <ThemedText type="smallBold">Sua nota</ThemedText>
+                <StarRating value={myRating} onChange={handleRate} />
+                {average && average.count > 0 && (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Média da comunidade: {(average.average / 2).toFixed(1)}/5 ({average.count}{' '}
+                    {average.count === 1 ? 'voto' : 'votos'})
+                  </ThemedText>
+                )}
+              </View>
+
+              {error && <ThemedText themeColor="danger">{error}</ThemedText>}
             </View>
-
-            <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText type="smallBold">Sua nota</ThemedText>
-              <StarRating value={myRating} onChange={handleRate} />
-              {average && average.count > 0 && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  Média da comunidade: {(average.average / 2).toFixed(1)}/5 ({average.count}{' '}
-                  {average.count === 1 ? 'voto' : 'votos'})
-                </ThemedText>
-              )}
-            </View>
-
-            {error && <ThemedText themeColor="danger">{error}</ThemedText>}
-          </View>
+          </GestureDetector>
         }
       />
     </>
@@ -337,16 +371,17 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   navButton: {
+    flex: 0.85,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,
     borderRadius: 12,
-    paddingHorizontal: Spacing.one,
+    paddingHorizontal: Spacing.half,
     paddingVertical: 12,
   },
   watchedButton: {
-    flex: 1,
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

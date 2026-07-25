@@ -18,6 +18,7 @@ import {
   isFavorite,
   isFollowing,
   markSeasonWatched,
+  onEpisodeWatchedChange,
   removeFavorite,
   unfollowShow,
   unmarkSeasonWatched,
@@ -83,6 +84,26 @@ export default function ShowDetailsScreen() {
         .catch(() => {});
     }, [user, showId])
   );
+
+  // Sincroniza na hora com marcações feitas em outras telas (ex.: temporada,
+  // detalhes do episódio), sem esperar o próximo foco desta tela — e sem
+  // correr o risco do refetch por foco acima, que pode chegar antes da
+  // escrita terminar.
+  useEffect(() => {
+    if (!user) return;
+    return onEpisodeWatchedChange((changedShowId) => {
+      if (changedShowId !== showId) return;
+      getWatchedEpisodes(user.id, showId)
+        .then((episodes) => {
+          const counts = new Map<number, number>();
+          for (const episode of episodes) {
+            counts.set(episode.season_number, (counts.get(episode.season_number) ?? 0) + 1);
+          }
+          setWatchedBySeason(counts);
+        })
+        .catch(() => {});
+    });
+  }, [user, showId]);
 
   useEffect(() => {
     if (!show) return;
