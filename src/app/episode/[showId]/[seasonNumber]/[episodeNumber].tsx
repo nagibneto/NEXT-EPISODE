@@ -227,7 +227,7 @@ export default function EpisodeScreen() {
                 ]}
                 onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
                 <Ionicons name="play-skip-back" size={20} color={theme.text} />
-                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
                   Anterior
                 </ThemedText>
               </Pressable>
@@ -248,8 +248,11 @@ export default function EpisodeScreen() {
                     size={18}
                     color={watched ? theme.text : theme.accentText}
                   />
-                  <ThemedText type="smallBold" style={{ color: watched ? theme.text : theme.accentText }}>
-                    {watched ? 'Desmarcar como assistido' : 'Marcar como assistido'}
+                  <ThemedText
+                    type="smallBold"
+                    numberOfLines={1}
+                    style={{ color: watched ? theme.text : theme.accentText }}>
+                    {watched ? 'Não assistido' : 'Assistido'}
                   </ThemedText>
                 </Pressable>
               )}
@@ -262,7 +265,7 @@ export default function EpisodeScreen() {
                   { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
                 ]}
                 onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
-                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
                   Próximo
                 </ThemedText>
                 <Ionicons name="play-skip-forward" size={20} color={theme.text} />
@@ -325,7 +328,7 @@ const styles = StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: Spacing.two,
+    gap: Spacing.one,
   },
   navButton: {
     flexDirection: 'row',
@@ -333,7 +336,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.one,
     borderRadius: 12,
-    paddingHorizontal: Spacing.two,
+    paddingHorizontal: Spacing.one,
     paddingVertical: 12,
   },
   watchedButton: {
@@ -343,6 +346,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.one,
     borderRadius: 12,
+    paddingHorizontal: Spacing.one,
     paddingVertical: 12,
   },
 });
