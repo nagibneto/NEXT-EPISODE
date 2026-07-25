@@ -174,13 +174,18 @@ export default function EpisodeScreen() {
             : null;
         })();
 
-  function goToEpisode(target: { seasonNumber: number; episodeNumber: number }) {
+  function goToEpisode(
+    target: { seasonNumber: number; episodeNumber: number },
+    direction: 'prev' | 'next'
+  ) {
     router.replace({
       pathname: '/episode/[showId]/[seasonNumber]/[episodeNumber]',
       params: {
         showId: String(showId),
         seasonNumber: String(target.seasonNumber),
         episodeNumber: String(target.episodeNumber),
+        // Lido só pelo _layout.tsx raiz para escolher o lado da animação.
+        direction,
       },
     });
   }
@@ -194,9 +199,9 @@ export default function EpisodeScreen() {
       const fastFling = Math.abs(event.velocityX) > 800 && Math.abs(event.translationX) > 20;
       if (!fastFling && Math.abs(event.translationX) < 70) return;
       if (event.translationX < 0 && nextEpisode) {
-        runOnJS(goToEpisode)(nextEpisode);
+        runOnJS(goToEpisode)(nextEpisode, 'next');
       } else if (event.translationX > 0 && previousEpisode) {
-        runOnJS(goToEpisode)(previousEpisode);
+        runOnJS(goToEpisode)(previousEpisode, 'prev');
       }
     });
 
@@ -252,7 +257,7 @@ export default function EpisodeScreen() {
                     styles.navButton,
                     { backgroundColor: theme.backgroundElement, opacity: previousEpisode ? 1 : 0.35 },
                   ]}
-                  onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
+                  onPress={() => previousEpisode && goToEpisode(previousEpisode, 'prev')}>
                   <Ionicons name="play-skip-back" size={20} color={theme.text} />
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
                     Ant.
@@ -291,7 +296,7 @@ export default function EpisodeScreen() {
                     styles.navButton,
                     { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
                   ]}
-                  onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
+                  onPress={() => nextEpisode && goToEpisode(nextEpisode, 'next')}>
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
                     Próx.
                   </ThemedText>

@@ -25,7 +25,17 @@ function RootNavigator() {
         <Stack.Screen name="show/[id]/season/[seasonNumber]" options={{ title: 'Temporada' }} />
         <Stack.Screen
           name="episode/[showId]/[seasonNumber]/[episodeNumber]"
-          options={{ title: 'Episódio' }}
+          options={({ route }) => ({
+            title: 'Episódio',
+            // Anterior/Próximo trocam de episódio com router.replace, que por
+            // padrão sempre anima como se fosse avançar. O parâmetro
+            // "direction" (só usado aqui, não pela tela) inverte o lado da
+            // animação quando o usuário está voltando.
+            animation:
+              (route.params as { direction?: string } | undefined)?.direction === 'prev'
+                ? 'slide_from_left'
+                : 'slide_from_right',
+          })}
         />
         <Stack.Screen name="import-tv-time" options={{ title: 'Importar do TV Time' }} />
         <Stack.Screen name="friends" options={{ title: 'Amigos' }} />
