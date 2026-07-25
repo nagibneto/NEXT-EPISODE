@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Link, Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
@@ -57,7 +57,13 @@ export default function SeasonScreen() {
       .catch((err) =>
         setError(err instanceof Error ? err.message : 'Erro ao carregar a temporada.')
       );
-    if (user) {
+  }, [showId, seasonNumber]);
+
+  // Refaz a busca de assistidos toda vez que a tela volta ao foco, para
+  // refletir marcações feitas na tela de detalhes do episódio.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
       getWatchedEpisodes(user.id, showId)
         .then((episodes) => {
           setWatched(
@@ -69,8 +75,8 @@ export default function SeasonScreen() {
           );
         })
         .catch(() => {});
-    }
-  }, [showId, seasonNumber, user]);
+    }, [showId, seasonNumber, user])
+  );
 
   const toggleWatched = useCallback(
     async (episodeNumber: number) => {

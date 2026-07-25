@@ -227,7 +227,10 @@ export default function EpisodeScreen() {
                 ]}
                 onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
                 <Ionicons name="play-skip-back" size={20} color={theme.text} />
-                <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
+                <ThemedText
+                  type="smallBold"
+                  numberOfLines={1}
+                  style={{ color: theme.text, fontSize: 12, lineHeight: 16 }}>
                   Anterior
                 </ThemedText>
               </Pressable>
@@ -238,21 +241,21 @@ export default function EpisodeScreen() {
                   style={[
                     styles.watchedButton,
                     {
-                      backgroundColor: watched ? theme.backgroundElement : theme.accent,
+                      backgroundColor: watched ? theme.accent : theme.backgroundElement,
                       opacity: togglingWatched ? 0.6 : 1,
                     },
                   ]}
                   onPress={toggleWatched}>
                   <Ionicons
-                    name={watched ? 'close-circle-outline' : 'checkmark-done'}
+                    name={watched ? 'checkmark-done' : 'close-circle-outline'}
                     size={18}
-                    color={watched ? theme.text : theme.accentText}
+                    color={watched ? theme.accentText : theme.text}
                   />
                   <ThemedText
                     type="smallBold"
                     numberOfLines={1}
-                    style={{ color: watched ? theme.text : theme.accentText }}>
-                    {watched ? 'Não assistido' : 'Assistido'}
+                    style={{ color: watched ? theme.accentText : theme.text }}>
+                    {watched ? 'Assistido' : 'Não assistido'}
                   </ThemedText>
                 </Pressable>
               )}
@@ -265,7 +268,10 @@ export default function EpisodeScreen() {
                   { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
                 ]}
                 onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
-                <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
+                <ThemedText
+                  type="smallBold"
+                  numberOfLines={1}
+                  style={{ color: theme.text, fontSize: 12, lineHeight: 16 }}>
                   Próximo
                 </ThemedText>
                 <Ionicons name="play-skip-forward" size={20} color={theme.text} />
