@@ -274,7 +274,7 @@ export function CommentsScreen({
 
   function renderComment(item: EpisodeComment) {
     return (
-      <View style={[styles.comment, { backgroundColor: theme.backgroundElement }]}>
+      <View style={styles.comment}>
         <View style={styles.commentHeader}>
           <View style={styles.commentAuthor}>
             <UserAvatar
@@ -387,16 +387,21 @@ export function CommentsScreen({
             </ThemedText>
           )
         }
-        renderItem={({ item }) => (
-          <View style={styles.commentThread}>
-            {renderComment(item)}
-            {(repliesByParent.get(item.id) ?? []).map((reply) => (
-              <View key={reply.id} style={styles.replyIndent}>
-                {renderComment(reply)}
-              </View>
-            ))}
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const replies = repliesByParent.get(item.id) ?? [];
+          return (
+            <View style={[styles.commentThread, { backgroundColor: theme.backgroundElement }]}>
+              {renderComment(item)}
+              {replies.map((reply) => (
+                <View
+                  key={reply.id}
+                  style={[styles.reply, { borderTopColor: theme.background }]}>
+                  {renderComment(reply)}
+                </View>
+              ))}
+            </View>
+          );
+        }}
       />
       {commentsUnlocked && (
         <View style={{ backgroundColor: theme.background }}>
@@ -515,8 +520,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.two,
   },
   comment: {
-    borderRadius: 12,
-    padding: Spacing.three,
     gap: Spacing.one,
   },
   commentImage: {
@@ -582,7 +585,9 @@ const styles = StyleSheet.create({
     gap: Spacing.half,
   },
   commentThread: {
-    gap: Spacing.two,
+    borderRadius: 12,
+    padding: Spacing.three,
+    gap: Spacing.three,
   },
   lockedCard: {
     borderRadius: 12,
@@ -597,8 +602,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: Spacing.one,
   },
-  replyIndent: {
+  reply: {
     marginLeft: Spacing.four,
+    paddingTop: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   replyBanner: {
     flexDirection: 'row',
