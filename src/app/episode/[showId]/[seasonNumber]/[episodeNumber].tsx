@@ -254,13 +254,8 @@ export default function EpisodeScreen() {
                   ]}
                   onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
                   <Ionicons name="play-skip-back" size={20} color={theme.text} />
-                  <ThemedText
-                    type="smallBold"
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                    style={{ color: theme.text, fontSize: 12, lineHeight: 16, flexShrink: 1 }}>
-                    Anterior
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
+                    Ant.
                   </ThemedText>
                 </Pressable>
 
@@ -283,9 +278,7 @@ export default function EpisodeScreen() {
                     <ThemedText
                       type="smallBold"
                       numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.75}
-                      style={{ color: watched ? theme.accentText : theme.text, flexShrink: 1 }}>
+                      style={{ color: watched ? theme.accentText : theme.text }}>
                       {watched ? 'Assistido' : 'Não assistido'}
                     </ThemedText>
                   </Pressable>
@@ -299,13 +292,8 @@ export default function EpisodeScreen() {
                     { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
                   ]}
                   onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
-                  <ThemedText
-                    type="smallBold"
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                    style={{ color: theme.text, fontSize: 12, lineHeight: 16, flexShrink: 1 }}>
-                    Próximo
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
+                    Próx.
                   </ThemedText>
                   <Ionicons name="play-skip-forward" size={20} color={theme.text} />
                 </Pressable>
