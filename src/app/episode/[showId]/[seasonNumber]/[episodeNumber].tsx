@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Link, Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -20,10 +20,17 @@ import {
   rateEpisode,
 } from '@/lib/db';
 import { syncEpisodeNotifications } from '@/lib/notifications';
-import { getEpisodeDetails, getShowDetailsCached, stillUrl, type TmdbEpisode } from '@/lib/tmdb';
+import {
+  getEpisodeDetails,
+  getShowDetailsCached,
+  stillUrl,
+  type TmdbEpisode,
+  type TmdbSeasonSummary,
+} from '@/lib/tmdb';
 
 export default function EpisodeScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams<{
     showId: string;
@@ -36,6 +43,7 @@ export default function EpisodeScreen() {
 
   const [episode, setEpisode] = useState<TmdbEpisode | null>(null);
   const [showName, setShowName] = useState<string | null>(null);
+  const [seasons, setSeasons] = useState<TmdbSeasonSummary[] | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [watched, setWatched] = useState<boolean | null>(null);
@@ -49,7 +57,10 @@ export default function EpisodeScreen() {
       .then(setEpisode)
       .catch((err) => setError(errorMessage(err, 'Erro ao carregar o episódio.')));
     getShowDetailsCached(showId)
-      .then((show) => setShowName(show.name))
+      .then((show) => {
+        setShowName(show.name);
+        setSeasons(show.seasons);
+      })
       .catch(() => {});
     getEpisodeAverageRating(showId, seasonNumber, episodeNumber)
       .then(setAverage)
@@ -132,6 +143,37 @@ export default function EpisodeScreen() {
   const still = stillUrl(episode.still_path, 'original');
   const code = `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
 
+  const currentSeason = seasons?.find((s) => s.season_number === seasonNumber);
+  const previousEpisode =
+    episodeNumber > 1
+      ? { seasonNumber, episodeNumber: episodeNumber - 1 }
+      : (() => {
+          const previousSeason = seasons?.find((s) => s.season_number === seasonNumber - 1 && s.season_number > 0);
+          return previousSeason && previousSeason.episode_count > 0
+            ? { seasonNumber: previousSeason.season_number, episodeNumber: previousSeason.episode_count }
+            : null;
+        })();
+  const nextEpisode =
+    currentSeason && episodeNumber < currentSeason.episode_count
+      ? { seasonNumber, episodeNumber: episodeNumber + 1 }
+      : (() => {
+          const nextSeason = seasons?.find((s) => s.season_number === seasonNumber + 1);
+          return nextSeason && nextSeason.episode_count > 0
+            ? { seasonNumber: nextSeason.season_number, episodeNumber: 1 }
+            : null;
+        })();
+
+  function goToEpisode(target: { seasonNumber: number; episodeNumber: number }) {
+    router.replace({
+      pathname: '/episode/[showId]/[seasonNumber]/[episodeNumber]',
+      params: {
+        showId: String(showId),
+        seasonNumber: String(target.seasonNumber),
+        episodeNumber: String(target.episodeNumber),
+      },
+    });
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: code }} />
@@ -175,27 +217,57 @@ export default function EpisodeScreen() {
               </ThemedText>
             ) : null}
 
-            {user && watched !== null && (
+            <View style={styles.navRow}>
               <Pressable
-                disabled={togglingWatched}
+                disabled={!previousEpisode}
+                hitSlop={6}
                 style={[
-                  styles.watchedButton,
-                  {
-                    backgroundColor: watched ? theme.backgroundElement : theme.accent,
-                    opacity: togglingWatched ? 0.6 : 1,
-                  },
+                  styles.navButton,
+                  { backgroundColor: theme.backgroundElement, opacity: previousEpisode ? 1 : 0.35 },
                 ]}
-                onPress={toggleWatched}>
-                <Ionicons
-                  name={watched ? 'close-circle-outline' : 'checkmark-done'}
-                  size={18}
-                  color={watched ? theme.text : theme.accentText}
-                />
-                <ThemedText type="smallBold" style={{ color: watched ? theme.text : theme.accentText }}>
-                  {watched ? 'Desmarcar como assistido' : 'Marcar como assistido'}
+                onPress={() => previousEpisode && goToEpisode(previousEpisode)}>
+                <Ionicons name="play-skip-back" size={20} color={theme.text} />
+                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                  Anterior
                 </ThemedText>
               </Pressable>
-            )}
+
+              {user && watched !== null && (
+                <Pressable
+                  disabled={togglingWatched}
+                  style={[
+                    styles.watchedButton,
+                    {
+                      backgroundColor: watched ? theme.backgroundElement : theme.accent,
+                      opacity: togglingWatched ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={toggleWatched}>
+                  <Ionicons
+                    name={watched ? 'close-circle-outline' : 'checkmark-done'}
+                    size={18}
+                    color={watched ? theme.text : theme.accentText}
+                  />
+                  <ThemedText type="smallBold" style={{ color: watched ? theme.text : theme.accentText }}>
+                    {watched ? 'Desmarcar como assistido' : 'Marcar como assistido'}
+                  </ThemedText>
+                </Pressable>
+              )}
+
+              <Pressable
+                disabled={!nextEpisode}
+                hitSlop={6}
+                style={[
+                  styles.navButton,
+                  { backgroundColor: theme.backgroundElement, opacity: nextEpisode ? 1 : 0.35 },
+                ]}
+                onPress={() => nextEpisode && goToEpisode(nextEpisode)}>
+                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                  Próximo
+                </ThemedText>
+                <Ionicons name="play-skip-forward" size={20} color={theme.text} />
+              </Pressable>
+            </View>
 
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Sua nota</ThemedText>
@@ -250,7 +322,22 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     marginTop: Spacing.two,
   },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: Spacing.two,
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 12,
+  },
   watchedButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
