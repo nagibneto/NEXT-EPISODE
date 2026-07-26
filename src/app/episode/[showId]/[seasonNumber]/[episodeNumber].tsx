@@ -266,9 +266,24 @@ export default function EpisodeScreen() {
                 </Link>
               )}
               {still && <Image source={{ uri: still }} style={styles.still} contentFit="cover" />}
-              <ThemedText type="smallBold" style={styles.title}>
-                {code} — {episode.name}
-              </ThemedText>
+              <View style={styles.titleRow}>
+                <ThemedText type="smallBold" style={[styles.title, styles.titleText]}>
+                  {code} — {episode.name}
+                </ThemedText>
+                {user && watched !== null && (
+                  <Pressable
+                    hitSlop={8}
+                    disabled={togglingWatched}
+                    onPress={toggleWatched}
+                    style={{ opacity: togglingWatched ? 0.6 : 1 }}>
+                    <Ionicons
+                      name={watched ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={28}
+                      color={watched ? theme.accent : theme.textSecondary}
+                    />
+                  </Pressable>
+                )}
+              </View>
               {episode.air_date && (
                 <ThemedText type="small" themeColor="textSecondary">
                   {new Date(`${episode.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
@@ -297,34 +312,9 @@ export default function EpisodeScreen() {
                   onPress={() => previousEpisode && goToEpisode(previousEpisode, 'prev')}>
                   <Ionicons name="play-skip-back" size={20} color={theme.text} />
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
-                    Ant.
+                    Episódio anterior
                   </ThemedText>
                 </Pressable>
-
-                {user && watched !== null && (
-                  <Pressable
-                    disabled={togglingWatched}
-                    style={[
-                      styles.watchedButton,
-                      {
-                        backgroundColor: watched ? theme.accent : theme.backgroundElement,
-                        opacity: togglingWatched ? 0.6 : 1,
-                      },
-                    ]}
-                    onPress={toggleWatched}>
-                    <Ionicons
-                      name={watched ? 'checkmark-done' : 'close-circle-outline'}
-                      size={18}
-                      color={watched ? theme.accentText : theme.text}
-                    />
-                    <ThemedText
-                      type="smallBold"
-                      numberOfLines={1}
-                      style={{ color: watched ? theme.accentText : theme.text }}>
-                      {watched ? 'Assistido' : 'Não assistido'}
-                    </ThemedText>
-                  </Pressable>
-                )}
 
                 <Pressable
                   disabled={!nextEpisode}
@@ -335,7 +325,7 @@ export default function EpisodeScreen() {
                   ]}
                   onPress={() => nextEpisode && goToEpisode(nextEpisode, 'next')}>
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
-                    Próx.
+                    Próximo episódio
                   </ThemedText>
                   <Ionicons name="play-skip-forward" size={20} color={theme.text} />
                 </Pressable>
@@ -400,6 +390,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  titleText: {
+    flex: 1,
+  },
   ratingCard: {
     borderRadius: 12,
     padding: Spacing.three,
@@ -409,26 +407,15 @@ const styles = StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
   navButton: {
-    flex: 0.85,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,
     borderRadius: 12,
-    paddingHorizontal: Spacing.half,
-    paddingVertical: 12,
-  },
-  watchedButton: {
-    flex: 1.3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.one,
-    borderRadius: 12,
-    paddingHorizontal: Spacing.one,
     paddingVertical: 12,
   },
 });
