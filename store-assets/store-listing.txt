@@ -1,6 +1,15 @@
 CATEGORIA
 Entretenimento
 
+CLASSIFICAÇÃO ETÁRIA
+16+ (A16) — definida manualmente.
+
+O questionário de conteúdo da App Store resulta em 4+. A faixa foi
+elevada para 16+ de propósito, acompanhando o TV Time: o app tem
+comentários livres entre usuários, então é uma escolha conservadora
+nossa, não uma exigência do questionário. Se alguém for "corrigir"
+isso para 4+ no futuro, saiba que é intencional.
+
 E-MAIL DE CONTATO
 nagibneto_2@hotmail.com
 
