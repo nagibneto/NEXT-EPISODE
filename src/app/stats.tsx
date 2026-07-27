@@ -9,10 +9,15 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { getWatchedCounts, getWatchedMovies } from '@/lib/db';
-import { airedEpisodeCount, getMovieDetailsCached, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
-
-const FALLBACK_RUNTIME_MIN = 40;
-const FALLBACK_MOVIE_RUNTIME_MIN = 110;
+import {
+  airedEpisodeCount,
+  episodeRuntime,
+  FALLBACK_MOVIE_RUNTIME_MIN,
+  FALLBACK_RUNTIME_MIN,
+  getMovieDetailsCached,
+  getShowDetailsCached,
+  posterUrl,
+} from '@/lib/tmdb';
 
 interface ShowStat {
   tmdb_show_id: number;
@@ -33,18 +38,6 @@ interface Stats {
   totalMovies: number;
   /** Todas as séries assistidas, das que mais consumiram tempo para as que menos. */
   shows: ShowStat[];
-}
-
-/** Duração típica de um episódio da série, com fallback quando a TMDB não informa. */
-function episodeRuntime(details: {
-  episode_run_time: number[];
-  last_episode_to_air: { runtime: number | null } | null;
-}) {
-  if (details.episode_run_time.length > 0) {
-    const sum = details.episode_run_time.reduce((acc, min) => acc + min, 0);
-    return sum / details.episode_run_time.length;
-  }
-  return details.last_episode_to_air?.runtime || FALLBACK_RUNTIME_MIN;
 }
 
 function formatDuration(totalMinutes: number) {

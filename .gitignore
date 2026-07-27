@@ -18,6 +18,9 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Supabase CLI (estado local do "supabase link")
+supabase/.temp/
+
 # Metro
 .metro-health-check*
 

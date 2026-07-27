@@ -451,6 +451,70 @@ create index if not exists watched_episodes_user_date_idx
 create index if not exists episode_comments_user_date_idx
   on public.episode_comments (user_id, created_at desc);
 
+-- ---------- Notificação push: pedido de amizade ----------
+-- Dispara a Edge Function supabase/functions/notify-friend-request assim que
+-- um pedido é criado, pra avisar o destinatário na hora — diferente do
+-- resumo diário de episódios novos (cron, ver final do arquivo).
+--
+-- A URL e a chave vêm do Vault (o SQL Editor não é superusuário, então
+-- "alter database ... set" dá permission denied). Se os segredos não
+-- existirem, o pedido de amizade é criado normalmente e só não sai push.
+create or replace function public.notify_friend_request()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  function_url text;
+  service_key text;
+begin
+  if new.status <> 'pending' then
+    return new;
+  end if;
+
+  begin
+    select decrypted_secret into function_url
+      from vault.decrypted_secrets where name = 'notify_friend_request_url';
+    select decrypted_secret into service_key
+      from vault.decrypted_secrets where name = 'notify_friend_request_key';
+
+    if function_url is not null and service_key is not null then
+      perform net.http_post(
+        url := function_url,
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', 'Bearer ' || service_key
+        ),
+        body := jsonb_build_object('follower_id', new.follower_id, 'followed_id', new.followed_id)
+      );
+    end if;
+  exception when others then
+    -- A notificação é acessório: se o Vault ou o pg_net falharem, o pedido
+    -- de amizade tem que ser gravado do mesmo jeito.
+    null;
+  end;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_friend_request_created on public.user_follows;
+create trigger on_friend_request_created
+  after insert on public.user_follows
+  for each row execute function public.notify_friend_request();
+
+-- Configuração única (rode no SQL Editor com os valores do seu projeto —
+-- não entra no git porque tem a service role key):
+--
+--   select vault.create_secret(
+--     'https://SEU-PROJETO.supabase.co/functions/v1/notify-friend-request',
+--     'notify_friend_request_url'
+--   );
+--   select vault.create_secret('SUA_SERVICE_ROLE_KEY', 'notify_friend_request_key');
+--
+-- Requer a extensão pg_net habilitada (mesma usada no cron de episódios) e
+-- o deploy da function (supabase functions deploy notify-friend-request --no-verify-jwt).
+
 -- ---------- Push tokens (notificações remotas) ----------
 create table if not exists public.push_tokens (
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -485,6 +549,38 @@ as $$
   where user_id = auth.uid()
   group by tmdb_show_id
   order by episode_count desc;
+$$;
+
+-- ---------- Ranking de tempo assistido (amigos) ----------
+-- Conta episódios assistidos por (usuário, série) dentro de uma janela de
+-- tempo opcional. security invoker: a RLS de watched_episodes continua
+-- valendo, então cada chamada só enxerga o próprio usuário e seus amigos
+-- aceitos — não dá pra "espiar" quem não é amigo passando o id na mão.
+create or replace function public.get_friends_episode_counts(target_user_ids uuid[], since timestamptz default null)
+returns table (user_id uuid, tmdb_show_id integer, episode_count bigint)
+language sql
+security invoker
+set search_path = public
+as $$
+  select user_id, tmdb_show_id, count(*) as episode_count
+  from public.watched_episodes
+  where user_id = any(target_user_ids)
+    and (since is null or watched_at >= since)
+  group by user_id, tmdb_show_id;
+$$;
+
+-- Mesma ideia para filmes assistidos (sem agregação: watched_movies já não
+-- tem repetição por usuário/filme, então cada linha conta 1 filme).
+create or replace function public.get_friends_movie_watches(target_user_ids uuid[], since timestamptz default null)
+returns table (user_id uuid, tmdb_id integer)
+language sql
+security invoker
+set search_path = public
+as $$
+  select user_id, tmdb_id
+  from public.watched_movies
+  where user_id = any(target_user_ids)
+    and (since is null or watched_at >= since);
 $$;
 
 -- ---------- Curtidas em comentários ----------

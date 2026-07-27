@@ -5,9 +5,11 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BadgeDot } from '@/components/badge-dot';
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
+import { useIncomingFriendRequestCount } from '@/hooks/use-incoming-friend-request-count';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { getProfile, profileDisplayName, type Profile } from '@/lib/db';
@@ -49,6 +51,7 @@ export function HeaderActions({ showAvatar = true }: { showAvatar?: boolean }) {
   const router = useRouter();
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const friendRequestCount = useIncomingFriendRequestCount();
 
   useEffect(() => {
     if (!user) return;
@@ -61,6 +64,7 @@ export function HeaderActions({ showAvatar = true }: { showAvatar?: boolean }) {
     <View style={styles.actionsRow}>
       <Pressable hitSlop={8} style={styles.bellButton} onPress={() => router.push('/notifications')}>
         <Ionicons name="notifications-outline" size={22} color={theme.text} />
+        <BadgeDot visible={friendRequestCount > 0} />
       </Pressable>
       {showAvatar && (
         <Pressable hitSlop={4} onPress={() => router.push('/profile')}>

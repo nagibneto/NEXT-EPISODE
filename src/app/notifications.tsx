@@ -6,10 +6,19 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedText } from '@/components/themed-text';
+import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { errorMessage, getFollowedShows, getWatchedCounts, type FollowedShow } from '@/lib/db';
+import {
+  errorMessage,
+  getFollowedShows,
+  getIncomingFriendRequests,
+  getWatchedCounts,
+  profileDisplayName,
+  type FollowedShow,
+  type Profile,
+} from '@/lib/db';
 import { airedEpisodeCount, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
 
 interface NewEpisodesItem {
@@ -24,6 +33,29 @@ interface NewEpisodesItem {
 type DismissedMap = Record<number, number>;
 
 const dismissedKey = (userId: string) => `notifications-dismissed-v1:${userId}`;
+
+/** Linha de um pedido de amizade pendente: leva à tela de Amigos para aceitar/recusar. */
+function FriendRequestRow({ profile }: { profile: Profile }) {
+  const theme = useTheme();
+  return (
+    <Link href="/friends" asChild>
+      {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.row, { backgroundColor: theme.backgroundElement }])}>
+        <UserAvatar avatarId={profile.avatar_id} name={profileDisplayName(profile)} size={40} />
+        <View style={styles.info}>
+          <ThemedText type="smallBold" numberOfLines={1}>
+            {profileDisplayName(profile)}
+          </ThemedText>
+          <ThemedText type="small" themeColor="accent">
+            quer ser seu amigo
+          </ThemedText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+      </Pressable>
+    </Link>
+  );
+}
 
 /** Linha de uma série com episódios novos: leva à tela da série, ou dispensa com o X. */
 function NotificationRow({
@@ -75,6 +107,7 @@ export default function NotificationsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const [items, setItems] = useState<NewEpisodesItem[] | null>(null);
+  const [friendRequests, setFriendRequests] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
@@ -82,6 +115,11 @@ export default function NotificationsScreen() {
       if (!user) return;
       let cancelled = false;
       setError(null);
+      getIncomingFriendRequests(user.id)
+        .then((requests) => {
+          if (!cancelled) setFriendRequests(requests);
+        })
+        .catch(() => {});
       (async () => {
         try {
           const [shows, counts, dismissedRaw] = await Promise.all([
@@ -174,26 +212,45 @@ export default function NotificationsScreen() {
     <FlatList
       data={items}
       keyExtractor={(item) => String(item.show.tmdb_id)}
-      contentContainerStyle={[styles.list, !items.length && styles.listEmpty]}
+      contentContainerStyle={[
+        styles.list,
+        !items.length && !friendRequests.length && styles.listEmpty,
+      ]}
       style={{ backgroundColor: theme.background }}
       ListHeaderComponent={
-        items.length > 0 ? (
-          <Pressable style={styles.clearAllButton} hitSlop={8} onPress={clearAll}>
-            <ThemedText type="small" themeColor="accent">
-              Limpar tudo
-            </ThemedText>
-          </Pressable>
+        friendRequests.length > 0 || items.length > 0 ? (
+          <>
+            {friendRequests.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText type="smallBold" style={styles.sectionTitle}>
+                  Pedidos de amizade ({friendRequests.length})
+                </ThemedText>
+                {friendRequests.map((profile) => (
+                  <FriendRequestRow key={profile.id} profile={profile} />
+                ))}
+              </View>
+            )}
+            {items.length > 0 && (
+              <Pressable style={styles.clearAllButton} hitSlop={8} onPress={clearAll}>
+                <ThemedText type="small" themeColor="accent">
+                  Limpar tudo
+                </ThemedText>
+              </Pressable>
+            )}
+          </>
         ) : null
       }
       ListEmptyComponent={
-        <View style={styles.center}>
-          <ThemedText type="subtitle" style={styles.message}>
-            Nenhuma novidade
-          </ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.message}>
-            Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.
-          </ThemedText>
-        </View>
+        friendRequests.length === 0 ? (
+          <View style={styles.center}>
+            <ThemedText type="subtitle" style={styles.message}>
+              Nenhuma novidade
+            </ThemedText>
+            <ThemedText themeColor="textSecondary" style={styles.message}>
+              Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.
+            </ThemedText>
+          </View>
+        ) : null
       }
       renderItem={({ item }) => (
         <NotificationRow
@@ -228,6 +285,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.two,
+  },
+  section: {
+    marginBottom: Spacing.two,
+  },
+  sectionTitle: {
+    marginHorizontal: Spacing.two,
+    marginBottom: Spacing.one,
   },
   row: {
     flexDirection: 'row',

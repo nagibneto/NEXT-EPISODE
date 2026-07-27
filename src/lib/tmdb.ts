@@ -259,6 +259,22 @@ export function getMovieDetailsCached(movieId: number) {
   return cached;
 }
 
+/** Duração típica de episódio/filme quando a TMDB não informa a real. */
+export const FALLBACK_RUNTIME_MIN = 40;
+export const FALLBACK_MOVIE_RUNTIME_MIN = 110;
+
+/** Duração típica de um episódio da série, com fallback quando a TMDB não informa. */
+export function episodeRuntime(details: {
+  episode_run_time: number[];
+  last_episode_to_air: { runtime: number | null } | null;
+}) {
+  if (details.episode_run_time.length > 0) {
+    const sum = details.episode_run_time.reduce((acc, min) => acc + min, 0);
+    return sum / details.episode_run_time.length;
+  }
+  return details.last_episode_to_air?.runtime || FALLBACK_RUNTIME_MIN;
+}
+
 /**
  * Quantos episódios da série já foram ao ar: temporadas anteriores completas
  * (especiais fora) + posição do último episódio exibido na temporada atual.

@@ -886,6 +886,49 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
   );
 }
 
+// ---------- Ranking de tempo assistido (amigos) ----------
+
+export interface FriendEpisodeCount {
+  user_id: string;
+  tmdb_show_id: number;
+  episode_count: number;
+}
+
+/** Episódios assistidos por (usuário, série) desde `since` (null = desde sempre). Só retorna o próprio usuário e amigos aceitos (RLS). */
+export async function getFriendsEpisodeCounts(
+  userIds: string[],
+  since: Date | null
+): Promise<FriendEpisodeCount[]> {
+  const { data, error } = await supabase.rpc('get_friends_episode_counts', {
+    target_user_ids: userIds,
+    since: since ? since.toISOString() : null,
+  });
+  if (error) throw error;
+  return (data ?? []).map((row: { user_id: string; tmdb_show_id: number; episode_count: number | string }) => ({
+    user_id: row.user_id,
+    tmdb_show_id: row.tmdb_show_id,
+    episode_count: Number(row.episode_count),
+  }));
+}
+
+export interface FriendMovieWatch {
+  user_id: string;
+  tmdb_id: number;
+}
+
+/** Filmes assistidos por usuário desde `since` (null = desde sempre). Só retorna o próprio usuário e amigos aceitos (RLS). */
+export async function getFriendsMovieWatches(
+  userIds: string[],
+  since: Date | null
+): Promise<FriendMovieWatch[]> {
+  const { data, error } = await supabase.rpc('get_friends_movie_watches', {
+    target_user_ids: userIds,
+    since: since ? since.toISOString() : null,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
 // ---------- Push tokens ----------
 
 export async function savePushToken(userId: string, token: string, platform: 'ios' | 'android') {

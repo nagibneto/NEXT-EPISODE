@@ -4,10 +4,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { BadgeDot } from '@/components/badge-dot';
 import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
+import { useIncomingFriendRequestCount } from '@/hooks/use-incoming-friend-request-count';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { AVATAR_IDS, avatarSource } from '@/lib/avatars';
@@ -25,6 +27,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const friendRequestCount = useIncomingFriendRequestCount();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [choosingAvatar, setChoosingAvatar] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -247,9 +250,10 @@ export default function ProfileScreen() {
         <Pressable
           style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
           onPress={() => router.push('/friends')}>
+          <BadgeDot visible={friendRequestCount > 0} />
           <Ionicons name="people" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Encontrar amigos
+            Amigos
           </ThemedText>
         </Pressable>
 

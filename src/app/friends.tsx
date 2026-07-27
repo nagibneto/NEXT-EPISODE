@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { ActionSheet } from '@/components/action-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
@@ -31,6 +32,12 @@ export default function FriendsScreen() {
   const [outgoing, setOutgoing] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  // Desfazer amizade e cancelar pedido pedem confirmação — são ações que o
+  // usuário não consegue desfazer sozinho depois.
+  const [confirming, setConfirming] = useState<{
+    profile: Profile;
+    kind: 'friend' | 'outgoing';
+  } | null>(null);
 
   const loadRelations = useCallback(() => {
     if (!user) return;
@@ -107,12 +114,18 @@ export default function FriendsScreen() {
 
     if (status === 'friend') {
       return (
-        <Pressable
-          disabled={busy}
-          onPress={() => handleRemove(profile)}
-          style={[styles.actionButton, { backgroundColor: theme.backgroundSelected }]}>
-          <ThemedText type="smallBold">Amigos</ThemedText>
-        </Pressable>
+        <View style={styles.statusGroup}>
+          <View style={[styles.statusPill, { backgroundColor: theme.backgroundSelected }]}>
+            <ThemedText type="smallBold">Amigos</ThemedText>
+          </View>
+          <Pressable
+            hitSlop={8}
+            disabled={busy}
+            onPress={() => setConfirming({ profile, kind: 'friend' })}
+            style={styles.removeButton}>
+            <Ionicons name="person-remove-outline" size={20} color={theme.danger} />
+          </Pressable>
+        </View>
       );
     }
     if (status === 'incoming') {
@@ -129,14 +142,20 @@ export default function FriendsScreen() {
     }
     if (status === 'outgoing') {
       return (
-        <Pressable
-          disabled={busy}
-          onPress={() => handleRemove(profile)}
-          style={[styles.actionButton, { backgroundColor: theme.backgroundSelected }]}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            Pendente
-          </ThemedText>
-        </Pressable>
+        <View style={styles.statusGroup}>
+          <View style={[styles.statusPill, { backgroundColor: theme.backgroundSelected }]}>
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              Pendente
+            </ThemedText>
+          </View>
+          <Pressable
+            hitSlop={8}
+            disabled={busy}
+            onPress={() => setConfirming({ profile, kind: 'outgoing' })}
+            style={styles.removeButton}>
+            <Ionicons name="close-circle-outline" size={20} color={theme.danger} />
+          </Pressable>
+        </View>
       );
     }
     return (
@@ -271,6 +290,31 @@ export default function FriendsScreen() {
         }
         renderItem={renderProfile}
       />
+
+      <ActionSheet
+        visible={confirming !== null}
+        title={
+          confirming?.kind === 'friend'
+            ? `Desfazer amizade com ${profileDisplayName(confirming.profile)}? Vocês deixam de ver o feed e o ranking um do outro.`
+            : confirming
+              ? `Cancelar o pedido de amizade enviado para ${profileDisplayName(confirming.profile)}?`
+              : undefined
+        }
+        options={
+          confirming
+            ? [
+                {
+                  label: confirming.kind === 'friend' ? 'Desfazer amizade' : 'Cancelar pedido',
+                  icon:
+                    confirming.kind === 'friend' ? 'person-remove-outline' : 'close-circle-outline',
+                  destructive: true,
+                  onPress: () => handleRemove(confirming.profile),
+                },
+              ]
+            : []
+        }
+        onClose={() => setConfirming(null)}
+      />
     </View>
   );
 }
@@ -318,6 +362,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: Spacing.three,
     paddingVertical: 8,
+  },
+  // "Amigos"/"Pendente" viram só rótulo; quem remove é o ícone ao lado, para
+  // não apagar a relação num toque acidental.
+  statusGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  statusPill: {
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 8,
+  },
+  removeButton: {
+    padding: Spacing.half,
   },
   requestButtons: {
     flexDirection: 'row',
