@@ -451,15 +451,21 @@ create index if not exists watched_episodes_user_date_idx
 create index if not exists episode_comments_user_date_idx
   on public.episode_comments (user_id, created_at desc);
 
--- ---------- Notificação push: pedido de amizade ----------
--- Dispara a Edge Function supabase/functions/notify-friend-request assim que
--- um pedido é criado, pra avisar o destinatário na hora — diferente do
--- resumo diário de episódios novos (cron, ver final do arquivo).
+-- ---------- Notificação push: amizade ----------
+-- Dispara a Edge Function supabase/functions/notify-friend-request nos dois
+-- momentos que interessam ao outro lado: quando o pedido é criado e quando
+-- ele é aceito. Tudo na hora, diferente do resumo diário de episódios novos
+-- (cron, ver final do arquivo).
 --
 -- A URL e a chave vêm do Vault (o SQL Editor não é superusuário, então
 -- "alter database ... set" dá permission denied). Se os segredos não
--- existirem, o pedido de amizade é criado normalmente e só não sai push.
-create or replace function public.notify_friend_request()
+-- existirem, a amizade é gravada normalmente e só não sai push.
+--
+-- Nome antigo, de quando só existia a notificação de pedido.
+drop trigger if exists on_friend_request_created on public.user_follows;
+drop function if exists public.notify_friend_request();
+
+create or replace function public.notify_friend_event()
 returns trigger
 language plpgsql
 security definer set search_path = public
@@ -467,9 +473,20 @@ as $$
 declare
   function_url text;
   service_key text;
+  event_type text;
 begin
-  if new.status <> 'pending' then
-    return new;
+  if tg_op = 'INSERT' then
+    -- A linha recíproca criada no aceite já nasce 'accepted' e não é pedido.
+    if new.status <> 'pending' then
+      return new;
+    end if;
+    event_type := 'request';
+  else
+    -- Só interessa a transição pending -> accepted; outros updates não avisam.
+    if old.status is not distinct from new.status or new.status <> 'accepted' then
+      return new;
+    end if;
+    event_type := 'accepted';
   end if;
 
   begin
@@ -485,12 +502,18 @@ begin
           'Content-Type', 'application/json',
           'Authorization', 'Bearer ' || service_key
         ),
-        body := jsonb_build_object('follower_id', new.follower_id, 'followed_id', new.followed_id)
+        -- Quem recebe o push sai do tipo do evento: no pedido é o followed_id,
+        -- no aceite é o follower_id (quem pediu). A function resolve isso.
+        body := jsonb_build_object(
+          'follower_id', new.follower_id,
+          'followed_id', new.followed_id,
+          'type', event_type
+        )
       );
     end if;
   exception when others then
-    -- A notificação é acessório: se o Vault ou o pg_net falharem, o pedido
-    -- de amizade tem que ser gravado do mesmo jeito.
+    -- A notificação é acessório: se o Vault ou o pg_net falharem, a amizade
+    -- tem que ser gravada do mesmo jeito.
     null;
   end;
 
@@ -501,10 +524,17 @@ $$;
 drop trigger if exists on_friend_request_created on public.user_follows;
 create trigger on_friend_request_created
   after insert on public.user_follows
-  for each row execute function public.notify_friend_request();
+  for each row execute function public.notify_friend_event();
 
--- Configuração única (rode no SQL Editor com os valores do seu projeto —
--- não entra no git porque tem a service role key):
+drop trigger if exists on_friend_request_accepted on public.user_follows;
+create trigger on_friend_request_accepted
+  after update on public.user_follows
+  for each row execute function public.notify_friend_event();
+
+-- Configuração única, já feita neste projeto (rode no SQL Editor com os
+-- valores do seu — não entra no git porque tem a service role key). Vale
+-- para os dois eventos: os segredos mantêm o nome "..._request" por
+-- compatibilidade com o que já está gravado no Vault.
 --
 --   select vault.create_secret(
 --     'https://SEU-PROJETO.supabase.co/functions/v1/notify-friend-request',

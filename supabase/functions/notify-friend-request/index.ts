@@ -1,9 +1,16 @@
 /**
- * Edge Function: notifica por push quando alguém manda um pedido de amizade.
+ * Edge Function: notifica por push os dois lados de uma amizade — quando
+ * alguém manda o pedido e quando o outro aceita.
  *
- * Disparada na hora por um trigger em user_follows (veja supabase/schema.sql,
- * seção "Notificação push: pedido de amizade") — diferente do resumo diário
- * de episódios novos, que roda por cron.
+ * Disparada na hora por triggers em user_follows (veja supabase/schema.sql,
+ * seção "Notificação push: amizade") — diferente do resumo diário de
+ * episódios novos, que roda por cron.
+ *
+ * O corpo é sempre a linha de user_follows envolvida, mais o tipo do evento:
+ *   { follower_id, followed_id, type: 'request' | 'accepted' }
+ * Os papéis se invertem entre os dois: no pedido quem recebe é o followed_id;
+ * no aceite quem recebe é o follower_id (que mandou o pedido lá atrás).
+ * "type" é opcional e assume 'request' para não quebrar chamadas antigas.
  *
  * Deploy:
  *   supabase functions deploy notify-friend-request --no-verify-jwt
@@ -20,7 +27,7 @@ const supabase = createClient(
 );
 
 Deno.serve(async (req) => {
-  const { follower_id: followerId, followed_id: followedId } = await req.json();
+  const { follower_id: followerId, followed_id: followedId, type = 'request' } = await req.json();
   if (!followerId || !followedId) {
     return Response.json(
       { error: 'follower_id e followed_id são obrigatórios.' },
@@ -28,21 +35,26 @@ Deno.serve(async (req) => {
     );
   }
 
-  const [{ data: follower }, { data: tokenRows }] = await Promise.all([
-    supabase.from('profiles').select('username, display_name').eq('id', followerId).maybeSingle(),
-    supabase.from('push_tokens').select('token').eq('user_id', followedId),
+  const isAccept = type === 'accepted';
+  // Quem recebe o push e quem aparece no texto trocam de lado conforme o evento.
+  const recipientId = isAccept ? followerId : followedId;
+  const actorId = isAccept ? followedId : followerId;
+
+  const [{ data: actor }, { data: tokenRows }] = await Promise.all([
+    supabase.from('profiles').select('username, display_name').eq('id', actorId).maybeSingle(),
+    supabase.from('push_tokens').select('token').eq('user_id', recipientId),
   ]);
 
   if (!tokenRows || tokenRows.length === 0) {
-    return Response.json({ sent: 0, reason: 'destinatário sem push token' });
+    return Response.json({ sent: 0, type, reason: 'destinatário sem push token' });
   }
 
-  const name = follower?.display_name || follower?.username || 'Alguém';
+  const name = actor?.display_name || actor?.username || 'Alguém';
   const messages = tokenRows.map((row: { token: string }) => ({
     to: row.token,
-    title: 'Novo pedido de amizade',
-    body: `${name} quer ser seu amigo.`,
-    data: { type: 'friend_request', followerId },
+    title: isAccept ? 'Pedido de amizade aceito' : 'Novo pedido de amizade',
+    body: isAccept ? `${name} aceitou seu pedido de amizade.` : `${name} quer ser seu amigo.`,
+    data: { type: isAccept ? 'friend_accepted' : 'friend_request', actorId },
   }));
 
   let sent = 0;
@@ -67,5 +79,5 @@ Deno.serve(async (req) => {
     await supabase.from('push_tokens').delete().in('token', staleTokens);
   }
 
-  return Response.json({ sent, removedTokens: staleTokens.length });
+  return Response.json({ sent, type, removedTokens: staleTokens.length });
 });
