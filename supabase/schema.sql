@@ -368,10 +368,14 @@ create policy "Usuário envia mídia na própria pasta"
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+-- Sem política de select de propósito. O bucket é público, então o endpoint
+-- /object/public/... serve as imagens sem passar por RLS (é o que o app usa,
+-- via getPublicUrl em src/lib/storage.ts). A política que existia aqui não
+-- era necessária para exibir nada: ela só liberava LISTAR o bucket, o que
+-- deixava qualquer um enumerar todas as imagens de comentários — inclusive as
+-- de comentários já ocultados por denúncia. O próprio Security Advisor
+-- aponta isso ("Public buckets don't need this").
 drop policy if exists "Mídia de comentários é pública" on storage.objects;
-create policy "Mídia de comentários é pública"
-  on storage.objects for select to public
-  using (bucket_id = 'comment-media');
 
 drop policy if exists "Usuário remove a própria mídia" on storage.objects;
 create policy "Usuário remove a própria mídia"
@@ -770,6 +774,37 @@ drop policy if exists "Usuário gerencia os próprios filmes para assistir" on p
 create policy "Usuário gerencia os próprios filmes para assistir"
   on public.watchlist_movies for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- Permissões das funções de trigger ----------
+-- Precisa ficar no fim do arquivo: "create or replace function" concede
+-- EXECUTE a PUBLIC de novo a cada execução, então revogar antes não adianta.
+--
+-- O Security Advisor do Supabase acusa toda função SECURITY DEFINER que anon
+-- ou authenticated podem executar. No nosso caso são só funções de trigger, e
+-- o Postgres recusa chamá-las direto ("trigger functions can only be called
+-- as triggers") — não dá para explorar. Ainda assim revogamos: não custa
+-- nada, e uma lista de alertas cheia de falso positivo esconde o dia em que
+-- aparecer um alerta de verdade.
+--
+-- Revogar EXECUTE não afeta os triggers: eles rodam com o privilégio do dono
+-- da tabela, não com o de quem fez o insert/update.
+--
+-- O laço pega todas as funções de trigger do schema public, inclusive as que
+-- ainda não estão versionadas aqui, e cobre automaticamente as futuras.
+do $$
+declare
+  fn record;
+begin
+  for fn in
+    select p.oid::regprocedure as signature
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prorettype = 'trigger'::regtype
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', fn.signature);
+  end loop;
+end $$;
 
 -- ---------- Cron das notificações remotas ----------
 -- A Edge Function supabase/functions/notify-new-episodes é executada 1x por dia.
