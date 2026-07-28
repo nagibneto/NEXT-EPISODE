@@ -29,9 +29,8 @@ import {
   posterUrl,
 } from '@/lib/tmdb';
 
-/** Quantas séries listar; o suficiente para dar ideia do gosto sem virar uma lista infinita. */
+/** Quantas séries listar na seção "que mais assistiu"; a de "em comum" é um carrossel, sem limite. */
 const TOP_SHOWS = 10;
-const COMMON_SHOWS = 12;
 
 interface ShowStat {
   tmdb_show_id: number;
@@ -53,8 +52,6 @@ interface UserStats {
   totalMovies: number;
   shows: ShowStat[];
   common: CommonShow[];
-  /** Total de séries em comum — a lista exibida é cortada em COMMON_SHOWS. */
-  commonCount: number;
 }
 
 /** Estatísticas públicas de um amigo, abertas ao tocar no avatar dele. */
@@ -146,8 +143,7 @@ export default function UserStatsScreen() {
           totalShows: shows.length,
           totalMovies: movieWatches.length,
           shows: shows.slice(0, TOP_SHOWS),
-          common: common.slice(0, COMMON_SHOWS),
-          commonCount: common.length,
+          common,
         });
       } catch (err) {
         if (!cancelled) setError(errorMessage(err, 'Erro ao carregar as estatísticas.'));
@@ -234,18 +230,19 @@ function StatsBody({ stats, name }: { stats: UserStats; name: string }) {
       </View>
 
       {stats.common.length > 0 && (
-        <>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Séries em comum ({stats.commonCount.toLocaleString('pt-BR')})
+        <View style={styles.commonSection}>
+          <ThemedText type="smallBold" style={styles.commonSectionTitle}>
+            Séries em comum ({stats.common.length.toLocaleString('pt-BR')})
           </ThemedText>
-          {stats.common.map((show) => (
-            <ShowRow
-              key={show.tmdb_show_id}
-              show={show}
-              subtitle={`Você: ${show.myEpisodes.toLocaleString('pt-BR')} ep · ${name}: ${show.episodes.toLocaleString('pt-BR')} ep`}
-            />
-          ))}
-        </>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.commonRow}>
+            {stats.common.map((show) => (
+              <CommonShowCard key={show.tmdb_show_id} show={show} friendName={name} />
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {stats.shows.length > 0 && (
@@ -300,6 +297,32 @@ function ShowRow({ show, subtitle }: { show: ShowStat; subtitle: string }) {
             {subtitle}
           </ThemedText>
         </View>
+      </Pressable>
+    </Link>
+  );
+}
+
+/** Card do carrossel de séries em comum: pôster grande + comparação dos dois lados embaixo. */
+function CommonShowCard({ show, friendName }: { show: CommonShow; friendName: string }) {
+  const theme = useTheme();
+  const poster = posterUrl(show.poster_path, 'w185');
+  return (
+    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }} asChild>
+      <Pressable style={styles.commonCard}>
+        {poster ? (
+          <Image source={{ uri: poster }} style={styles.commonPoster} contentFit="cover" />
+        ) : (
+          <View style={[styles.commonPoster, { backgroundColor: theme.backgroundElement }]} />
+        )}
+        <ThemedText type="smallBold" numberOfLines={2}>
+          {show.name}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+          Você: {show.myEpisodes.toLocaleString('pt-BR')} ep
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+          {friendName}: {show.episodes.toLocaleString('pt-BR')} ep
+        </ThemedText>
       </Pressable>
     </Link>
   );
@@ -386,6 +409,29 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginTop: Spacing.two,
+  },
+  commonSection: {
+    marginTop: Spacing.two,
+    gap: Spacing.two,
+    // O carrossel rola dentro do padding da tela; sem isso as bordas dos
+    // cards ficariam grudadas na tela em vez de alinhadas com o resto.
+    marginHorizontal: -Spacing.three,
+  },
+  commonSectionTitle: {
+    marginHorizontal: Spacing.three,
+  },
+  commonRow: {
+    paddingHorizontal: Spacing.three,
+    gap: Spacing.three,
+  },
+  commonCard: {
+    width: 110,
+    gap: Spacing.half,
+  },
+  commonPoster: {
+    width: 110,
+    height: 165,
+    borderRadius: 8,
   },
   showRow: {
     flexDirection: 'row',
