@@ -41,6 +41,7 @@ function RootNavigator() {
         <Stack.Screen name="friends" options={{ title: 'Amigos' }} />
         <Stack.Screen name="blocked-users" options={{ title: 'Usuários bloqueados' }} />
         <Stack.Screen name="stats" options={{ title: 'Estatísticas' }} />
+        <Stack.Screen name="user/[id]" options={{ title: 'Perfil' }} />
         <Stack.Screen name="favorites" options={{ title: 'Favoritos' }} />
         <Stack.Screen name="to-watch" options={{ title: 'Para assistir' }} />
         <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />

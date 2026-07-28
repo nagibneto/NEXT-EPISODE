@@ -26,6 +26,7 @@ import {
   type FeedItem,
   type Profile,
 } from '@/lib/db';
+import { shortDuration } from '@/lib/duration';
 import {
   episodeRuntime,
   FALLBACK_MOVIE_RUNTIME_MIN,
@@ -61,16 +62,6 @@ function relativeDate(iso: string) {
   if (days === 1) return 'ontem';
   if (days < 30) return `há ${days} dias`;
   return date.toLocaleDateString('pt-BR');
-}
-
-/** Versão curta ("3d 14h", "5h 20min", "42 min"), igual à usada em Estatísticas. */
-function shortDuration(totalMinutes: number) {
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = Math.round(totalMinutes % 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}min`;
-  return `${minutes} min`;
 }
 
 function periodSince(period: Period): Date | null {
@@ -220,14 +211,17 @@ export default function FeedScreen() {
         )}
         <View style={styles.itemBody}>
           <View style={styles.itemHeader}>
-            <View style={styles.itemUser}>
+            <Pressable
+              hitSlop={6}
+              style={styles.itemUser}
+              onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user.id } })}>
               <UserAvatar
                 avatarId={item.user.avatar_id}
                 name={profileDisplayName(item.user)}
                 size={24}
               />
               <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
-            </View>
+            </Pressable>
             <ThemedText type="small" themeColor="textSecondary">
               {relativeDate(item.date)}
             </ThemedText>
@@ -270,7 +264,8 @@ export default function FeedScreen() {
   function renderRankingItem({ item, index }: { item: RankingEntry; index: number }) {
     const isMe = item.user.id === user?.id;
     return (
-      <View
+      <Pressable
+        onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user.id } })}
         style={[
           styles.rankRow,
           { backgroundColor: theme.backgroundElement },
@@ -298,7 +293,7 @@ export default function FeedScreen() {
         <ThemedText type="smallBold" style={{ color: theme.gold }}>
           {shortDuration(item.minutes)}
         </ThemedText>
-      </View>
+      </Pressable>
     );
   }
 

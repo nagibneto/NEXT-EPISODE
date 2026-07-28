@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
@@ -24,6 +25,7 @@ type FriendStatus = 'friend' | 'incoming' | 'outgoing' | 'none';
 
 export default function FriendsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Profile[] | null>(null);
@@ -173,13 +175,18 @@ export default function FriendsScreen() {
   function renderProfile({ item }: { item: Profile }) {
     return (
       <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
-        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
-        <View style={styles.rowInfo}>
-          <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            @{item.username}
-          </ThemedText>
-        </View>
+        <Pressable
+          hitSlop={6}
+          style={styles.rowIdentity}
+          onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.id } })}>
+          <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
+          <View style={styles.rowInfo}>
+            <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              @{item.username}
+            </ThemedText>
+          </View>
+        </Pressable>
         {renderStatusButton(item)}
       </View>
     );
@@ -189,13 +196,18 @@ export default function FriendsScreen() {
     const busy = busyIds.has(item.id);
     return (
       <View key={item.id} style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
-        <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
-        <View style={styles.rowInfo}>
-          <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            @{item.username} quer ser seu amigo
-          </ThemedText>
-        </View>
+        <Pressable
+          hitSlop={6}
+          style={styles.rowIdentity}
+          onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.id } })}>
+          <UserAvatar avatarId={item.avatar_id} name={profileDisplayName(item)} size={40} />
+          <View style={styles.rowInfo}>
+            <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              @{item.username} quer ser seu amigo
+            </ThemedText>
+          </View>
+        </Pressable>
         <View style={styles.requestButtons}>
           <Pressable
             disabled={busy}
@@ -352,6 +364,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
     padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  // Avatar + nome levam ao perfil; o botão de ação fica fora para não roubar
+  // o toque de quem só quer aceitar/remover.
+  rowIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   rowInfo: {

@@ -9,6 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { getWatchedCounts, getWatchedMovies } from '@/lib/db';
+import { formatDuration, shortDuration } from '@/lib/duration';
 import {
   airedEpisodeCount,
   episodeRuntime,
@@ -38,24 +39,6 @@ interface Stats {
   totalMovies: number;
   /** Todas as séries assistidas, das que mais consumiram tempo para as que menos. */
   shows: ShowStat[];
-}
-
-function formatDuration(totalMinutes: number) {
-  const months = Math.floor(totalMinutes / (30 * 24 * 60));
-  const days = Math.floor((totalMinutes % (30 * 24 * 60)) / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = Math.round(totalMinutes % 60);
-  return { months, days, hours, minutes };
-}
-
-/** Versão curta ("3d 14h", "5h 20min", "42 min") para as linhas e quadrinhos. */
-function shortDuration(totalMinutes: number) {
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = Math.round(totalMinutes % 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}min`;
-  return `${minutes} min`;
 }
 
 export default function StatsScreen() {
