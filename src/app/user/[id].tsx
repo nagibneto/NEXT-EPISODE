@@ -15,6 +15,7 @@ import {
   getFriendsEpisodeCounts,
   getFriendsMovieWatches,
   getProfile,
+  getWatchedCounts,
   profileDisplayName,
   type Profile,
 } from '@/lib/db';
@@ -30,6 +31,7 @@ import {
 
 /** Quantas séries listar; o suficiente para dar ideia do gosto sem virar uma lista infinita. */
 const TOP_SHOWS = 10;
+const COMMON_SHOWS = 12;
 
 interface ShowStat {
   tmdb_show_id: number;
@@ -39,12 +41,20 @@ interface ShowStat {
   minutes: number;
 }
 
+/** Série que os dois assistem, com a contagem de cada lado para comparar. */
+interface CommonShow extends ShowStat {
+  myEpisodes: number;
+}
+
 interface UserStats {
   totalMinutes: number;
   totalEpisodes: number;
   totalShows: number;
   totalMovies: number;
   shows: ShowStat[];
+  common: CommonShow[];
+  /** Total de séries em comum — a lista exibida é cortada em COMMON_SHOWS. */
+  commonCount: number;
 }
 
 /** Estatísticas públicas de um amigo, abertas ao tocar no avatar dele. */
@@ -77,9 +87,11 @@ export default function UserStatsScreen() {
         setCanSee(allowed);
         if (!allowed) return;
 
-        const [episodeCounts, movieWatches] = await Promise.all([
+        const [episodeCounts, movieWatches, myCounts] = await Promise.all([
           getFriendsEpisodeCounts([id], null),
           getFriendsMovieWatches([id], null),
+          // No próprio perfil "em comum" não faz sentido — seria a lista toda.
+          isSelf ? Promise.resolve([]) : getWatchedCounts(),
         ]);
 
         const shows = await Promise.all(
@@ -120,12 +132,22 @@ export default function UserStatsScreen() {
 
         if (cancelled) return;
         shows.sort((a, b) => b.minutes - a.minutes);
+
+        // Interseção com o que eu assisto. Sai de graça: as séries em comum
+        // são um subconjunto das do amigo, já resolvidas na TMDB acima.
+        const myEpisodesByShow = new Map(myCounts.map((c) => [c.tmdb_show_id, c.episode_count]));
+        const common = shows
+          .filter((show) => myEpisodesByShow.has(show.tmdb_show_id))
+          .map((show) => ({ ...show, myEpisodes: myEpisodesByShow.get(show.tmdb_show_id)! }));
+
         setStats({
           totalMinutes: shows.reduce((acc, show) => acc + show.minutes, 0) + movieMinutes,
           totalEpisodes: shows.reduce((acc, show) => acc + show.episodes, 0),
           totalShows: shows.length,
           totalMovies: movieWatches.length,
           shows: shows.slice(0, TOP_SHOWS),
+          common: common.slice(0, COMMON_SHOWS),
+          commonCount: common.length,
         });
       } catch (err) {
         if (!cancelled) setError(errorMessage(err, 'Erro ao carregar as estatísticas.'));
@@ -179,13 +201,13 @@ export default function UserStatsScreen() {
           </ThemedText>
         </View>
       ) : (
-        stats && <StatsBody stats={stats} />
+        stats && <StatsBody stats={stats} name={name} />
       )}
     </ScrollView>
   );
 }
 
-function StatsBody({ stats }: { stats: UserStats }) {
+function StatsBody({ stats, name }: { stats: UserStats; name: string }) {
   const theme = useTheme();
   const duration = formatDuration(stats.totalMinutes);
 
@@ -211,49 +233,35 @@ function StatsBody({ stats }: { stats: UserStats }) {
         <StatCard value={stats.totalMovies} label="Filmes" />
       </View>
 
+      {stats.common.length > 0 && (
+        <>
+          <ThemedText type="smallBold" style={styles.sectionTitle}>
+            Séries em comum ({stats.commonCount.toLocaleString('pt-BR')})
+          </ThemedText>
+          {stats.common.map((show) => (
+            <ShowRow
+              key={show.tmdb_show_id}
+              show={show}
+              subtitle={`Você: ${show.myEpisodes.toLocaleString('pt-BR')} ep · ${name}: ${show.episodes.toLocaleString('pt-BR')} ep`}
+            />
+          ))}
+        </>
+      )}
+
       {stats.shows.length > 0 && (
         <>
           <ThemedText type="smallBold" style={styles.sectionTitle}>
             Séries que mais assistiu
           </ThemedText>
-          {stats.shows.map((show) => {
-            const poster = posterUrl(show.poster_path, 'w185');
-            return (
-              <Link
-                key={show.tmdb_show_id}
-                href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }}
-                asChild>
-                {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
-                <Pressable
-                  style={StyleSheet.flatten([
-                    styles.showRow,
-                    { backgroundColor: theme.backgroundElement },
-                  ])}>
-                  {poster ? (
-                    <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
-                  )}
-                  <View style={styles.showInfo}>
-                    <View style={styles.showName}>
-                      <ThemedText
-                        type="smallBold"
-                        numberOfLines={1}
-                        style={{ color: theme.accent, flexShrink: 1 }}>
-                        {show.name}
-                      </ThemedText>
-                      <Ionicons name="chevron-forward" size={12} color={theme.accent} />
-                    </View>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {show.episodes.toLocaleString('pt-BR')}{' '}
-                      {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
-                      {shortDuration(show.minutes)}
-                    </ThemedText>
-                  </View>
-                </Pressable>
-              </Link>
-            );
-          })}
+          {stats.shows.map((show) => (
+            <ShowRow
+              key={show.tmdb_show_id}
+              show={show}
+              subtitle={`${show.episodes.toLocaleString('pt-BR')} ${
+                show.episodes === 1 ? 'episódio' : 'episódios'
+              } · ${shortDuration(show.minutes)}`}
+            />
+          ))}
         </>
       )}
 
@@ -261,6 +269,39 @@ function StatsBody({ stats }: { stats: UserStats }) {
         Tempo estimado com base na duração dos episódios e filmes informada pela TMDB.
       </ThemedText>
     </>
+  );
+}
+
+/** Linha de série com pôster e uma legenda livre; leva à tela da série. */
+function ShowRow({ show, subtitle }: { show: ShowStat; subtitle: string }) {
+  const theme = useTheme();
+  const poster = posterUrl(show.poster_path, 'w185');
+  return (
+    <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }} asChild>
+      {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.showRow, { backgroundColor: theme.backgroundElement }])}>
+        {poster ? (
+          <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
+        ) : (
+          <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
+        )}
+        <View style={styles.showInfo}>
+          <View style={styles.showName}>
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={{ color: theme.accent, flexShrink: 1 }}>
+              {show.name}
+            </ThemedText>
+            <Ionicons name="chevron-forward" size={12} color={theme.accent} />
+          </View>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {subtitle}
+          </ThemedText>
+        </View>
+      </Pressable>
+    </Link>
   );
 }
 
