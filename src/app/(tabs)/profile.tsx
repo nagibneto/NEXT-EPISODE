@@ -304,7 +304,6 @@ export default function ProfileScreen() {
           disabled={deleting}
           style={[
             styles.tile,
-            styles.tileHalfOnly,
             { backgroundColor: theme.backgroundElement, opacity: deleting ? 0.6 : 1 },
           ]}
           onPress={handleDeleteAccount}>
@@ -411,12 +410,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     alignItems: 'center',
     gap: Spacing.one,
-  },
-  // Sozinho na última linha: sem grow para não esticar na largura toda
-  // (excluir conta é o botão menos usado, não precisa de destaque).
-  tileHalfOnly: {
-    flexGrow: 0,
-    flexBasis: '48%',
   },
   tileLabel: {
     textAlign: 'center',
