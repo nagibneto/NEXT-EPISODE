@@ -658,6 +658,10 @@ export async function importWatchedMoviesBulk(
 
 // ---------- Amigos ----------
 
+// Contas usadas para revisão nas lojas (Google Play / App Store) — não devem
+// aparecer na busca de amigos dos usuários reais.
+const REVIEWER_USERNAMES = ['nagib Googleplay', 'revisor_apple'];
+
 export async function searchProfiles(query: string, excludeUserId: string): Promise<Profile[]> {
   // Vírgulas e parênteses têm significado especial no filtro .or() do PostgREST.
   const term = query.replace(/[,()]/g, ' ').trim();
@@ -667,6 +671,7 @@ export async function searchProfiles(query: string, excludeUserId: string): Prom
     .select('id, username, display_name, avatar_id')
     .or(`username.ilike.%${term}%,display_name.ilike.%${term}%`)
     .neq('id', excludeUserId)
+    .not('username', 'in', `(${REVIEWER_USERNAMES.map((name) => `"${name}"`).join(',')})`)
     .limit(20);
   if (error) throw error;
   return data ?? [];
