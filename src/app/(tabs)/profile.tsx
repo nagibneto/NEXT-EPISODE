@@ -275,6 +275,15 @@ export default function ProfileScreen() {
           </ThemedText>
         </Pressable>
 
+        <Pressable
+          style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push('/notification-settings')}>
+          <Ionicons name="notifications-outline" size={22} color={theme.accent} />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            Notificações
+          </ThemedText>
+        </Pressable>
+
         <View style={[styles.tile, { backgroundColor: theme.backgroundElement }]}>
           <ThemeSelector />
           <ThemedText type="smallBold" style={styles.tileLabel}>

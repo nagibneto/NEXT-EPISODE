@@ -10,15 +10,20 @@ import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { markFeedLikesSeen } from '@/hooks/use-unseen-feed-likes-count';
 import {
   errorMessage,
+  getFeedLikesReceived,
   getFollowedShows,
   getIncomingFriendRequests,
   getWatchedCounts,
+  getWatchedMoviesByIds,
   profileDisplayName,
   type FollowedShow,
+  type MediaType,
   type Profile,
 } from '@/lib/db';
+import { relativeDate } from '@/lib/relative-date';
 import { airedEpisodeCount, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
 
 interface NewEpisodesItem {
@@ -28,6 +33,17 @@ interface NewEpisodesItem {
   /** Total de episódios exibidos no momento — usado para lembrar o que já foi limpo. */
   aired: number;
 }
+
+interface LikeItem {
+  liker: Profile;
+  media_type: MediaType;
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  created_at: string;
+}
+
+type NotificationsView = 'novidades' | 'reacoes';
 
 /** tmdb_id → quantidade de episódios exibidos na última vez que a notificação foi limpa. */
 type DismissedMap = Record<number, number>;
@@ -102,17 +118,105 @@ function NotificationRow({
   );
 }
 
-/** Séries seguidas com episódios já exibidos que o usuário ainda não assistiu. */
+/** Linha de uma curtida recebida: leva à série/filme curtido. */
+function LikeRow({ item }: { item: LikeItem }) {
+  const theme = useTheme();
+  const uri = posterUrl(item.poster_path, 'w185');
+  const href =
+    item.media_type === 'movie'
+      ? ({ pathname: '/movie/[id]', params: { id: String(item.tmdb_id) } } as const)
+      : ({ pathname: '/show/[id]', params: { id: String(item.tmdb_id) } } as const);
+  return (
+    <Link href={href} asChild>
+      {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.row, { backgroundColor: theme.backgroundElement }])}>
+        <UserAvatar avatarId={item.liker.avatar_id} name={profileDisplayName(item.liker)} size={40} />
+        <View style={styles.info}>
+          <ThemedText type="smallBold" numberOfLines={1}>
+            {profileDisplayName(item.liker)}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            curtiu <ThemedText type="smallBold">{item.title}</ThemedText>
+          </ThemedText>
+        </View>
+        {uri ? (
+          <Image source={{ uri }} style={styles.likePoster} contentFit="cover" />
+        ) : null}
+        <ThemedText type="small" themeColor="textSecondary">
+          {relativeDate(item.created_at)}
+        </ThemedText>
+      </Pressable>
+    </Link>
+  );
+}
+
+/** Séries seguidas com episódios já exibidos que o usuário ainda não assistiu, pedidos de amizade e curtidas recebidas. */
 export default function NotificationsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
+  const [view, setView] = useState<NotificationsView>('novidades');
+
   const [items, setItems] = useState<NewEpisodesItem[] | null>(null);
   const [friendRequests, setFriendRequests] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [likes, setLikes] = useState<LikeItem[] | null>(null);
+  const [likesError, setLikesError] = useState<string | null>(null);
+
+  const loadLikes = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLikesError(null);
+      const received = await getFeedLikesReceived(user.id);
+      const tvIds = [...new Set(received.filter((r) => r.media_type === 'tv').map((r) => r.tmdb_id))];
+      const movieIds = [
+        ...new Set(received.filter((r) => r.media_type === 'movie').map((r) => r.tmdb_id)),
+      ];
+      const [showEntries, movieRows] = await Promise.all([
+        Promise.all(
+          tvIds.map(async (id) => {
+            try {
+              const details = await getShowDetailsCached(id);
+              return [id, { title: details.name, poster_path: details.poster_path }] as const;
+            } catch {
+              return [id, { title: `Série #${id}`, poster_path: null }] as const;
+            }
+          })
+        ),
+        getWatchedMoviesByIds(user.id, movieIds),
+      ]);
+      const showMap = new Map(showEntries);
+      const movieMap = new Map(
+        movieRows.map((m) => [m.tmdb_id, { title: m.title, poster_path: m.poster_path }])
+      );
+      setLikes(
+        received.map((r) => {
+          const info = r.media_type === 'movie' ? movieMap.get(r.tmdb_id) : showMap.get(r.tmdb_id);
+          return {
+            liker: r.liker,
+            media_type: r.media_type,
+            tmdb_id: r.tmdb_id,
+            title: info?.title ?? (r.media_type === 'movie' ? 'um filme' : 'uma série'),
+            poster_path: info?.poster_path ?? null,
+            created_at: r.created_at,
+          };
+        })
+      );
+    } catch (err) {
+      setLikesError(errorMessage(err, 'Erro ao carregar curtidas.'));
+    }
+  }, [user]);
+
   useFocusEffect(
     useCallback(() => {
       if (!user) return;
+      if (view === 'reacoes') {
+        loadLikes();
+        markFeedLikesSeen(user.id).catch(() => {});
+        return;
+      }
+
       let cancelled = false;
       setError(null);
       getIncomingFriendRequests(user.id)
@@ -158,7 +262,7 @@ export default function NotificationsScreen() {
       return () => {
         cancelled = true;
       };
-    }, [user])
+    }, [view, user, loadLikes])
   );
 
   async function persistDismissed(entries: [number, number][]) {
@@ -190,80 +294,139 @@ export default function NotificationsScreen() {
     ]);
   }
 
-  if (error) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <ThemedText themeColor="danger" style={styles.message}>
-          {error}
-        </ThemedText>
-      </View>
-    );
-  }
-
-  if (items === null) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
   return (
-    <FlatList
-      data={items}
-      keyExtractor={(item) => String(item.show.tmdb_id)}
-      contentContainerStyle={[
-        styles.list,
-        !items.length && !friendRequests.length && styles.listEmpty,
-      ]}
-      style={{ backgroundColor: theme.background }}
-      ListHeaderComponent={
-        friendRequests.length > 0 || items.length > 0 ? (
-          <>
-            {friendRequests.length > 0 && (
-              <View style={styles.section}>
-                <ThemedText type="smallBold" style={styles.sectionTitle}>
-                  Pedidos de amizade ({friendRequests.length})
-                </ThemedText>
-                {friendRequests.map((profile) => (
-                  <FriendRequestRow key={profile.id} profile={profile} />
-                ))}
-              </View>
-            )}
-            {items.length > 0 && (
-              <Pressable style={styles.clearAllButton} hitSlop={8} onPress={clearAll}>
-                <ThemedText type="small" themeColor="accent">
-                  Limpar tudo
-                </ThemedText>
-              </Pressable>
-            )}
-          </>
-        ) : null
-      }
-      ListEmptyComponent={
-        friendRequests.length === 0 ? (
-          <View style={styles.center}>
-            <ThemedText type="subtitle" style={styles.message}>
-              Nenhuma novidade
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
+        {(
+          [
+            { value: 'novidades', label: 'Novidades', icon: 'sparkles-outline' },
+            { value: 'reacoes', label: 'Reações', icon: 'heart-outline' },
+          ] as const
+        ).map((option) => (
+          <Pressable
+            key={option.value}
+            style={[styles.segment, view === option.value && { backgroundColor: theme.accent }]}
+            onPress={() => setView(option.value)}>
+            <Ionicons
+              name={option.icon}
+              size={13}
+              color={view === option.value ? theme.accentText : theme.textSecondary}
+            />
+            <ThemedText
+              type="small"
+              numberOfLines={1}
+              style={[
+                styles.segmentText,
+                { color: view === option.value ? theme.accentText : theme.textSecondary },
+              ]}>
+              {option.label}
             </ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.message}>
-              Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.
+          </Pressable>
+        ))}
+      </View>
+
+      {view === 'novidades' ? (
+        error ? (
+          <View style={styles.center}>
+            <ThemedText themeColor="danger" style={styles.message}>
+              {error}
             </ThemedText>
           </View>
-        ) : null
-      }
-      renderItem={({ item }) => (
-        <NotificationRow
-          show={item.show}
-          newCount={item.newCount}
-          onDismiss={() => dismissOne(item)}
+        ) : items === null ? (
+          <View style={styles.center}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <FlatList
+            data={items}
+            keyExtractor={(item) => String(item.show.tmdb_id)}
+            contentContainerStyle={[
+              styles.list,
+              !items.length && !friendRequests.length && styles.listEmpty,
+            ]}
+            ListHeaderComponent={
+              friendRequests.length > 0 || items.length > 0 ? (
+                <>
+                  {friendRequests.length > 0 && (
+                    <View style={styles.section}>
+                      <ThemedText type="smallBold" style={styles.sectionTitle}>
+                        Pedidos de amizade ({friendRequests.length})
+                      </ThemedText>
+                      {friendRequests.map((profile) => (
+                        <FriendRequestRow key={profile.id} profile={profile} />
+                      ))}
+                    </View>
+                  )}
+                  {items.length > 0 && (
+                    <Pressable style={styles.clearAllButton} hitSlop={8} onPress={clearAll}>
+                      <ThemedText type="small" themeColor="accent">
+                        Limpar tudo
+                      </ThemedText>
+                    </Pressable>
+                  )}
+                </>
+              ) : null
+            }
+            ListEmptyComponent={
+              friendRequests.length === 0 ? (
+                <View style={styles.center}>
+                  <ThemedText type="subtitle" style={styles.message}>
+                    Nenhuma novidade
+                  </ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.message}>
+                    Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.
+                  </ThemedText>
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <NotificationRow
+                show={item.show}
+                newCount={item.newCount}
+                onDismiss={() => dismissOne(item)}
+              />
+            )}
+          />
+        )
+      ) : likesError ? (
+        <View style={styles.center}>
+          <ThemedText themeColor="danger" style={styles.message}>
+            {likesError}
+          </ThemedText>
+        </View>
+      ) : likes === null ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        <FlatList
+          data={likes}
+          keyExtractor={(item, index) =>
+            `${item.liker.id}:${item.media_type}:${item.tmdb_id}:${item.created_at}:${index}`
+          }
+          contentContainerStyle={[styles.list, !likes.length && styles.listEmpty]}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Ionicons name="heart-outline" size={40} color={theme.textSecondary} />
+              <ThemedText type="subtitle" style={styles.message}>
+                Nenhuma curtida ainda
+              </ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.message}>
+                Quando um amigo curtir o que você assistiu, aparece aqui.
+              </ThemedText>
+            </View>
+          }
+          renderItem={({ item }) => <LikeRow item={item} />}
         />
       )}
-    />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -274,6 +437,27 @@ const styles = StyleSheet.create({
   message: {
     textAlign: 'center',
     paddingHorizontal: Spacing.four,
+  },
+  segmented: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 2,
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.three,
+  },
+  segment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.one,
+    paddingVertical: 8,
+  },
+  segmentText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   list: {
     padding: Spacing.two,
@@ -306,6 +490,11 @@ const styles = StyleSheet.create({
   poster: {
     width: 40,
     height: 60,
+    borderRadius: 4,
+  },
+  likePoster: {
+    width: 32,
+    height: 48,
     borderRadius: 4,
   },
   info: {

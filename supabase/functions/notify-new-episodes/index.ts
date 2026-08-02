@@ -73,6 +73,17 @@ Deno.serve(async () => {
     tokensByUser.set(row.user_id, list);
   }
 
+  // 1b. Remove quem desativou notificação de episódios novos.
+  const { data: optedOutRows, error: prefsError } = await supabase
+    .from('notification_preferences')
+    .select('user_id')
+    .eq('new_episodes', false)
+    .in('user_id', [...tokensByUser.keys()]);
+  if (prefsError) throw prefsError;
+  for (const row of optedOutRows ?? []) {
+    tokensByUser.delete(row.user_id);
+  }
+
   // 2. Séries seguidas pelos usuários que têm token.
   const { data: followRows, error: followsError } = await supabase
     .from('followed_shows')

@@ -45,6 +45,7 @@ function RootNavigator() {
         <Stack.Screen name="favorites" options={{ title: 'Favoritos' }} />
         <Stack.Screen name="to-watch" options={{ title: 'Para assistir' }} />
         <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />
+        <Stack.Screen name="notification-settings" options={{ title: 'Preferências de notificação' }} />
       </Stack>
     </ThemeProvider>
   );

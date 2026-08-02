@@ -40,6 +40,16 @@ Deno.serve(async (req) => {
   const recipientId = isAccept ? followerId : followedId;
   const actorId = isAccept ? followedId : followerId;
 
+  const { data: prefs } = await supabase
+    .from('notification_preferences')
+    .select('friend_requests, friend_accepted')
+    .eq('user_id', recipientId)
+    .maybeSingle();
+  const prefField = isAccept ? prefs?.friend_accepted : prefs?.friend_requests;
+  if (prefField === false) {
+    return Response.json({ sent: 0, type, reason: 'destinatário desativou este tipo de notificação' });
+  }
+
   const [{ data: actor }, { data: tokenRows }] = await Promise.all([
     supabase.from('profiles').select('username, display_name').eq('id', actorId).maybeSingle(),
     supabase.from('push_tokens').select('token').eq('user_id', recipientId),

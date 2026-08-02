@@ -799,6 +799,19 @@ export interface FeedWatchedItem {
   /** Episódios assistidos no mesmo dia, agrupados (estilo TV Time). */
   episodes: { season_number: number; episode_number: number }[];
   date: string;
+  like_count: number;
+  liked_by_me: boolean;
+}
+
+export interface FeedWatchedMovieItem {
+  type: 'watched_movie';
+  user: Profile;
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  date: string;
+  like_count: number;
+  liked_by_me: boolean;
 }
 
 export interface FeedCommentItem {
@@ -812,11 +825,25 @@ export interface FeedCommentItem {
   date: string;
 }
 
-export type FeedItem = FeedWatchedItem | FeedCommentItem;
+export type FeedItem = FeedWatchedItem | FeedWatchedMovieItem | FeedCommentItem;
+
+/** Chave que identifica a atividade "assistiu" curtível (série ou filme) no feed. */
+export function feedActivityIdentity(item: FeedWatchedItem | FeedWatchedMovieItem) {
+  return {
+    owner_id: item.user.id,
+    media_type: (item.type === 'watched_movie' ? 'movie' : 'tv') as MediaType,
+    tmdb_id: item.type === 'watched_movie' ? item.tmdb_id : item.tmdb_show_id,
+    activity_date: item.date.slice(0, 10),
+  };
+}
+
+function feedActivityKey(id: ReturnType<typeof feedActivityIdentity>) {
+  return `${id.owner_id}:${id.media_type}:${id.tmdb_id}:${id.activity_date}`;
+}
 
 /**
- * Monta o feed com a atividade recente dos usuários que sigo:
- * episódios assistidos (agrupados por série + dia) e comentários.
+ * Monta o feed com a atividade recente dos usuários que sigo: séries e
+ * filmes assistidos (agrupados por dia) e comentários.
  */
 export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
   const friends = await getFriends(userId);
@@ -824,13 +851,19 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
   const friendById = new Map(friends.map((f) => [f.id, f]));
   const friendIds = friends.map((f) => f.id);
 
-  const [watchedRes, commentsRes] = await Promise.all([
+  const [watchedRes, moviesRes, commentsRes] = await Promise.all([
     supabase
       .from('watched_episodes')
       .select('user_id, tmdb_show_id, season_number, episode_number, watched_at')
       .in('user_id', friendIds)
       .order('watched_at', { ascending: false })
       .limit(120),
+    supabase
+      .from('watched_movies')
+      .select('user_id, tmdb_id, title, poster_path, watched_at')
+      .in('user_id', friendIds)
+      .order('watched_at', { ascending: false })
+      .limit(60),
     supabase
       .from('episode_comments')
       .select('user_id, tmdb_show_id, season_number, episode_number, content, image_url, created_at')
@@ -842,6 +875,7 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
       .limit(40),
   ]);
   if (watchedRes.error) throw watchedRes.error;
+  if (moviesRes.error) throw moviesRes.error;
   if (commentsRes.error) throw commentsRes.error;
 
   // Agrupa episódios assistidos pelo mesmo usuário, na mesma série e no mesmo dia.
@@ -864,9 +898,24 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
         tmdb_show_id: row.tmdb_show_id,
         episodes: [{ season_number: row.season_number, episode_number: row.episode_number }],
         date: row.watched_at,
+        like_count: 0,
+        liked_by_me: false,
       });
     }
   }
+
+  const movieItems: FeedWatchedMovieItem[] = (moviesRes.data ?? [])
+    .filter((row) => friendById.has(row.user_id))
+    .map((row) => ({
+      type: 'watched_movie',
+      user: friendById.get(row.user_id)!,
+      tmdb_id: row.tmdb_id,
+      title: row.title,
+      poster_path: row.poster_path,
+      date: row.watched_at,
+      like_count: 0,
+      liked_by_me: false,
+    }));
 
   const comments: FeedCommentItem[] = (commentsRes.data ?? [])
     .filter((row) => friendById.has(row.user_id))
@@ -881,9 +930,62 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
       date: row.created_at,
     }));
 
-  return [...watchedGroups.values(), ...comments].sort((a, b) =>
+  // Curtidas das atividades "assistiu" carregadas acima.
+  const likeable = [...watchedGroups.values(), ...movieItems];
+  if (likeable.length > 0) {
+    const minDate = likeable.reduce(
+      (min, it) => (it.date.slice(0, 10) < min ? it.date.slice(0, 10) : min),
+      likeable[0].date.slice(0, 10)
+    );
+    const { data: likeRows, error: likesError } = await supabase
+      .from('feed_likes')
+      .select('liker_id, owner_id, media_type, tmdb_id, activity_date')
+      .in('owner_id', friendIds)
+      .gte('activity_date', minDate);
+    if (likesError) throw likesError;
+
+    const likeCounts = new Map<string, number>();
+    const likedByMe = new Set<string>();
+    for (const row of likeRows ?? []) {
+      const key = `${row.owner_id}:${row.media_type}:${row.tmdb_id}:${row.activity_date}`;
+      likeCounts.set(key, (likeCounts.get(key) ?? 0) + 1);
+      if (row.liker_id === userId) likedByMe.add(key);
+    }
+    for (const item of likeable) {
+      const key = feedActivityKey(feedActivityIdentity(item));
+      item.like_count = likeCounts.get(key) ?? 0;
+      item.liked_by_me = likedByMe.has(key);
+    }
+  }
+
+  return [...watchedGroups.values(), ...movieItems, ...comments].sort((a, b) =>
     b.date.localeCompare(a.date)
   );
+}
+
+export async function likeFeedActivity(likerId: string, item: FeedWatchedItem | FeedWatchedMovieItem) {
+  const id = feedActivityIdentity(item);
+  const { error } = await supabase.from('feed_likes').insert({
+    liker_id: likerId,
+    owner_id: id.owner_id,
+    media_type: id.media_type,
+    tmdb_id: id.tmdb_id,
+    activity_date: id.activity_date,
+  });
+  if (error) throw error;
+}
+
+export async function unlikeFeedActivity(likerId: string, item: FeedWatchedItem | FeedWatchedMovieItem) {
+  const id = feedActivityIdentity(item);
+  const { error } = await supabase
+    .from('feed_likes')
+    .delete()
+    .eq('liker_id', likerId)
+    .eq('owner_id', id.owner_id)
+    .eq('media_type', id.media_type)
+    .eq('tmdb_id', id.tmdb_id)
+    .eq('activity_date', id.activity_date);
+  if (error) throw error;
 }
 
 // ---------- Ranking de tempo assistido (amigos) ----------
@@ -989,4 +1091,106 @@ export async function importWatchedEpisodesBulk(
     );
     if (error) throw error;
   }
+}
+
+// ---------- Curtidas recebidas (notificações) ----------
+
+export interface FeedLikeNotification {
+  liker: Profile;
+  media_type: MediaType;
+  tmdb_id: number;
+  activity_date: string;
+  created_at: string;
+}
+
+/** Curtidas que os amigos deram no que eu assisti, mais recentes primeiro. */
+export async function getFeedLikesReceived(userId: string): Promise<FeedLikeNotification[]> {
+  const { data, error } = await supabase
+    .from('feed_likes')
+    .select(
+      'media_type, tmdb_id, activity_date, created_at, profiles!feed_likes_liker_id_fkey(id, username, display_name, avatar_id)'
+    )
+    .eq('owner_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (
+    (data as unknown as {
+      media_type: MediaType;
+      tmdb_id: number;
+      activity_date: string;
+      created_at: string;
+      profiles: Profile;
+    }[]) ?? []
+  ).map((row) => ({
+    liker: row.profiles,
+    media_type: row.media_type,
+    tmdb_id: row.tmdb_id,
+    activity_date: row.activity_date,
+    created_at: row.created_at,
+  }));
+}
+
+/** Quantas curtidas recebi desde a data informada (ou todas, se null) — alimenta o sininho. */
+export async function getFeedLikesCountSince(userId: string, since: string | null): Promise<number> {
+  let query = supabase
+    .from('feed_likes')
+    .select('*', { count: 'exact', head: true })
+    .eq('owner_id', userId);
+  if (since) query = query.gt('created_at', since);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Título/pôster dos filmes que assisti, para exibir nas curtidas recebidas (sem chamar a TMDB). */
+export async function getWatchedMoviesByIds(
+  userId: string,
+  tmdbIds: number[]
+): Promise<{ tmdb_id: number; title: string; poster_path: string | null }[]> {
+  if (tmdbIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('watched_movies')
+    .select('tmdb_id, title, poster_path')
+    .eq('user_id', userId)
+    .in('tmdb_id', tmdbIds);
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ---------- Preferências de notificação ----------
+
+export interface NotificationPreferences {
+  new_episodes: boolean;
+  friend_requests: boolean;
+  friend_accepted: boolean;
+  feed_likes: boolean;
+}
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  new_episodes: true,
+  friend_requests: true,
+  friend_accepted: true,
+  feed_likes: true,
+};
+
+/** Ausência de linha = tudo ativado (mesmo padrão do trigger em supabase/schema.sql). */
+export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  const { data, error } = await supabase
+    .from('notification_preferences')
+    .select('new_episodes, friend_requests, friend_accepted, feed_likes')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? DEFAULT_NOTIFICATION_PREFERENCES;
+}
+
+export async function updateNotificationPreferences(
+  userId: string,
+  patch: Partial<NotificationPreferences>
+) {
+  const { error } = await supabase
+    .from('notification_preferences')
+    .upsert({ user_id: userId, ...patch }, { onConflict: 'user_id' });
+  if (error) throw error;
 }

@@ -775,6 +775,120 @@ create policy "Usuário gerencia os próprios filmes para assistir"
   on public.watchlist_movies for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- ---------- Curtidas no feed (assistidos) ----------
+-- Curtida numa atividade "amigo assistiu série/filme" do feed. A atividade não
+-- tem id próprio (é agrupada no client por dono + série/filme + dia, ver
+-- getFriendsFeed em src/lib/db.ts), então a curtida usa a mesma chave.
+create table if not exists public.feed_likes (
+  liker_id uuid not null references public.profiles (id) on delete cascade,
+  owner_id uuid not null references public.profiles (id) on delete cascade,
+  media_type text not null check (media_type in ('tv', 'movie')),
+  tmdb_id integer not null,
+  activity_date date not null,
+  created_at timestamptz not null default now(),
+  primary key (liker_id, owner_id, media_type, tmdb_id, activity_date),
+  check (liker_id <> owner_id)
+);
+
+alter table public.feed_likes enable row level security;
+
+drop policy if exists "Curtidas do feed são visíveis para autenticados" on public.feed_likes;
+create policy "Curtidas do feed são visíveis para autenticados"
+  on public.feed_likes for select to authenticated using (true);
+
+drop policy if exists "Usuário curte atividades do feed" on public.feed_likes;
+create policy "Usuário curte atividades do feed"
+  on public.feed_likes for insert to authenticated with check (auth.uid() = liker_id);
+
+drop policy if exists "Usuário remove a própria curtida do feed" on public.feed_likes;
+create policy "Usuário remove a própria curtida do feed"
+  on public.feed_likes for delete to authenticated using (auth.uid() = liker_id);
+
+create index if not exists feed_likes_owner_idx
+  on public.feed_likes (owner_id, media_type, tmdb_id, activity_date);
+
+create index if not exists feed_likes_liker_idx on public.feed_likes (liker_id, created_at desc);
+
+-- ---------- Notificação push: curtida no feed ----------
+-- Dispara a Edge Function supabase/functions/notify-feed-like sempre que
+-- alguém curte uma atividade "assistiu" de outra pessoa (mesmo padrão do
+-- trigger de amizade, ver "Notificação push: amizade" acima).
+create or replace function public.notify_feed_like()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  function_url text;
+  service_key text;
+begin
+  begin
+    select decrypted_secret into function_url
+      from vault.decrypted_secrets where name = 'notify_feed_like_url';
+    select decrypted_secret into service_key
+      from vault.decrypted_secrets where name = 'notify_feed_like_key';
+
+    if function_url is not null and service_key is not null then
+      perform net.http_post(
+        url := function_url,
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', 'Bearer ' || service_key
+        ),
+        body := jsonb_build_object(
+          'liker_id', new.liker_id,
+          'owner_id', new.owner_id,
+          'media_type', new.media_type,
+          'tmdb_id', new.tmdb_id
+        )
+      );
+    end if;
+  exception when others then
+    -- A notificação é acessório: se o Vault ou o pg_net falharem, a curtida
+    -- tem que ser gravada do mesmo jeito.
+    null;
+  end;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_feed_like_created on public.feed_likes;
+create trigger on_feed_like_created
+  after insert on public.feed_likes
+  for each row execute function public.notify_feed_like();
+
+-- Configuração única (rode no SQL Editor com os valores do seu projeto —
+-- não entra no git porque tem a service role key):
+--
+--   select vault.create_secret(
+--     'https://SEU-PROJETO.supabase.co/functions/v1/notify-feed-like',
+--     'notify_feed_like_url'
+--   );
+--   select vault.create_secret('SUA_SERVICE_ROLE_KEY', 'notify_feed_like_key');
+--
+-- Requer a extensão pg_net habilitada e o deploy da function
+-- (supabase functions deploy notify-feed-like --no-verify-jwt).
+
+-- ---------- Preferências de notificação ----------
+-- Cada linha vale para os pushes remotos (Expo Push via Edge Functions);
+-- ausência de linha = tudo ativado (comportamento padrão de sempre).
+create table if not exists public.notification_preferences (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  new_episodes boolean not null default true,
+  friend_requests boolean not null default true,
+  friend_accepted boolean not null default true,
+  feed_likes boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.notification_preferences enable row level security;
+
+drop policy if exists "Usuário gerencia as próprias preferências de notificação" on public.notification_preferences;
+create policy "Usuário gerencia as próprias preferências de notificação"
+  on public.notification_preferences for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ---------- Permissões das funções de trigger ----------
 -- Precisa ficar no fim do arquivo: "create or replace function" concede
 -- EXECUTE a PUBLIC de novo a cada execução, então revogar antes não adianta.

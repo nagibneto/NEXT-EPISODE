@@ -22,11 +22,16 @@ import {
   getFriendsFeed,
   getFriendsMovieWatches,
   getProfile,
+  likeFeedActivity,
   profileDisplayName,
+  unlikeFeedActivity,
   type FeedItem,
+  type FeedWatchedItem,
+  type FeedWatchedMovieItem,
   type Profile,
 } from '@/lib/db';
 import { shortDuration } from '@/lib/duration';
+import { relativeDate } from '@/lib/relative-date';
 import {
   episodeRuntime,
   FALLBACK_MOVIE_RUNTIME_MIN,
@@ -53,15 +58,6 @@ interface RankingEntry {
 
 function episodeCode(seasonNumber: number, episodeNumber: number) {
   return `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
-}
-
-function relativeDate(iso: string) {
-  const date = new Date(iso);
-  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
-  if (days <= 0) return 'hoje';
-  if (days === 1) return 'ontem';
-  if (days < 30) return `há ${days} dias`;
-  return date.toLocaleDateString('pt-BR');
 }
 
 function periodSince(period: Period): Date | null {
@@ -92,8 +88,12 @@ export default function FeedScreen() {
       const feed = await getFriendsFeed(user.id);
       setItems(feed);
 
-      // Resolve nome/pôster das séries na TMDB (com cache em memória).
-      const ids = [...new Set(feed.map((item) => item.tmdb_show_id))];
+      // Resolve nome/pôster das séries na TMDB (com cache em memória). Filmes
+      // já trazem título/pôster de watched_movies, sem precisar da TMDB.
+      const showIds = feed
+        .filter((item): item is Exclude<FeedItem, FeedWatchedMovieItem> => item.type !== 'watched_movie')
+        .map((item) => item.tmdb_show_id);
+      const ids = [...new Set(showIds)];
       const entries = await Promise.all(
         ids.map(async (id) => {
           try {
@@ -190,20 +190,42 @@ export default function FeedScreen() {
     setRefreshing(false);
   }
 
+  async function handleToggleLike(target: FeedWatchedItem | FeedWatchedMovieItem) {
+    if (!user) return;
+    setItems((prev) =>
+      (prev ?? []).map((it) =>
+        it === target
+          ? { ...it, liked_by_me: !it.liked_by_me, like_count: it.like_count + (it.liked_by_me ? -1 : 1) }
+          : it
+      )
+    );
+    try {
+      if (target.liked_by_me) await unlikeFeedActivity(user.id, target);
+      else await likeFeedActivity(user.id, target);
+    } catch {
+      await load(); // reverte buscando o feed de novo em caso de erro
+    }
+  }
+
   function renderFeedItem({ item }: { item: FeedItem }) {
-    const show = shows.get(item.tmdb_show_id);
-    const poster = posterUrl(show?.poster_path ?? null, 'w185');
-    const firstEpisode =
-      item.type === 'watched' ? item.episodes[item.episodes.length - 1] : item;
+    const isMovie = item.type === 'watched_movie';
+    const show = isMovie ? null : shows.get(item.tmdb_show_id);
+    const poster = isMovie
+      ? posterUrl(item.poster_path, 'w185')
+      : posterUrl(show?.poster_path ?? null, 'w185');
+    function handlePress() {
+      if (item.type === 'watched_movie') {
+        router.push(`/movie/${item.tmdb_id}`);
+        return;
+      }
+      const episode = item.type === 'watched' ? item.episodes[item.episodes.length - 1] : item;
+      router.push(`/episode/${item.tmdb_show_id}/${episode.season_number}/${episode.episode_number}`);
+    }
 
     return (
       <Pressable
         style={[styles.item, { backgroundColor: theme.backgroundElement }]}
-        onPress={() =>
-          router.push(
-            `/episode/${item.tmdb_show_id}/${firstEpisode.season_number}/${firstEpisode.episode_number}`
-          )
-        }>
+        onPress={handlePress}>
         {poster ? (
           <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
         ) : (
@@ -222,9 +244,25 @@ export default function FeedScreen() {
               />
               <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
             </Pressable>
-            <ThemedText type="small" themeColor="textSecondary">
-              {relativeDate(item.date)}
-            </ThemedText>
+            <View style={styles.itemMeta}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {relativeDate(item.date)}
+              </ThemedText>
+              {(item.type === 'watched' || item.type === 'watched_movie') && (
+                <Pressable hitSlop={8} style={styles.likeButton} onPress={() => handleToggleLike(item)}>
+                  <Ionicons
+                    name={item.liked_by_me ? 'heart' : 'heart-outline'}
+                    size={16}
+                    color={item.liked_by_me ? theme.danger : theme.textSecondary}
+                  />
+                  {item.like_count > 0 && (
+                    <ThemedText type="small" themeColor={item.liked_by_me ? 'danger' : 'textSecondary'}>
+                      {item.like_count}
+                    </ThemedText>
+                  )}
+                </Pressable>
+              )}
+            </View>
           </View>
           {item.type === 'watched' ? (
             <ThemedText type="small" themeColor="textSecondary">
@@ -235,6 +273,10 @@ export default function FeedScreen() {
                   )} de `
                 : `assistiu ${item.episodes.length} episódios de `}
               <ThemedText type="smallBold">{show?.name ?? '…'}</ThemedText>
+            </ThemedText>
+          ) : item.type === 'watched_movie' ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              assistiu <ThemedText type="smallBold">{item.title}</ThemedText>
             </ThemedText>
           ) : (
             <>
@@ -369,9 +411,10 @@ export default function FeedScreen() {
         ) : (
           <FlatList
             data={items}
-            keyExtractor={(item, index) =>
-              `${item.type}:${item.user.id}:${item.tmdb_show_id}:${item.date}:${index}`
-            }
+            keyExtractor={(item, index) => {
+              const mediaId = item.type === 'watched_movie' ? item.tmdb_id : item.tmdb_show_id;
+              return `${item.type}:${item.user.id}:${mediaId}:${item.date}:${index}`;
+            }}
             contentContainerStyle={[styles.list, !items.length && styles.listEmpty]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
             ListEmptyComponent={
@@ -487,7 +530,10 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    // Alinha pela base: se o coração deixa a coluna da direita mais alta que
+    // o nome, o espaço extra fica em cima (imperceptível) em vez de empurrar
+    // o "assistiu X" pra baixo.
+    alignItems: 'flex-end',
   },
   itemUser: {
     flexDirection: 'row',
@@ -495,11 +541,24 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     flexShrink: 1,
   },
+  itemMeta: {
+    alignItems: 'flex-end',
+    gap: Spacing.one,
+  },
   commentImage: {
     width: '100%',
     aspectRatio: 4 / 3,
     borderRadius: 8,
     marginTop: Spacing.one,
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.half,
+    // Altura fixa igual ao lineHeight do texto "small" (20): sem isso, a
+    // linha cresce de 16 (só o ícone) pra 20 (ícone + número) ao curtir, e
+    // empurra o resto do card pra baixo.
+    height: 20,
   },
   friendsButton: {
     flexDirection: 'row',
