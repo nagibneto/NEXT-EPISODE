@@ -1,0 +1,9 @@
+{
+  "today": "Hoje! 🎉",
+  "tomorrow": "Amanhã",
+  "inDays_one": "Em {{count}} dia",
+  "inDays_other": "Em {{count}} dias",
+  "loadError": "Erro ao carregar os próximos episódios.",
+  "emptyTitle": "Nada por enquanto",
+  "emptyBody": "Quando alguma das suas séries tiver um próximo episódio anunciado, ele aparece aqui."
+}

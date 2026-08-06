@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,40 +13,31 @@ import {
   type NotificationPreferences,
 } from '@/lib/db';
 
-const OPTIONS: { key: keyof NotificationPreferences; label: string; description: string }[] = [
-  {
-    key: 'new_episodes',
-    label: 'Episódios novos',
-    description: 'Quando uma série que você segue tem episódio novo no ar.',
-  },
-  {
-    key: 'friend_requests',
-    label: 'Pedidos de amizade',
-    description: 'Quando alguém quer ser seu amigo.',
-  },
-  {
-    key: 'friend_accepted',
-    label: 'Pedidos aceitos',
-    description: 'Quando alguém aceita seu pedido de amizade.',
-  },
-  {
-    key: 'feed_likes',
-    label: 'Curtidas no que você assistiu',
-    description: 'Quando um amigo curte uma série ou filme que você assistiu.',
-  },
+const OPTION_KEYS: (keyof NotificationPreferences)[] = [
+  'new_episodes',
+  'friend_requests',
+  'friend_accepted',
+  'feed_likes',
 ];
 
 export default function NotificationSettingsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const OPTIONS = OPTION_KEYS.map((key) => ({
+    key,
+    label: t(`notificationSettings.options.${key}.label`),
+    description: t(`notificationSettings.options.${key}.description`),
+  }));
 
   useEffect(() => {
     if (!user) return;
     getNotificationPreferences(user.id)
       .then(setPrefs)
-      .catch((err) => setError(errorMessage(err, 'Erro ao carregar preferências.')));
+      .catch((err) => setError(errorMessage(err, t('notificationSettings.loadError'))));
   }, [user]);
 
   async function handleToggle(key: keyof NotificationPreferences, value: boolean) {
@@ -57,7 +49,7 @@ export default function NotificationSettingsScreen() {
       await updateNotificationPreferences(user.id, { [key]: value });
     } catch (err) {
       setPrefs(previous);
-      setError(errorMessage(err, 'Não foi possível salvar a preferência.'));
+      setError(errorMessage(err, t('notificationSettings.saveError')));
     }
   }
 
@@ -78,7 +70,7 @@ export default function NotificationSettingsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
-        Escolha o que você quer receber por notificação push.
+        {t('notificationSettings.intro')}
       </ThemedText>
       {error && (
         <ThemedText type="small" themeColor="danger" style={styles.message}>

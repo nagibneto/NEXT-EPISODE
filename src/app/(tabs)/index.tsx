@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +37,7 @@ import {
   type WatchedMovie,
   type WatchlistMovie,
 } from '@/lib/db';
+import { localizedTitle } from '@/lib/locale';
 import {
   airedEpisodeCount,
   getGenres,
@@ -157,6 +159,7 @@ function WatchNextRow({
   onMarkWatched: () => void;
 }) {
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const swipeRef = useRef<SwipeableMethods>(null);
   const image =
@@ -164,14 +167,17 @@ function WatchNextRow({
 
   function confirmMarkWatched() {
     if (!next) return;
+    const seasonEpisode = t('home.seasonEpisodeCompact', {
+      season: String(next.seasonNumber).padStart(2, '0'),
+      episode: String(next.episodeNumber).padStart(2, '0'),
+    });
+    const showName = localizedTitle(show.name, show.name_en, i18n.language);
     Alert.alert(
-      'Marcar como assistido',
-      `${show.name} — T${String(next.seasonNumber).padStart(2, '0')} | E${String(
-        next.episodeNumber
-      ).padStart(2, '0')}${next.name ? ` (${next.name})` : ''}`,
+      t('home.markWatchedAlert.title'),
+      `${showName} — ${seasonEpisode}${next.name ? ` (${next.name})` : ''}`,
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Assisti', onPress: onMarkWatched },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('home.markWatchedAlert.confirm'), onPress: onMarkWatched },
       ]
     );
   }
@@ -244,7 +250,7 @@ function WatchNextRow({
               type="smallBold"
               numberOfLines={1}
               style={{ color: theme.accent, flexShrink: 1 }}>
-              {show.name}
+              {localizedTitle(show.name, show.name_en, i18n.language)}
             </ThemedText>
             <Ionicons name="chevron-forward" size={12} color={theme.accent} />
           </Pressable>
@@ -252,12 +258,14 @@ function WatchNextRow({
             <>
               <View style={styles.nextEpisodeRow}>
                 <ThemedText type="smallBold">
-                  T{String(next.seasonNumber).padStart(2, '0')} | E
-                  {String(next.episodeNumber).padStart(2, '0')}
+                  {t('home.seasonEpisodeCompact', {
+                    season: String(next.seasonNumber).padStart(2, '0'),
+                    episode: String(next.episodeNumber).padStart(2, '0'),
+                  })}
                 </ThemedText>
                 {remainingAfter > 0 && (
                   <ThemedText type="small" style={[styles.nextRemaining, { color: theme.gold }]}>
-                    +{remainingAfter} episódio{remainingAfter > 1 ? 's' : ''}
+                    {t('home.remainingEpisodes', { count: remainingAfter })}
                   </ThemedText>
                 )}
               </View>
@@ -285,11 +293,11 @@ function WatchNextRow({
             </>
           ) : next === null ? (
             <ThemedText type="small" themeColor="textSecondary">
-              Você está em dia 🎉
+              {t('home.upToDate')}
             </ThemedText>
           ) : (
             <ThemedText type="small" themeColor="textSecondary">
-              …
+              {t('home.calculating')}
             </ThemedText>
           )}
         </View>
@@ -314,6 +322,7 @@ function WatchNextRow({
 
 export default function MyShowsScreen() {
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const [mode, setMode] = useState<LibraryMode>('tv');
@@ -407,9 +416,9 @@ export default function MyShowsScreen() {
       // Registra o push token para as notificações remotas (Edge Function).
       registerPushToken(user.id).catch(() => {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar sua lista.');
+      setError(err instanceof Error ? err.message : t('home.loadError'));
     }
-  }, [user]);
+  }, [user, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -480,6 +489,19 @@ export default function MyShowsScreen() {
     return () => clearTimeout(timer);
   }, [user, hydrated, shows, watchedById, airedById, nextEpById, lastWatchedAtById, lastAirDateById]);
 
+  // Nome de série/filme já atualiza sozinho ao trocar de idioma (vem de
+  // localizedTitle, ver FlatList.extraData mais abaixo). Mas "assistir a
+  // seguir", contagem de episódios e gêneros vêm de chamadas à TMDB que só
+  // rodam uma vez por série/filme (ref *Fresh abaixo, pra não repetir sem
+  // necessidade) — sem isso, o nome do próximo episódio ficava preso no
+  // idioma antigo até fechar e abrir o app de novo. Limpa aqui pra forçar
+  // os três efeitos seguintes a buscar de novo, já na língua nova.
+  useEffect(() => {
+    airedFresh.current.clear();
+    nextEpFresh.current.clear();
+    movieGenresFresh.current.clear();
+  }, [i18n.language]);
+
   // Busca na TMDB quantos episódios de cada série já foram ao ar — usado no
   // filtro Em andamento/Finalizadas e na barrinha de progresso dos cards.
   // Os gêneros vêm de graça na mesma resposta e alimentam o filtro de categoria.
@@ -534,7 +556,7 @@ export default function MyShowsScreen() {
         for (const show of missing) airedPending.current.delete(show.tmdb_id);
       }
     })();
-  }, [shows, hydrated, airedById]);
+  }, [shows, hydrated, airedById, i18n.language]);
 
   // Busca os gêneros de cada filme (assistido ou na watchlist) para o filtro
   // de categoria, em lotes — só quando a aba Filmes está ativa.
@@ -569,7 +591,7 @@ export default function MyShowsScreen() {
         for (const id of missing) movieGenresPending.current.delete(id);
       }
     })();
-  }, [hydrated, mode, movies, movieWatchlist]);
+  }, [hydrated, mode, movies, movieWatchlist, i18n.language]);
 
   // Calcula o "assistir a seguir" de cada série quando o modo lista está
   // ativo, em lotes para não estourar a TMDB de uma vez.
@@ -604,7 +626,7 @@ export default function MyShowsScreen() {
         for (const show of missing) nextEpPending.current.delete(show.tmdb_id);
       }
     })();
-  }, [user, shows, hydrated, tvViewMode, mode, nextEpById]);
+  }, [user, shows, hydrated, tvViewMode, mode, nextEpById, i18n.language]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -631,7 +653,7 @@ export default function MyShowsScreen() {
         return rest;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível marcar como assistido.');
+      setError(err instanceof Error ? err.message : t('home.markWatchedError'));
     }
   }
 
@@ -718,12 +740,14 @@ export default function MyShowsScreen() {
     const watched = (movies ?? []).map((movie) => ({
       tmdb_id: movie.tmdb_id,
       title: movie.title,
+      title_en: movie.title_en,
       poster_path: movie.poster_path,
       date: movie.watched_at,
     }));
     const toWatch = (movieWatchlist ?? []).map((movie) => ({
       tmdb_id: movie.tmdb_id,
       title: movie.title,
+      title_en: movie.title_en,
       poster_path: movie.poster_path,
       date: movie.added_at,
     }));
@@ -803,7 +827,7 @@ export default function MyShowsScreen() {
             <ThemedText
               type="small"
               style={{ color: mode === 'tv' ? '#231A00' : theme.textSecondary }}>
-              Séries
+              {t('home.modeTv')}
             </ThemedText>
           </Pressable>
           <Pressable
@@ -817,7 +841,7 @@ export default function MyShowsScreen() {
             <ThemedText
               type="small"
               style={{ color: mode === 'movie' ? '#231A00' : theme.textSecondary }}>
-              Filmes
+              {t('home.modeMovie')}
             </ThemedText>
           </Pressable>
         </View>
@@ -825,7 +849,9 @@ export default function MyShowsScreen() {
           <Ionicons name="search" size={16} color={theme.textSecondary} />
           <TextInput
             style={[styles.input, { color: theme.text }]}
-            placeholder={showingMovies ? 'Buscar filmes…' : 'Buscar séries…'}
+            placeholder={
+              showingMovies ? t('home.searchMoviesPlaceholder') : t('home.searchShowsPlaceholder')
+            }
             placeholderTextColor={theme.textSecondary}
             value={query}
             onChangeText={setQuery}
@@ -842,8 +868,8 @@ export default function MyShowsScreen() {
         {showingMovies
           ? (
               [
-                { value: 'watched', label: 'Assistidos', icon: 'checkmark-circle' },
-                { value: 'towatch', label: 'Para assistir', icon: 'bookmark' },
+                { value: 'watched', label: t('home.movieFilterWatched'), icon: 'checkmark-circle' },
+                { value: 'towatch', label: t('home.movieFilterToWatch'), icon: 'bookmark' },
               ] as const
             ).map((option) => (
               <Pressable
@@ -873,9 +899,9 @@ export default function MyShowsScreen() {
             ))
           : (
               [
-                { value: 'ongoing', label: 'Em andamento', icon: 'play-circle' },
-                { value: 'notstarted', label: 'Não iniciado', icon: 'ellipse-outline' },
-                { value: 'ended', label: 'Finalizadas', icon: 'checkmark-circle' },
+                { value: 'ongoing', label: t('home.showFilterOngoing'), icon: 'play-circle' },
+                { value: 'notstarted', label: t('home.showFilterNotStarted'), icon: 'ellipse-outline' },
+                { value: 'ended', label: t('home.showFilterEnded'), icon: 'checkmark-circle' },
               ] as const
             ).map((option) => (
               <Pressable
@@ -954,7 +980,7 @@ export default function MyShowsScreen() {
               styles.sortButtonText,
               { color: genreFilter !== null ? theme.accent : theme.text },
             ]}>
-            Categorias
+            {t('home.categories')}
           </ThemedText>
         </Pressable>
         <View style={styles.toolsSpacer} />
@@ -1029,6 +1055,10 @@ export default function MyShowsScreen() {
         <FlatList
           key={`movie-${viewMode}`}
           data={filteredMovies}
+          // Os títulos vêm de localizedTitle(), que depende do idioma ativo,
+          // não do array "filteredMovies" em si — sem isso a lista não
+          // re-renderiza sozinha ao trocar de idioma (ver FlatList.extraData).
+          extraData={i18n.language}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={viewMode === 'grid' ? 3 : 1}
           // No Android o recorte de views fora da tela faz as imagens sumirem
@@ -1041,22 +1071,22 @@ export default function MyShowsScreen() {
           ListEmptyComponent={
             filtering ? (
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Nenhum filme encontrado com esse filtro.
+                {t('home.noMoviesFilterMatch')}
               </ThemedText>
             ) : (
               <View style={styles.center}>
                 <ThemedText type="subtitle" style={styles.message}>
-                  Nenhum filme ainda
+                  {t('home.noMoviesYetTitle')}
                 </ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.message}>
-                  Use a aba Buscar para encontrar os filmes que você já assistiu.
+                  {t('home.noMoviesYetBody')}
                 </ThemedText>
                 <Pressable
                   style={[styles.searchButton, { backgroundColor: theme.accent }]}
                   onPress={() => router.push('/search')}>
                   <Ionicons name="search" size={18} color={theme.accentText} />
                   <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
-                    Buscar filmes
+                    {t('home.searchMoviesButton')}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -1066,14 +1096,14 @@ export default function MyShowsScreen() {
             viewMode === 'grid' ? (
               <ShowCard
                 tmdbId={item.tmdb_id}
-                name={item.title}
+                name={localizedTitle(item.title, item.title_en, i18n.language)}
                 posterPath={item.poster_path}
                 media="movie"
               />
             ) : (
               <LibraryListRow
                 tmdbId={item.tmdb_id}
-                name={item.title}
+                name={localizedTitle(item.title, item.title_en, i18n.language)}
                 posterPath={item.poster_path}
               />
             )
@@ -1083,6 +1113,7 @@ export default function MyShowsScreen() {
         <FlatList
           key={`tv-${viewMode}`}
           data={filteredShows}
+          extraData={i18n.language}
           keyExtractor={(item) => String(item.tmdb_id)}
           numColumns={viewMode === 'grid' ? 3 : 1}
           // No Android o recorte de views fora da tela faz as imagens sumirem
@@ -1095,22 +1126,22 @@ export default function MyShowsScreen() {
           ListEmptyComponent={
             filtering ? (
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Nenhuma série encontrada com esse filtro.
+                {t('home.noShowsFilterMatch')}
               </ThemedText>
             ) : (
               <View style={styles.center}>
                 <ThemedText type="subtitle" style={styles.message}>
-                  Nenhuma série ainda
+                  {t('home.noShowsYetTitle')}
                 </ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.message}>
-                  Use a aba Buscar para encontrar e seguir suas séries favoritas.
+                  {t('home.noShowsYetBody')}
                 </ThemedText>
                 <Pressable
                   style={[styles.searchButton, { backgroundColor: theme.accent }]}
                   onPress={() => router.push('/search')}>
                   <Ionicons name="search" size={18} color={theme.accentText} />
                   <ThemedText type="smallBold" style={[styles.searchButtonLabel, { color: theme.accentText }]}>
-                    Buscar séries
+                    {t('home.searchShowsButton')}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -1121,7 +1152,7 @@ export default function MyShowsScreen() {
               return (
                 <ShowCard
                   tmdbId={item.tmdb_id}
-                  name={item.name}
+                  name={localizedTitle(item.name, item.name_en, i18n.language)}
                   posterPath={item.poster_path}
                   progress={progressFor(item.tmdb_id)}
                 />

@@ -1,0 +1,31 @@
+{
+  "markWatchedAlert": {
+    "title": "Marcar como assistido",
+    "confirm": "Assisti"
+  },
+  "seasonEpisodeCompact": "T{{season}} | E{{episode}}",
+  "remainingEpisodes_one": "+{{count}} episódio",
+  "remainingEpisodes_other": "+{{count}} episódios",
+  "upToDate": "Você está em dia 🎉",
+  "calculating": "…",
+  "modeTv": "Séries",
+  "modeMovie": "Filmes",
+  "searchMoviesPlaceholder": "Buscar filmes…",
+  "searchShowsPlaceholder": "Buscar séries…",
+  "movieFilterWatched": "Assistidos",
+  "movieFilterToWatch": "Para assistir",
+  "showFilterOngoing": "Em andamento",
+  "showFilterNotStarted": "Não iniciado",
+  "showFilterEnded": "Finalizadas",
+  "categories": "Categorias",
+  "noMoviesFilterMatch": "Nenhum filme encontrado com esse filtro.",
+  "noMoviesYetTitle": "Nenhum filme ainda",
+  "noMoviesYetBody": "Use a aba Buscar para encontrar os filmes que você já assistiu.",
+  "searchMoviesButton": "Buscar filmes",
+  "noShowsFilterMatch": "Nenhuma série encontrada com esse filtro.",
+  "noShowsYetTitle": "Nenhuma série ainda",
+  "noShowsYetBody": "Use a aba Buscar para encontrar e seguir suas séries favoritas.",
+  "searchShowsButton": "Buscar séries",
+  "loadError": "Erro ao carregar sua lista.",
+  "markWatchedError": "Não foi possível marcar como assistido."
+}

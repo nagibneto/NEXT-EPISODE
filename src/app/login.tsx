@@ -1,6 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Redirect } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Image,
@@ -17,12 +19,15 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useThemePreference } from '@/hooks/use-theme-preference';
 import { useAuth } from '@/hooks/use-auth';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { session, signIn, signUp, resetPassword } = useAuth();
+  const { scheme } = useThemePreference();
+  const { t } = useTranslation();
+  const { session, signIn, signUp, resetPassword, signInWithApple, signInWithGoogle } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,18 +37,36 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+  }, []);
 
   if (session) return <Redirect href="/(tabs)" />;
+
+  async function handleSocialSignIn(action: () => Promise<void>) {
+    setError(null);
+    setInfo(null);
+    setBusy(true);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('common.genericError'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleSubmit() {
     setError(null);
     setInfo(null);
     if (!email.trim() || (mode !== 'forgot' && !password)) {
-      setError(mode === 'forgot' ? 'Preencha o e-mail.' : 'Preencha e-mail e senha.');
+      setError(mode === 'forgot' ? t('login.fillEmail') : t('login.fillEmailPassword'));
       return;
     }
     if (mode === 'signup' && username.trim().length < 3) {
-      setError('O nome de usuário precisa de pelo menos 3 caracteres.');
+      setError(t('login.usernameTooShort'));
       return;
     }
     setBusy(true);
@@ -51,9 +74,7 @@ export default function LoginScreen() {
       if (mode === 'forgot') {
         await resetPassword(email.trim());
         setMode('login');
-        setInfo(
-          'Enviamos um link de recuperação para o seu e-mail. Abra-o no celular para escolher uma nova senha.'
-        );
+        setInfo(t('login.resetLinkSent'));
       } else if (mode === 'login') {
         await signIn(email.trim(), password);
       } else {
@@ -66,12 +87,10 @@ export default function LoginScreen() {
         setUsername('');
         setDisplayName('');
         setShowPassword(false);
-        setInfo(
-          'Conta criada! Faça login para continuar. Se a confirmação por e-mail estiver ativa, verifique sua caixa de entrada antes.'
-        );
+        setInfo(t('login.signupSuccess'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Algo deu errado. Tente novamente.');
+      setError(err instanceof Error ? err.message : t('common.genericError'));
     } finally {
       setBusy(false);
     }
@@ -98,17 +117,16 @@ export default function LoginScreen() {
           </ThemedText>
         </View>
         <ThemedText themeColor="textSecondary" style={styles.tagline}>
-          Acompanhe suas séries, avalie episódios e converse com outros fãs.
+          {t('login.tagline')}
         </ThemedText>
 
         {!isSupabaseConfigured && (
           <View style={[styles.configWarning, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold" themeColor="danger">
-              ⚠️ Configuração pendente
+              {t('login.configWarningTitle')}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Preencha EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env e
-              reinicie o app (veja o README).
+              {t('login.configWarningBody')}
             </ThemedText>
           </View>
         )}
@@ -117,7 +135,7 @@ export default function LoginScreen() {
           <>
             <TextInput
               style={inputStyle}
-              placeholder="Nome de usuário (único, para busca)"
+              placeholder={t('login.usernamePlaceholder')}
               placeholderTextColor={theme.textSecondary}
               autoCapitalize="none"
               value={username}
@@ -125,7 +143,7 @@ export default function LoginScreen() {
             />
             <TextInput
               style={inputStyle}
-              placeholder="Apelido (como você vai aparecer)"
+              placeholder={t('login.displayNamePlaceholder')}
               placeholderTextColor={theme.textSecondary}
               maxLength={40}
               value={displayName}
@@ -135,7 +153,7 @@ export default function LoginScreen() {
         )}
         <TextInput
           style={inputStyle}
-          placeholder="E-mail"
+          placeholder={t('login.emailPlaceholder')}
           placeholderTextColor={theme.textSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -146,7 +164,7 @@ export default function LoginScreen() {
           <View style={[styles.passwordRow, { backgroundColor: theme.backgroundElement }]}>
             <TextInput
               style={[styles.input, styles.passwordInput, { color: theme.text }]}
-              placeholder="Senha"
+              placeholder={t('login.passwordPlaceholder')}
               placeholderTextColor={theme.textSecondary}
               secureTextEntry={!showPassword}
               value={password}
@@ -156,7 +174,7 @@ export default function LoginScreen() {
               onPress={() => setShowPassword((visible) => !visible)}
               hitSlop={8}
               style={styles.eyeButton}
-              accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+              accessibilityLabel={showPassword ? t('login.hidePassword') : t('login.showPassword')}>
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                 size={22}
@@ -175,13 +193,13 @@ export default function LoginScreen() {
               setMode('forgot');
             }}>
             <ThemedText type="small" themeColor="textSecondary">
-              Esqueci minha senha
+              {t('login.forgotPassword')}
             </ThemedText>
           </Pressable>
         )}
         {mode === 'forgot' && (
           <ThemedText type="small" themeColor="textSecondary">
-            Informe o e-mail da sua conta e enviaremos um link para criar uma nova senha.
+            {t('login.forgotInstructions')}
           </ThemedText>
         )}
 
@@ -197,17 +215,21 @@ export default function LoginScreen() {
           ) : (
             <ThemedText type="smallBold" style={{ color: theme.accentText }}>
               {mode === 'login'
-                ? 'Entrar'
+                ? t('login.submitLogin')
                 : mode === 'signup'
-                  ? 'Criar conta'
-                  : 'Enviar link de recuperação'}
+                  ? t('login.submitSignup')
+                  : t('login.submitForgot')}
             </ThemedText>
           )}
         </Pressable>
 
         <View style={styles.switchRow}>
           <ThemedText type="small" themeColor="textSecondary">
-            {mode === 'login' ? 'Ainda não tem conta?' : mode === 'signup' ? 'Já tem conta?' : 'Lembrou a senha?'}
+            {mode === 'login'
+              ? t('login.noAccount')
+              : mode === 'signup'
+                ? t('login.hasAccount')
+                : t('login.rememberedPassword')}
           </ThemedText>
           <Pressable
             onPress={() => {
@@ -216,10 +238,48 @@ export default function LoginScreen() {
               setMode(mode === 'login' ? 'signup' : 'login');
             }}>
             <ThemedText type="linkPrimary">
-              {mode === 'login' ? 'Cadastre-se' : 'Faça login'}
+              {mode === 'login' ? t('login.signupLink') : t('login.loginLink')}
             </ThemedText>
           </Pressable>
         </View>
+
+        {mode !== 'forgot' && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.backgroundElement }]} />
+              <ThemedText type="small" themeColor="textSecondary">
+                {t('login.orDivider')}
+              </ThemedText>
+              <View style={[styles.dividerLine, { backgroundColor: theme.backgroundElement }]} />
+            </View>
+
+            <View style={styles.socialButtons}>
+              {appleAvailable && (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={
+                    scheme === 'dark'
+                      ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={12}
+                  style={styles.appleButton}
+                  onPress={() => handleSocialSignIn(signInWithApple)}
+                />
+              )}
+              <Pressable
+                disabled={busy}
+                style={[styles.button, styles.googleButton, { backgroundColor: theme.backgroundElement }]}
+                onPress={() => handleSocialSignIn(signInWithGoogle)}>
+                <Ionicons name="logo-google" size={20} color={theme.text} />
+                <ThemedText type="smallBold">{t('login.continueWithGoogle')}</ThemedText>
+              </Pressable>
+              {/* TODO: habilitar quando o app do Facebook Developers estiver pronto
+                  (o app nasce em modo desenvolvimento na Meta, só loga devs/testers
+                  até passar por App Review — ver LOGIN-SOCIAL.md). */}
+            </View>
+          </>
+        )}
 
         <ThemeSelector />
       </KeyboardAvoidingView>
@@ -293,6 +353,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: Spacing.two,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  socialButtons: {
+    gap: Spacing.two,
+  },
+  appleButton: {
+    height: 48,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: Spacing.two,
   },
 });

@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { SkippedEpisodesSheet } from '@/components/skipped-episodes-sheet';
@@ -17,8 +18,15 @@ import {
   onEpisodeWatchedChange,
   unmarkSeasonWatched,
 } from '@/lib/db';
+import { formatDate } from '@/lib/locale';
 import { syncEpisodeNotifications } from '@/lib/notifications';
-import { getSeasonDetails, getShowDetailsCached, stillUrl, type TmdbSeasonDetails } from '@/lib/tmdb';
+import {
+  getSeasonDetails,
+  getShowDetailsCached,
+  getShowNames,
+  stillUrl,
+  type TmdbSeasonDetails,
+} from '@/lib/tmdb';
 import {
   getSkippedEpisodes,
   markSkippedEpisodesWatched,
@@ -27,6 +35,7 @@ import {
 
 export default function SeasonScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const params = useLocalSearchParams<{ id: string; seasonNumber: string }>();
   const showId = Number(params.id);
@@ -53,9 +62,8 @@ export default function SeasonScreen() {
     if (!user || followEnsured.current) return;
     try {
       const show = await getShowDetailsCached(showId);
-      await followShowsBulk(user.id, [
-        { tmdb_id: show.id, name: show.name, poster_path: show.poster_path },
-      ]);
+      const names = await getShowNames(show.id);
+      await followShowsBulk(user.id, [{ tmdb_id: show.id, ...names, poster_path: show.poster_path }]);
       followEnsured.current = true;
       syncEpisodeNotifications(user.id).catch(() => {});
     } catch {
@@ -67,7 +75,7 @@ export default function SeasonScreen() {
     getSeasonDetails(showId, seasonNumber)
       .then(setSeason)
       .catch((err) =>
-        setError(err instanceof Error ? err.message : 'Erro ao carregar a temporada.')
+        setError(err instanceof Error ? err.message : t('season.loadError'))
       );
   }, [showId, seasonNumber]);
 
@@ -242,7 +250,7 @@ export default function SeasonScreen() {
               <ThemedText
                 type="smallBold"
                 style={{ color: allWatched ? theme.text : theme.accentText }}>
-                {allWatched ? 'Desmarcar temporada' : 'Marcar temporada como assistida'}
+                {allWatched ? t('season.unmarkAll') : t('season.markAll')}
               </ThemedText>
             </Pressable>
           ) : null
@@ -275,9 +283,9 @@ export default function SeasonScreen() {
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
                       {item.air_date
-                        ? new Date(`${item.air_date}T00:00:00`).toLocaleDateString('pt-BR')
-                        : 'Data não anunciada'}
-                      {!released && ' · Em breve'}
+                        ? formatDate(`${item.air_date}T00:00:00`)
+                        : t('season.dateNotAnnounced')}
+                      {!released && ` · ${t('season.comingSoon')}`}
                     </ThemedText>
                   </View>
                 </Pressable>

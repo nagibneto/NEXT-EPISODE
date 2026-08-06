@@ -1,0 +1,23 @@
+{
+  "intro": "Escolha o que você quer receber por notificação push.",
+  "loadError": "Erro ao carregar preferências.",
+  "saveError": "Não foi possível salvar a preferência.",
+  "options": {
+    "new_episodes": {
+      "label": "Episódios novos",
+      "description": "Quando uma série que você segue tem episódio novo no ar."
+    },
+    "friend_requests": {
+      "label": "Pedidos de amizade",
+      "description": "Quando alguém quer ser seu amigo."
+    },
+    "friend_accepted": {
+      "label": "Pedidos aceitos",
+      "description": "Quando alguém aceita seu pedido de amizade."
+    },
+    "feed_likes": {
+      "label": "Curtidas no que você assistiu",
+      "description": "Quando um amigo curte uma série ou filme que você assistiu."
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ import { useAuth } from '@/hooks/use-auth';
  */
 export default function ResetPasswordScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const { session, loading, updatePassword } = useAuth();
   const [password, setPassword] = useState('');
@@ -35,11 +37,11 @@ export default function ResetPasswordScreen() {
   async function handleSubmit() {
     setError(null);
     if (password.length < 6) {
-      setError('A nova senha precisa ter pelo menos 6 caracteres.');
+      setError(t('resetPassword.passwordTooShort'));
       return;
     }
     if (password !== confirmation) {
-      setError('As senhas não coincidem.');
+      setError(t('resetPassword.passwordMismatch'));
       return;
     }
     setBusy(true);
@@ -48,7 +50,7 @@ export default function ResetPasswordScreen() {
       // A sessão de recuperação já é uma sessão normal; segue direto pro app.
       router.replace('/(tabs)');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível trocar a senha.');
+      setError(err instanceof Error ? err.message : t('resetPassword.updateError'));
     } finally {
       setBusy(false);
     }
@@ -69,16 +71,16 @@ export default function ResetPasswordScreen() {
           ) : (
             <>
               <ThemedText type="subtitle" style={styles.title}>
-                Link inválido ou expirado
+                {t('resetPassword.invalidLinkTitle')}
               </ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.title}>
-                Peça um novo link em “Esqueci minha senha” na tela de login.
+                {t('resetPassword.invalidLinkBody')}
               </ThemedText>
               <Pressable
                 style={[styles.button, { backgroundColor: theme.accent }]}
                 onPress={() => router.replace('/login')}>
                 <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-                  Ir para o login
+                  {t('resetPassword.goToLogin')}
                 </ThemedText>
               </Pressable>
             </>
@@ -94,16 +96,16 @@ export default function ResetPasswordScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}>
         <ThemedText type="subtitle" style={styles.title}>
-          Criar nova senha
+          {t('resetPassword.title')}
         </ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.title}>
-          Escolha a nova senha da sua conta.
+          {t('resetPassword.subtitle')}
         </ThemedText>
 
         <View style={[styles.passwordRow, { backgroundColor: theme.backgroundElement }]}>
           <TextInput
             style={[styles.input, styles.passwordInput, { color: theme.text }]}
-            placeholder="Nova senha"
+            placeholder={t('resetPassword.newPasswordPlaceholder')}
             placeholderTextColor={theme.textSecondary}
             secureTextEntry={!showPassword}
             autoFocus
@@ -114,7 +116,7 @@ export default function ResetPasswordScreen() {
             onPress={() => setShowPassword((visible) => !visible)}
             hitSlop={8}
             style={styles.eyeButton}
-            accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+            accessibilityLabel={showPassword ? t('login.hidePassword') : t('login.showPassword')}>
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
               size={22}
@@ -124,7 +126,7 @@ export default function ResetPasswordScreen() {
         </View>
         <TextInput
           style={inputStyle}
-          placeholder="Confirmar nova senha"
+          placeholder={t('resetPassword.confirmPasswordPlaceholder')}
           placeholderTextColor={theme.textSecondary}
           secureTextEntry={!showPassword}
           value={confirmation}
@@ -142,7 +144,7 @@ export default function ResetPasswordScreen() {
             <ActivityIndicator color={theme.accentText} />
           ) : (
             <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-              Salvar nova senha
+              {t('resetPassword.submit')}
             </ThemedText>
           )}
         </Pressable>

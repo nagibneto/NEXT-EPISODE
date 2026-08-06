@@ -1,0 +1,6 @@
+{
+  "message_one": "You're marking a later episode and left {{count}} earlier episode unwatched. Do you want to mark it as watched too?",
+  "message_other": "You're marking a later episode and left {{count}} earlier episodes unwatched. Do you want to mark them as watched too?",
+  "skipOption": "Just this episode",
+  "markAllOption": "Mark all as watched"
+}

@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -88,6 +89,7 @@ export function HeaderActions({ showAvatar = true }: { showAvatar?: boolean }) {
 export function StackHeader({ navigation, options, route, back }: NativeStackHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const title = options.title ?? route.name;
 
   return (
@@ -96,7 +98,9 @@ export function StackHeader({ navigation, options, route, back }: NativeStackHea
         {back ? (
           <Pressable hitSlop={8} onPress={navigation.goBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={26} color={theme.accent} />
-            <ThemedText style={[styles.backLabel, { color: theme.accent }]}>Voltar</ThemedText>
+            <ThemedText style={[styles.backLabel, { color: theme.accent }]}>
+              {t('common.back')}
+            </ThemedText>
           </Pressable>
         ) : (
           <View style={styles.backButton} />

@@ -1,15 +1,22 @@
 import { Poppins_600SemiBold, useFonts } from '@expo-google-fonts/poppins';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { StackHeader } from '@/components/app-header';
 import { AuthProvider } from '@/hooks/use-auth';
+import { LanguagePreferenceProvider } from '@/hooks/use-language-preference';
+import { useNotificationNavigation } from '@/hooks/use-notification-navigation';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
+// Garante que o i18next esteja inicializado antes de qualquer useTranslation().
+import '@/lib/i18n';
 
 /** Separado do RootLayout porque precisa ler o contexto de preferência de tema. */
 function RootNavigator() {
   const { scheme } = useThemePreference();
+  const { t } = useTranslation();
+  useNotificationNavigation();
 
   return (
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -19,14 +26,18 @@ function RootNavigator() {
       <Stack screenOptions={{ header: (props) => <StackHeader {...props} /> }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="choose-username" options={{ headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
-        <Stack.Screen name="show/[id]/index" options={{ title: 'Série' }} />
-        <Stack.Screen name="movie/[id]" options={{ title: 'Filme' }} />
-        <Stack.Screen name="show/[id]/season/[seasonNumber]" options={{ title: 'Temporada' }} />
+        <Stack.Screen name="show/[id]/index" options={{ title: t('common.nav.show') }} />
+        <Stack.Screen name="movie/[id]" options={{ title: t('common.nav.movie') }} />
+        <Stack.Screen
+          name="show/[id]/season/[seasonNumber]"
+          options={{ title: t('common.nav.season') }}
+        />
         <Stack.Screen
           name="episode/[showId]/[seasonNumber]/[episodeNumber]"
           options={({ route }) => ({
-            title: 'Episódio',
+            title: t('common.nav.episode'),
             // Anterior/Próximo trocam de episódio com router.replace, que por
             // padrão sempre anima como se fosse avançar. O parâmetro
             // "direction" (só usado aqui, não pela tela) inverte o lado da
@@ -37,15 +48,22 @@ function RootNavigator() {
                 : 'slide_from_right',
           })}
         />
-        <Stack.Screen name="import-tv-time" options={{ title: 'Importar do TV Time' }} />
-        <Stack.Screen name="friends" options={{ title: 'Amigos' }} />
-        <Stack.Screen name="blocked-users" options={{ title: 'Usuários bloqueados' }} />
-        <Stack.Screen name="stats" options={{ title: 'Estatísticas' }} />
-        <Stack.Screen name="user/[id]" options={{ title: 'Perfil' }} />
-        <Stack.Screen name="favorites" options={{ title: 'Favoritos' }} />
-        <Stack.Screen name="to-watch" options={{ title: 'Para assistir' }} />
-        <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />
-        <Stack.Screen name="notification-settings" options={{ title: 'Preferências de notificação' }} />
+        <Stack.Screen name="import-tv-time" options={{ title: t('common.nav.importTvTime') }} />
+        <Stack.Screen name="friends" options={{ title: t('common.nav.friends') }} />
+        <Stack.Screen
+          name="find-friends-contacts"
+          options={{ title: t('common.nav.findFriendsContacts') }}
+        />
+        <Stack.Screen name="blocked-users" options={{ title: t('common.nav.blockedUsers') }} />
+        <Stack.Screen name="stats" options={{ title: t('common.nav.stats') }} />
+        <Stack.Screen name="user/[id]" options={{ title: t('common.nav.profile') }} />
+        <Stack.Screen name="favorites" options={{ title: t('common.nav.favorites') }} />
+        <Stack.Screen name="to-watch" options={{ title: t('common.nav.toWatch') }} />
+        <Stack.Screen name="notifications" options={{ title: t('common.nav.notifications') }} />
+        <Stack.Screen
+          name="notification-settings"
+          options={{ title: t('common.nav.notificationSettings') }}
+        />
       </Stack>
     </ThemeProvider>
   );
@@ -62,7 +80,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <ThemePreferenceProvider>
-          <RootNavigator />
+          <LanguagePreferenceProvider>
+            <RootNavigator />
+          </LanguagePreferenceProvider>
         </ThemePreferenceProvider>
       </AuthProvider>
     </GestureHandlerRootView>

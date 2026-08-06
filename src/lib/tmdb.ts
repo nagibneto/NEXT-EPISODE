@@ -6,10 +6,27 @@
  * - Chave da API v3 (32 caracteres) → enviada como query param api_key.
  */
 
+import { i18n, DEFAULT_LANGUAGE, type AppLanguage } from './i18n';
+
 const BASE_URL = 'https://api.themoviedb.org/3';
 const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
 const IS_V4_TOKEN = !!API_KEY && API_KEY.startsWith('eyJ');
-const LANGUAGE = 'pt-BR';
+
+// Definido por useLanguagePreference sempre que o idioma do app muda.
+let currentLanguage: AppLanguage = DEFAULT_LANGUAGE;
+
+export function setTmdbLanguage(lang: AppLanguage) {
+  currentLanguage = lang;
+}
+
+/** Região usada para catálogo de streaming — não existe seletor próprio, segue o idioma. */
+function currentRegion() {
+  return currentLanguage === 'en-US' ? 'US' : 'BR';
+}
+
+export function otherLanguage(lang: AppLanguage): AppLanguage {
+  return lang === 'en-US' ? 'pt-BR' : 'en-US';
+}
 
 export const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -81,18 +98,18 @@ export interface TmdbSeasonDetails {
 
 async function get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   if (!API_KEY) {
-    throw new Error(
-      'Chave da TMDB ausente. Defina EXPO_PUBLIC_TMDB_API_KEY no arquivo .env (veja o README).'
-    );
+    throw new Error(i18n.t('tmdb.missingApiKey'));
   }
-  const query = new URLSearchParams({ language: LANGUAGE, ...params });
+  const query = new URLSearchParams({ language: currentLanguage, ...params });
   if (!IS_V4_TOKEN) query.set('api_key', API_KEY);
   const response = await fetch(`${BASE_URL}${path}?${query}`, {
     headers: IS_V4_TOKEN ? { Authorization: `Bearer ${API_KEY}` } : undefined,
   });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`TMDB ${response.status} em ${path}: ${body}`);
+    throw new Error(
+      i18n.t('tmdb.requestError', { status: response.status, path, body })
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -112,8 +129,8 @@ export function getPopularShows(page = 1) {
   });
 }
 
-export function getShowDetails(showId: number) {
-  return get<TmdbShowDetails>(`/tv/${showId}`);
+export function getShowDetails(showId: number, language: AppLanguage = currentLanguage) {
+  return get<TmdbShowDetails>(`/tv/${showId}`, { language });
 }
 
 // ---------- Gêneros e descoberta ----------
@@ -127,16 +144,17 @@ export interface TmdbGenre {
 const genresCache = new Map<string, Promise<TmdbGenre[]>>();
 
 export function getGenres(media: 'tv' | 'movie') {
-  let cached = genresCache.get(media);
+  const key = `${media}-${currentLanguage}`;
+  let cached = genresCache.get(key);
   if (!cached) {
     cached = get<{ genres: TmdbGenre[] }>(`/genre/${media}/list`)
       .then((data) => data.genres)
       .catch((error) => {
         // Não guarda falhas no cache para permitir nova tentativa.
-        genresCache.delete(media);
+        genresCache.delete(key);
         throw error;
       });
-    genresCache.set(media, cached);
+    genresCache.set(key, cached);
   }
   return cached;
 }
@@ -167,7 +185,7 @@ function discoverParams(filters: DiscoverFilters) {
   if (filters.providerId) {
     params.with_watch_providers = String(filters.providerId);
     // O filtro de provider só funciona amarrado a uma região.
-    params.watch_region = 'BR';
+    params.watch_region = currentRegion();
   }
   return params;
 }
@@ -188,19 +206,29 @@ export function discoverMovies(filters: DiscoverFilters = {}) {
 
 // Cache em memória para telas que consultam muitas séries de uma vez
 // (feed social e estatísticas). Dura enquanto o app estiver aberto.
-const showDetailsCache = new Map<number, Promise<TmdbShowDetails>>();
+const showDetailsCache = new Map<string, Promise<TmdbShowDetails>>();
 
-export function getShowDetailsCached(showId: number) {
-  let cached = showDetailsCache.get(showId);
+export function getShowDetailsCached(showId: number, language: AppLanguage = currentLanguage) {
+  const key = `${showId}-${language}`;
+  let cached = showDetailsCache.get(key);
   if (!cached) {
-    cached = getShowDetails(showId).catch((error) => {
+    cached = getShowDetails(showId, language).catch((error) => {
       // Não guarda falhas no cache para permitir nova tentativa.
-      showDetailsCache.delete(showId);
+      showDetailsCache.delete(key);
       throw error;
     });
-    showDetailsCache.set(showId, cached);
+    showDetailsCache.set(key, cached);
   }
   return cached;
+}
+
+/** Nome da série nos dois idiomas suportados — usado ao gravar seguir/marcar assistido. */
+export async function getShowNames(showId: number): Promise<{ name: string; name_en: string }> {
+  const [pt, en] = await Promise.all([
+    getShowDetailsCached(showId, 'pt-BR'),
+    getShowDetailsCached(showId, 'en-US'),
+  ]);
+  return { name: pt.name, name_en: en.name };
 }
 
 // ---------- Filmes ----------
@@ -238,25 +266,35 @@ export function getPopularMovies(page = 1) {
   });
 }
 
-export function getMovieDetails(movieId: number) {
-  return get<TmdbMovieDetails>(`/movie/${movieId}`);
+export function getMovieDetails(movieId: number, language: AppLanguage = currentLanguage) {
+  return get<TmdbMovieDetails>(`/movie/${movieId}`, { language });
 }
 
 // Mesmo esquema de cache das séries, para telas que consultam muitos filmes
 // de uma vez (estatísticas).
-const movieDetailsCache = new Map<number, Promise<TmdbMovieDetails>>();
+const movieDetailsCache = new Map<string, Promise<TmdbMovieDetails>>();
 
-export function getMovieDetailsCached(movieId: number) {
-  let cached = movieDetailsCache.get(movieId);
+export function getMovieDetailsCached(movieId: number, language: AppLanguage = currentLanguage) {
+  const key = `${movieId}-${language}`;
+  let cached = movieDetailsCache.get(key);
   if (!cached) {
-    cached = getMovieDetails(movieId).catch((error) => {
+    cached = getMovieDetails(movieId, language).catch((error) => {
       // Não guarda falhas no cache para permitir nova tentativa.
-      movieDetailsCache.delete(movieId);
+      movieDetailsCache.delete(key);
       throw error;
     });
-    movieDetailsCache.set(movieId, cached);
+    movieDetailsCache.set(key, cached);
   }
   return cached;
+}
+
+/** Título do filme nos dois idiomas suportados — usado ao gravar assistido/favorito/watchlist. */
+export async function getMovieNames(movieId: number): Promise<{ title: string; title_en: string }> {
+  const [pt, en] = await Promise.all([
+    getMovieDetailsCached(movieId, 'pt-BR'),
+    getMovieDetailsCached(movieId, 'en-US'),
+  ]);
+  return { title: pt.title, title_en: en.title };
 }
 
 /** Duração típica de episódio/filme quando a TMDB não informa a real. */
@@ -315,8 +353,9 @@ export function providerLogoUrl(path: string | null) {
 }
 
 /**
- * Em quais streamings o título está disponível no Brasil. Os dados vêm do
- * JustWatch via TMDB — a atribuição "JustWatch" na UI é exigência deles.
+ * Em quais streamings o título está disponível na região do usuário. Os
+ * dados vêm do JustWatch via TMDB — a atribuição "JustWatch" na UI é
+ * exigência deles.
  */
 export async function getWatchProviders(
   media: 'tv' | 'movie',
@@ -325,46 +364,49 @@ export async function getWatchProviders(
   const data = await get<{
     results: Record<string, { link?: string; flatrate?: TmdbWatchProvider[] }>;
   }>(`/${media}/${id}/watch/providers`);
-  const br = data.results?.BR;
-  const flatrate = (br?.flatrate ?? [])
+  const region = data.results?.[currentRegion()];
+  const flatrate = (region?.flatrate ?? [])
     // O JustWatch lista variantes do mesmo serviço ("Netflix Standard with
     // Ads", "HBO Max Amazon Channel") — só os planos/revendas principais
     // interessam aqui.
     .filter((p) => !/with ads|amazon channel|apple tv channel/i.test(p.provider_name))
     .sort((a, b) => a.display_priority - b.display_priority);
-  return { link: br?.link ?? null, flatrate };
+  return { link: region?.link ?? null, flatrate };
 }
 
-// Como os gêneros, a lista de streamings do país quase não muda; cache pela
-// duração do app (uma entrada para séries, outra para filmes).
+// Como os gêneros, a lista de streamings da região quase não muda; cache pela
+// duração do app (uma entrada por combinação de mídia + região).
 const streamingProvidersCache = new Map<string, Promise<TmdbWatchProvider[]>>();
 
 /**
- * Todos os streamings com catálogo no Brasil, ordenados por relevância
- * (dados JustWatch via TMDB — a atribuição "JustWatch" na UI é exigência deles).
+ * Todos os streamings com catálogo na região do usuário, ordenados por
+ * relevância (dados JustWatch via TMDB — a atribuição "JustWatch" na UI é
+ * exigência deles).
  */
 export function getStreamingProviders(media: 'tv' | 'movie') {
-  let cached = streamingProvidersCache.get(media);
+  const region = currentRegion();
+  const key = `${media}-${region}`;
+  let cached = streamingProvidersCache.get(key);
   if (!cached) {
     cached = get<{
       results: (TmdbWatchProvider & { display_priorities?: Record<string, number> })[];
-    }>(`/watch/providers/${media}`, { watch_region: 'BR' })
+    }>(`/watch/providers/${media}`, { watch_region: region })
       .then((data) =>
         data.results
           // Mesmo critério do getWatchProviders: variantes/revendas fora.
           .filter((p) => !/with ads|amazon channel|apple tv channel/i.test(p.provider_name))
           .sort(
             (a, b) =>
-              (a.display_priorities?.BR ?? a.display_priority) -
-              (b.display_priorities?.BR ?? b.display_priority)
+              (a.display_priorities?.[region] ?? a.display_priority) -
+              (b.display_priorities?.[region] ?? b.display_priority)
           )
       )
       .catch((error) => {
         // Não guarda falhas no cache para permitir nova tentativa.
-        streamingProvidersCache.delete(media);
+        streamingProvidersCache.delete(key);
         throw error;
       });
-    streamingProvidersCache.set(media, cached);
+    streamingProvidersCache.set(key, cached);
   }
   return cached;
 }
@@ -378,7 +420,7 @@ export function getSeasonDetails(showId: number, seasonNumber: number) {
 const seasonDetailsCache = new Map<string, Promise<TmdbSeasonDetails>>();
 
 export function getSeasonDetailsCached(showId: number, seasonNumber: number) {
-  const key = `${showId}-${seasonNumber}`;
+  const key = `${showId}-${seasonNumber}-${currentLanguage}`;
   let cached = seasonDetailsCache.get(key);
   if (!cached) {
     cached = getSeasonDetails(showId, seasonNumber).catch((error) => {

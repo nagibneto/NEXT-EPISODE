@@ -19,6 +19,20 @@ alter table public.profiles
 alter table public.profiles
   add column if not exists avatar_id integer check (avatar_id between 1 and 12);
 
+-- Idioma do app (sincronizado pelo cliente); usado pelas Edge Functions de
+-- push para notificar no idioma certo.
+alter table public.profiles
+  add column if not exists language text not null default 'pt-BR'
+    check (language in ('pt-BR', 'en-US'));
+
+-- true para quem entrou por login social (Google/Apple/Facebook): esses
+-- provedores não mandam um @usuário, só nome e foto, então o trigger abaixo
+-- gera um username temporário e marca a flag. O app força a escolha de um
+-- @usuário definitivo (ver src/app/choose-username.tsx) antes de liberar as
+-- abas enquanto a flag estiver true.
+alter table public.profiles
+  add column if not exists needs_username boolean not null default false;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "Perfis são visíveis para todos os usuários autenticados" on public.profiles;
@@ -29,14 +43,17 @@ drop policy if exists "Usuário pode atualizar o próprio perfil" on public.prof
 create policy "Usuário pode atualizar o próprio perfil"
   on public.profiles for update to authenticated using (auth.uid() = id);
 
--- Cria o perfil automaticamente no cadastro, usando o username enviado no signUp.
+-- Cria o perfil automaticamente no cadastro. No cadastro por e-mail o
+-- username vem no signUp (ver src/hooks/use-auth.tsx); no login social não
+-- vem nenhum, então geramos um temporário e marcamos needs_username para o
+-- app pedir um definitivo antes de liberar as abas.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, username, display_name)
+  insert into public.profiles (id, username, display_name, needs_username)
   values (
     new.id,
     coalesce(
@@ -45,8 +62,11 @@ begin
     ),
     coalesce(
       new.raw_user_meta_data ->> 'display_name',
+      new.raw_user_meta_data ->> 'full_name', -- Google/Facebook
+      new.raw_user_meta_data ->> 'name',      -- Apple (quando vier)
       new.raw_user_meta_data ->> 'username'
-    )
+    ),
+    new.raw_user_meta_data ->> 'username' is null
   );
   return new;
 end;
@@ -66,6 +86,12 @@ create table if not exists public.followed_shows (
   followed_at timestamptz not null default now(),
   primary key (user_id, tmdb_id)
 );
+
+-- Nome em inglês, gravado ao lado do nome em pt-BR (coluna "name" acima)
+-- para exibir localizado sem reconsultar a TMDB. Nulo = registro antigo,
+-- ainda não migrado (ver scripts/backfill-i18n-titles.js).
+alter table public.followed_shows
+  add column if not exists name_en text;
 
 alter table public.followed_shows enable row level security;
 
@@ -100,6 +126,12 @@ create table if not exists public.watched_movies (
   watched_at timestamptz not null default now(),
   primary key (user_id, tmdb_id)
 );
+
+-- Título em inglês, gravado ao lado do título em pt-BR (coluna "title"
+-- acima) para exibir localizado sem reconsultar a TMDB. Nulo = registro
+-- antigo, ainda não migrado (ver scripts/backfill-i18n-titles.js).
+alter table public.watched_movies
+  add column if not exists title_en text;
 
 alter table public.watched_movies enable row level security;
 
@@ -565,6 +597,48 @@ create policy "Usuário gerencia os próprios push tokens"
   on public.push_tokens for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- ---------- Telefone para achar amigos pelos contatos ----------
+-- Fica fora de "profiles" de propósito: a policy de select de profiles é
+-- "using (true)" para qualquer autenticado, o que vazaria o telefone de
+-- todo mundo. Aqui cada um só enxerga a própria linha.
+--
+-- phone_hash é sha256(E.164) + pepper do servidor (PHONE_HASH_PEPPER, um
+-- segredo da Edge Function, nunca exposto ao cliente) — ver
+-- supabase/functions/set-phone-number e supabase/functions/match-contacts.
+-- De propósito NÃO existe policy de insert/update: a única forma de gravar
+-- telefone é pela Edge Function set-phone-number (usa o service role e
+-- calcula o pepper no servidor), então o cliente nunca grava um hash sem
+-- pepper nem forja o telefone de outra pessoa.
+create table if not exists public.phone_contacts (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  phone_number text not null,
+  phone_hash text not null unique,
+  updated_at timestamptz not null default now()
+);
+
+-- Alguém pode ter salvo o telefone de um jeito diferente do que a pessoa
+-- cadastrou (sem "+55", ou até sem o DDD) — ver phoneMatchVariants em
+-- src/lib/phone.ts. Essas duas colunas guardam hash de variantes menos
+-- específicas do mesmo número, só pra aumentar a chance de achar o match;
+-- de propósito SEM "unique" (números "sem DDD" podem colidir entre pessoas
+-- de cidades diferentes, isso é esperado).
+alter table public.phone_contacts add column if not exists phone_hash_national text;
+alter table public.phone_contacts add column if not exists phone_hash_local text;
+
+alter table public.phone_contacts enable row level security;
+
+drop policy if exists "Usuário vê o próprio telefone" on public.phone_contacts;
+create policy "Usuário vê o próprio telefone"
+  on public.phone_contacts for select to authenticated using (auth.uid() = user_id);
+
+drop policy if exists "Usuário remove o próprio telefone" on public.phone_contacts;
+create policy "Usuário remove o próprio telefone"
+  on public.phone_contacts for delete to authenticated using (auth.uid() = user_id);
+
+create index if not exists phone_contacts_hash_idx on public.phone_contacts (phone_hash);
+create index if not exists phone_contacts_hash_national_idx on public.phone_contacts (phone_hash_national);
+create index if not exists phone_contacts_hash_local_idx on public.phone_contacts (phone_hash_local);
+
 -- ---------- Estatísticas ----------
 -- Conta episódios assistidos por série sem esbarrar no limite de linhas da API.
 -- last_watched_at alimenta a ordenação da watchlist (série marcada mais
@@ -749,6 +823,12 @@ create table if not exists public.favorites (
   primary key (user_id, media_type, tmdb_id)
 );
 
+-- Título em inglês, gravado ao lado do título em pt-BR (coluna "title"
+-- acima) para exibir localizado sem reconsultar a TMDB. Nulo = registro
+-- antigo, ainda não migrado (ver scripts/backfill-i18n-titles.js).
+alter table public.favorites
+  add column if not exists title_en text;
+
 alter table public.favorites enable row level security;
 
 drop policy if exists "Usuário gerencia os próprios favoritos" on public.favorites;
@@ -767,6 +847,12 @@ create table if not exists public.watchlist_movies (
   added_at timestamptz not null default now(),
   primary key (user_id, tmdb_id)
 );
+
+-- Título em inglês, gravado ao lado do título em pt-BR (coluna "title"
+-- acima) para exibir localizado sem reconsultar a TMDB. Nulo = registro
+-- antigo, ainda não migrado (ver scripts/backfill-i18n-titles.js).
+alter table public.watchlist_movies
+  add column if not exists title_en text;
 
 alter table public.watchlist_movies enable row level security;
 

@@ -1,0 +1,13 @@
+{
+  "loadError": "Couldn't load the movie.",
+  "updateError": "Couldn't update.",
+  "rateError": "Couldn't save your rating.",
+  "commentsLocked": "You haven't marked this movie as watched yet. Comments may contain spoilers.",
+  "minutesSuffix": "min",
+  "watched": "✓ Watched",
+  "markWatched": "+ Mark as watched",
+  "toWatch": "Want to watch",
+  "yourRating": "Your rating",
+  "communityAverage_one": "Community average: {{rating}}/5 ({{count}} vote)",
+  "communityAverage_other": "Community average: {{rating}}/5 ({{count}} votes)"
+}

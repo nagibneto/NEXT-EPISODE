@@ -3,6 +3,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
 import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { CastList } from '@/components/cast-list';
@@ -23,12 +24,14 @@ import {
   unfollowShow,
   unmarkSeasonWatched,
 } from '@/lib/db';
+import { formatDate } from '@/lib/locale';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   backdropUrl,
   getSeasonAverageRatings,
   getSeasonDetailsCached,
   getShowDetails,
+  getShowNames,
   posterUrl,
   type TmdbSeasonSummary,
   type TmdbShowDetails,
@@ -36,6 +39,7 @@ import {
 
 export default function ShowDetailsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const showId = Number(id);
@@ -54,7 +58,7 @@ export default function ShowDetailsScreen() {
   useEffect(() => {
     getShowDetails(showId)
       .then(setShow)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Erro ao carregar a série.'));
+      .catch((err) => setError(err instanceof Error ? err.message : t('show.loadError')));
     if (user) {
       isFollowing(user.id, showId)
         .then(setFollowing)
@@ -131,16 +135,17 @@ export default function ShowDetailsScreen() {
         await unfollowShow(user.id, show.id);
         setFollowing(false);
       } else {
+        const names = await getShowNames(show.id);
         await followShow(user.id, {
           tmdb_id: show.id,
-          name: show.name,
+          ...names,
           poster_path: show.poster_path,
         });
         setFollowing(true);
       }
       syncEpisodeNotifications(user.id).catch(() => {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível atualizar.');
+      setError(err instanceof Error ? err.message : t('show.updateError'));
     } finally {
       setBusy(false);
     }
@@ -153,10 +158,12 @@ export default function ShowDetailsScreen() {
     setFavorite(next);
     try {
       if (next) {
+        const names = await getShowNames(show.id);
         await addFavorite(user.id, {
           media_type: 'tv',
           tmdb_id: show.id,
-          title: show.name,
+          title: names.name,
+          title_en: names.name_en,
           poster_path: show.poster_path,
         });
       } else {
@@ -184,9 +191,10 @@ export default function ShowDetailsScreen() {
         // Marcar assistido também passa a seguir a série, para ela aparecer
         // na watchlist (mesmo comportamento da tela da temporada).
         if (!following) {
+          const names = await getShowNames(show.id);
           await followShow(user.id, {
             tmdb_id: show.id,
-            name: show.name,
+            ...names,
             poster_path: show.poster_path,
           });
           setFollowing(true);
@@ -202,8 +210,8 @@ export default function ShowDetailsScreen() {
       }
     } catch (err) {
       Alert.alert(
-        'Não foi possível atualizar',
-        err instanceof Error ? err.message : 'Tente novamente.'
+        t('show.updateErrorTitle'),
+        err instanceof Error ? err.message : t('show.tryAgain')
       );
     } finally {
       setSeasonBusy(null);
@@ -213,9 +221,9 @@ export default function ShowDetailsScreen() {
   /** Toque na bolinha da temporada: marca tudo, ou confirma antes de desmarcar. */
   function onSeasonCheckPress(season: TmdbSeasonSummary, complete: boolean) {
     if (complete) {
-      Alert.alert('Desmarcar temporada', `Desmarcar todos os episódios de ${season.name}?`, [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Desmarcar', style: 'destructive', onPress: () => setSeasonWatched(season, false) },
+      Alert.alert(t('show.unmarkSeasonTitle'), t('show.unmarkSeasonMessage', { name: season.name }), [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('show.unmarkButton'), style: 'destructive', onPress: () => setSeasonWatched(season, false) },
       ]);
     } else {
       setSeasonWatched(season, true);
@@ -281,8 +289,8 @@ export default function ShowDetailsScreen() {
             {show.genres.map((genre) => genre.name).join(' · ')}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {show.number_of_seasons} temporada{show.number_of_seasons === 1 ? '' : 's'} ·{' '}
-            {show.number_of_episodes} episódios
+            {t('show.seasonsCount', { count: show.number_of_seasons })} ·{' '}
+            {show.number_of_episodes} {t('show.episodesWord')}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             ⭐ {show.vote_average.toFixed(1)} (TMDB)
@@ -303,7 +311,7 @@ export default function ShowDetailsScreen() {
         <ThemedText
           type="smallBold"
           style={{ color: following ? theme.text : theme.accentText }}>
-          {following === null ? '…' : following ? '✓ Seguindo' : '+ Seguir série'}
+          {following === null ? '…' : following ? t('show.following') : t('show.follow')}
         </ThemedText>
       </Pressable>
 
@@ -319,7 +327,7 @@ export default function ShowDetailsScreen() {
         {next?.air_date && (
           <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold" style={{ color: theme.accent }}>
-              Próximo episódio
+              {t('show.nextEpisode')}
             </ThemedText>
             <ThemedText type="small">
               S{String(next.season_number).padStart(2, '0')}E
@@ -327,7 +335,7 @@ export default function ShowDetailsScreen() {
               {next.name ? ` — ${next.name}` : ''}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {new Date(`${next.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
+              {formatDate(`${next.air_date}T00:00:00`, {
                 weekday: 'long',
                 day: '2-digit',
                 month: 'long',
@@ -340,7 +348,7 @@ export default function ShowDetailsScreen() {
       <CastList media="tv" tmdbId={show.id} />
 
       <ThemedText type="smallBold" style={styles.sectionTitle}>
-        Temporadas
+        {t('show.seasonsTitle')}
       </ThemedText>
       {seasons.map((season) => {
         const watchedCount = Math.min(
@@ -364,7 +372,7 @@ export default function ShowDetailsScreen() {
                   {following || watchedBySeason.has(season.season_number)
                     ? `${watchedCount}/`
                     : ''}
-                  {season.episode_count} episódios
+                  {season.episode_count} {t('show.episodesWord')}
                   {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
                 </ThemedText>
               </View>

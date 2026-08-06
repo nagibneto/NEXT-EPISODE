@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,6 +27,7 @@ export function WatchProviders({
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [providers, setProviders] = useState<TmdbWatchProviders | null>(null);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function WatchProviders({
       style={[styles.card, { backgroundColor: theme.backgroundElement }, style]}
       disabled={!providers.link}
       onPress={() => providers.link && Linking.openURL(providers.link)}>
-      <ThemedText type="smallBold">Assista em</ThemedText>
+      <ThemedText type="smallBold">{t('watchProviders.header')}</ThemedText>
       <View style={styles.logoRow}>
         {providers.flatrate.map((provider) => {
           const logo = providerLogoUrl(provider.logo_path);
@@ -70,7 +72,7 @@ export function WatchProviders({
         })}
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        Disponibilidade no Brasil · dados JustWatch
+        {t('watchProviders.attribution')}
       </ThemedText>
     </Pressable>
   );

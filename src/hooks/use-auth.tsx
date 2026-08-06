@@ -1,8 +1,12 @@
 import type { Session, User } from '@supabase/supabase-js';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 
+import { updateDisplayName } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -38,6 +42,12 @@ interface AuthContextValue {
   resetPassword: (email: string) => Promise<void>;
   /** Troca a senha do usuário logado (usado após abrir o link de recuperação). */
   updatePassword: (password: string) => Promise<void>;
+  /** Login nativo com Apple (ASAuthorization). Só existe capability no iOS. */
+  signInWithApple: () => Promise<void>;
+  /** Login via navegador (OAuth) com Google. */
+  signInWithGoogle: () => Promise<void>;
+  /** Login via navegador (OAuth) com Facebook. */
+  signInWithFacebook: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -115,6 +125,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }
 
+  async function signInWithApple() {
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+    let credential: AppleAuthentication.AppleAuthenticationCredential;
+    try {
+      credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+    } catch (err) {
+      // Usuário cancelou o painel de login da Apple — não é um erro de verdade.
+      if ((err as { code?: string }).code === 'ERR_REQUEST_CANCELED') return;
+      throw err;
+    }
+    if (!credential.identityToken) throw new Error('A Apple não retornou um token de identidade.');
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+      nonce: rawNonce,
+    });
+    if (error) throw error;
+
+    // fullName só vem preenchido na primeiríssima autorização deste usuário.
+    const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (fullName && data.user) {
+      updateDisplayName(data.user.id, fullName).catch(() => {});
+    }
+  }
+
+  async function signInWithOAuthProvider(provider: 'google' | 'facebook') {
+    const redirectTo = Linking.createURL('/login');
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, skipBrowserRedirect: Platform.OS !== 'web' },
+    });
+    if (error) throw error;
+    if (Platform.OS === 'web') return; // signInWithOAuth já redirecionou a página.
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === 'success') {
+      await applySessionFromUrl(result.url);
+    }
+  }
+
+  const signInWithGoogle = () => signInWithOAuthProvider('google');
+  const signInWithFacebook = () => signInWithOAuthProvider('facebook');
+
   return (
     <AuthContext.Provider
       value={{
@@ -126,6 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         resetPassword,
         updatePassword,
+        signInWithApple,
+        signInWithGoogle,
+        signInWithFacebook,
       }}>
       {children}
     </AuthContext.Provider>

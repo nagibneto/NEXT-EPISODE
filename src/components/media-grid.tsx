@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ShowCard } from '@/components/show-card';
@@ -31,6 +32,7 @@ export function MediaGrid({
   emptyText: string;
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<MediaFilter>(null);
 
   const filtered = useMemo(() => {
@@ -51,8 +53,8 @@ export function MediaGrid({
       <View style={styles.chipsRow}>
         {(
           [
-            { value: 'tv', label: 'Séries' },
-            { value: 'movie', label: 'Filmes' },
+            { value: 'tv', label: t('mediaGrid.shows') },
+            { value: 'movie', label: t('mediaGrid.movies') },
           ] as const
         ).map((option) => (
           <Pressable
@@ -85,7 +87,7 @@ export function MediaGrid({
         ListEmptyComponent={
           filter && items.length > 0 ? (
             <ThemedText themeColor="textSecondary" style={styles.message}>
-              Nada por aqui com esse filtro.
+              {t('mediaGrid.noResultsFiltered')}
             </ThemedText>
           ) : (
             <View style={styles.center}>

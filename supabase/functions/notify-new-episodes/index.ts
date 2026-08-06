@@ -17,6 +17,20 @@ const TMDB_BASE = 'https://api.themoviedb.org/3';
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_PUSH_CHUNK = 100;
 
+type Language = 'pt-BR' | 'en-US';
+
+/** Textos de notificação por idioma — runtime separado do bundle do app, sem acesso ao i18next do cliente. */
+const STRINGS: Record<Language, { title: (showName: string) => string; body: (code: string, episodeName: string) => string }> = {
+  'pt-BR': {
+    title: (showName) => `Novo episódio de ${showName}!`,
+    body: (code, episodeName) => `${code} — "${episodeName}" estreia hoje.`,
+  },
+  'en-US': {
+    title: (showName) => `New episode of ${showName}!`,
+    body: (code, episodeName) => `${code} — "${episodeName}" airs today.`,
+  },
+};
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -35,12 +49,12 @@ interface TmdbShow {
   last_episode_to_air: TmdbEpisode | null;
 }
 
-async function fetchShow(tmdbId: number): Promise<TmdbShow | null> {
+async function fetchShow(tmdbId: number, language: Language): Promise<TmdbShow | null> {
   const apiKey = Deno.env.get('TMDB_API_KEY');
   if (!apiKey) throw new Error('Segredo TMDB_API_KEY não configurado.');
   const isV4 = apiKey.startsWith('eyJ');
   const url = new URL(`${TMDB_BASE}/tv/${tmdbId}`);
-  url.searchParams.set('language', 'pt-BR');
+  url.searchParams.set('language', language);
   if (!isV4) url.searchParams.set('api_key', apiKey);
   const response = await fetch(url, {
     headers: isV4 ? { Authorization: `Bearer ${apiKey}` } : undefined,
@@ -84,6 +98,17 @@ Deno.serve(async () => {
     tokensByUser.delete(row.user_id);
   }
 
+  // 1c. Idioma de cada usuário, para notificar no idioma certo.
+  const { data: languageRows, error: languageError } = await supabase
+    .from('profiles')
+    .select('id, language')
+    .in('id', [...tokensByUser.keys()]);
+  if (languageError) throw languageError;
+  const languageByUser = new Map<string, Language>();
+  for (const row of languageRows ?? []) {
+    languageByUser.set(row.id, row.language === 'en-US' ? 'en-US' : 'pt-BR');
+  }
+
   // 2. Séries seguidas pelos usuários que têm token.
   const { data: followRows, error: followsError } = await supabase
     .from('followed_shows')
@@ -109,26 +134,39 @@ Deno.serve(async () => {
 
   for (const [tmdbId, followers] of followersByShow) {
     try {
-      const show = await fetchShow(tmdbId);
-      if (!show) continue;
-      const episode = episodeAiringOn(show, today);
-      if (!episode) continue;
-
-      const code = `S${String(episode.season_number).padStart(2, '0')}E${String(
-        episode.episode_number
-      ).padStart(2, '0')}`;
+      // Agrupa os seguidores por idioma — normalmente só 1, até 2 se a série
+      // tiver seguidores nos dois idiomas.
+      const followersByLanguage = new Map<Language, string[]>();
       for (const userId of followers) {
-        for (const token of tokensByUser.get(userId) ?? []) {
-          messages.push({
-            to: token,
-            title: `Novo episódio de ${show.name}!`,
-            body: `${code} — "${episode.name}" estreia hoje.`,
-            data: {
-              tmdbShowId: tmdbId,
-              seasonNumber: episode.season_number,
-              episodeNumber: episode.episode_number,
-            },
-          });
+        const language = languageByUser.get(userId) ?? 'pt-BR';
+        const list = followersByLanguage.get(language) ?? [];
+        list.push(userId);
+        followersByLanguage.set(language, list);
+      }
+
+      for (const [language, languageFollowers] of followersByLanguage) {
+        const show = await fetchShow(tmdbId, language);
+        if (!show) continue;
+        const episode = episodeAiringOn(show, today);
+        if (!episode) continue;
+
+        const code = `S${String(episode.season_number).padStart(2, '0')}E${String(
+          episode.episode_number
+        ).padStart(2, '0')}`;
+        const strings = STRINGS[language];
+        for (const userId of languageFollowers) {
+          for (const token of tokensByUser.get(userId) ?? []) {
+            messages.push({
+              to: token,
+              title: strings.title(show.name),
+              body: strings.body(code, episode.name),
+              data: {
+                tmdbShowId: tmdbId,
+                seasonNumber: episode.season_number,
+                episodeNumber: episode.episode_number,
+              },
+            });
+          }
         }
       }
     } catch {

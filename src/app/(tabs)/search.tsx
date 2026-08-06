@@ -2,6 +2,7 @@ import Entypo from '@expo/vector-icons/Entypo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -123,6 +124,7 @@ function FilterChip({
 
 export default function SearchScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [mode, setMode] = useState<SearchMode>('tv');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -202,7 +204,7 @@ export default function SearchScreen() {
           setTotalPages(data.totalPages);
         } catch (err) {
           if (requestId.current !== id) return;
-          setError(err instanceof Error ? err.message : 'Erro ao buscar.');
+          setError(err instanceof Error ? err.message : t('search.searchError'));
         } finally {
           if (requestId.current === id) setLoading(false);
         }
@@ -211,7 +213,7 @@ export default function SearchScreen() {
     );
 
     return () => clearTimeout(timer);
-  }, [query, fetchResults]);
+  }, [query, fetchResults, t]);
 
   async function handleLoadMore() {
     if (loading || loadingMore || results === null || page >= totalPages) return;
@@ -248,7 +250,7 @@ export default function SearchScreen() {
         <Ionicons name="search" size={16} color={theme.textSecondary} />
         <TextInput
           style={[styles.input, { color: theme.text }]}
-          placeholder={mode === 'tv' ? 'Buscar séries…' : 'Buscar filmes…'}
+          placeholder={mode === 'tv' ? t('search.tvPlaceholder') : t('search.moviePlaceholder')}
           placeholderTextColor={theme.textSecondary}
           value={query}
           onChangeText={setQuery}
@@ -274,7 +276,7 @@ export default function SearchScreen() {
             <ThemedText
               type="small"
               style={{ color: mode === 'tv' ? '#231A00' : theme.textSecondary }}>
-              Séries
+              {t('search.tvTab')}
             </ThemedText>
           </Pressable>
           <Pressable
@@ -288,7 +290,7 @@ export default function SearchScreen() {
             <ThemedText
               type="small"
               style={{ color: mode === 'movie' ? '#231A00' : theme.textSecondary }}>
-              Filmes
+              {t('search.movieTab')}
             </ThemedText>
           </Pressable>
         </View>
@@ -339,7 +341,7 @@ export default function SearchScreen() {
               <ThemedText
                 type="small"
                 style={{ color: genreId !== null ? theme.accent : theme.text }}>
-                Categorias
+                {t('search.categories')}
               </ThemedText>
             </Pressable>
             <ScrollView
@@ -373,8 +375,8 @@ export default function SearchScreen() {
             </ScrollView>
           </View>
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>
-            {hasFilters ? 'Resultados do filtro' : 'Populares no momento'}
-            {providerId !== null ? ' · dados JustWatch' : ''}
+            {hasFilters ? t('search.filterResults') : t('search.popularNow')}
+            {providerId !== null ? t('search.justWatchData') : ''}
           </ThemedText>
         </>
       )}
@@ -406,7 +408,7 @@ export default function SearchScreen() {
           }
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.message}>
-              {mode === 'tv' ? 'Nenhuma série encontrada.' : 'Nenhum filme encontrado.'}
+              {mode === 'tv' ? t('search.noShowsFound') : t('search.noMoviesFound')}
             </ThemedText>
           }
           renderItem={({ item }) => (
@@ -414,7 +416,7 @@ export default function SearchScreen() {
               tmdbId={item.id}
               name={item.name}
               posterPath={item.poster_path}
-              subtitle={item.viaActor ? `Elenco: ${item.viaActor}` : item.year}
+              subtitle={item.viaActor ? t('search.castPrefix', { name: item.viaActor }) : item.year}
               media={mode}
             />
           )}

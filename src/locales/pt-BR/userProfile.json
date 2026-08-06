@@ -1,0 +1,22 @@
+{
+  "statsError": "Erro ao carregar as estatísticas.",
+  "showFallback": "Série #{{id}}",
+  "visibleOnlyToFriends": "As estatísticas de {{name}} são visíveis só para amigos.",
+  "totalWatchTime": "Tempo total assistido",
+  "months_one": "mês",
+  "months_other": "meses",
+  "days_one": "dia",
+  "days_other": "dias",
+  "hours": "horas",
+  "minutesShort": "min",
+  "episodesLabel": "Episódios",
+  "showsLabel": "Séries",
+  "moviesLabel": "Filmes",
+  "commonShowsHeader": "Séries em comum ({{count}})",
+  "mostWatchedShows": "Séries que mais assistiu",
+  "episodesCount_one": "{{count}} episódio",
+  "episodesCount_other": "{{count}} episódios",
+  "youEpisodes": "Você: {{count}} ep",
+  "friendEpisodes": "{{name}}: {{count}} ep",
+  "note": "Tempo estimado com base na duração dos episódios e filmes informada pela TMDB."
+}

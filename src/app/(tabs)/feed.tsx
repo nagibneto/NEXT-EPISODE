@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -31,6 +32,8 @@ import {
   type Profile,
 } from '@/lib/db';
 import { shortDuration } from '@/lib/duration';
+import { i18n } from '@/lib/i18n';
+import { localizedTitle } from '@/lib/locale';
 import { relativeDate } from '@/lib/relative-date';
 import {
   episodeRuntime,
@@ -68,6 +71,7 @@ function periodSince(period: Period): Date | null {
 
 export default function FeedScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const [view, setView] = useState<FeedView>('feed');
@@ -100,15 +104,15 @@ export default function FeedScreen() {
             const details = await getShowDetailsCached(id);
             return [id, { name: details.name, poster_path: details.poster_path }] as const;
           } catch {
-            return [id, { name: `Série #${id}`, poster_path: null }] as const;
+            return [id, { name: t('feed.unknownShowName', { id }), poster_path: null }] as const;
           }
         })
       );
       setShows(new Map(entries));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar o feed.');
+      setError(err instanceof Error ? err.message : t('feed.loadFeedError'));
     }
-  }, [user]);
+  }, [user, t]);
 
   const loadRanking = useCallback(async () => {
     if (!user) return;
@@ -172,9 +176,9 @@ export default function FeedScreen() {
         .sort((a, b) => b.minutes - a.minutes);
       setRanking(result);
     } catch (err) {
-      setRankingError(err instanceof Error ? err.message : 'Erro ao carregar o ranking.');
+      setRankingError(err instanceof Error ? err.message : t('feed.loadRankingError'));
     }
-  }, [user, period]);
+  }, [user, period, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -267,21 +271,28 @@ export default function FeedScreen() {
           {item.type === 'watched' ? (
             <ThemedText type="small" themeColor="textSecondary">
               {item.episodes.length === 1
-                ? `assistiu ${episodeCode(
-                    item.episodes[0].season_number,
-                    item.episodes[0].episode_number
-                  )} de `
-                : `assistiu ${item.episodes.length} episódios de `}
+                ? t('feed.watchedEpisode', {
+                    code: episodeCode(
+                      item.episodes[0].season_number,
+                      item.episodes[0].episode_number
+                    ),
+                  })
+                : t('feed.watchedEpisodesCount', { count: item.episodes.length })}
               <ThemedText type="smallBold">{show?.name ?? '…'}</ThemedText>
             </ThemedText>
           ) : item.type === 'watched_movie' ? (
             <ThemedText type="small" themeColor="textSecondary">
-              assistiu <ThemedText type="smallBold">{item.title}</ThemedText>
+              {t('feed.watchedMovie')}
+              <ThemedText type="smallBold">
+                {localizedTitle(item.title, item.title_en, i18n.language)}
+              </ThemedText>
             </ThemedText>
           ) : (
             <>
               <ThemedText type="small" themeColor="textSecondary">
-                comentou {episodeCode(item.season_number, item.episode_number)} de{' '}
+                {t('feed.commentedEpisode', {
+                  code: episodeCode(item.season_number, item.episode_number),
+                })}
                 <ThemedText type="smallBold">{show?.name ?? '…'}</ThemedText>
               </ThemedText>
               {item.content ? (
@@ -316,19 +327,25 @@ export default function FeedScreen() {
         <ThemedText
           type="smallBold"
           style={[styles.rankPosition, { color: index === 0 ? theme.gold : theme.textSecondary }]}>
-          {index + 1}º
+          {index + 1}
+          {t('feed.rankSuffix')}
         </ThemedText>
         <UserAvatar avatarId={item.user.avatar_id} name={profileDisplayName(item.user)} size={36} />
         <View style={styles.rankInfo}>
           <ThemedText type="smallBold" numberOfLines={1}>
             {profileDisplayName(item.user)}
-            {isMe ? ' (você)' : ''}
+            {isMe ? t('feed.youSuffix') : ''}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {item.episodes.toLocaleString('pt-BR')}{' '}
-            {item.episodes === 1 ? 'episódio' : 'episódios'}
+            {t('feed.episodeCount', {
+              count: item.episodes,
+              formatted: item.episodes.toLocaleString(i18n.language),
+            })}
             {item.movies > 0
-              ? ` · ${item.movies.toLocaleString('pt-BR')} ${item.movies === 1 ? 'filme' : 'filmes'}`
+              ? t('feed.movieCount', {
+                  count: item.movies,
+                  formatted: item.movies.toLocaleString(i18n.language),
+                })
               : ''}
           </ThemedText>
         </View>
@@ -344,8 +361,8 @@ export default function FeedScreen() {
       <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
         {(
           [
-            { value: 'feed', label: 'Feed', icon: 'newspaper-outline' },
-            { value: 'ranking', label: 'Ranking', icon: 'trophy' },
+            { value: 'feed', label: t('feed.feedTab'), icon: 'newspaper-outline' },
+            { value: 'ranking', label: t('feed.rankingTab'), icon: 'trophy' },
           ] as const
         ).map((option) => (
           <Pressable
@@ -374,9 +391,9 @@ export default function FeedScreen() {
         <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
           {(
             [
-              { value: 'week', label: 'Semana' },
-              { value: 'month', label: 'Mês' },
-              { value: 'all', label: 'Sempre' },
+              { value: 'week', label: t('feed.weekPeriod') },
+              { value: 'month', label: t('feed.monthPeriod') },
+              { value: 'all', label: t('feed.allPeriod') },
             ] as const
           ).map((option) => (
             <Pressable
@@ -411,6 +428,10 @@ export default function FeedScreen() {
         ) : (
           <FlatList
             data={items}
+            // Título de filme e datas usam localizedTitle()/formatDate(), que
+            // dependem do idioma ativo, não do array "items" em si — sem isso
+            // a lista não re-renderiza sozinha ao trocar de idioma.
+            extraData={i18n.language}
             keyExtractor={(item, index) => {
               const mediaId = item.type === 'watched_movie' ? item.tmdb_id : item.tmdb_show_id;
               return `${item.type}:${item.user.id}:${mediaId}:${item.date}:${index}`;
@@ -421,10 +442,10 @@ export default function FeedScreen() {
               <View style={styles.center}>
                 <Ionicons name="people" size={40} color={theme.textSecondary} />
                 <ThemedText type="subtitle" style={styles.message}>
-                  Seu feed está vazio
+                  {t('feed.emptyFeedTitle')}
                 </ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.message}>
-                  Siga amigos para ver o que eles andam assistindo e comentando.
+                  {t('feed.emptyFeedBody')}
                 </ThemedText>
                 <Pressable
                   style={[styles.friendsButton, { backgroundColor: theme.accent }]}
@@ -433,7 +454,7 @@ export default function FeedScreen() {
                   <ThemedText
                     type="smallBold"
                     style={[styles.friendsButtonLabel, { color: theme.accentText }]}>
-                    Encontrar amigos
+                    {t('feed.findFriends')}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -454,13 +475,14 @@ export default function FeedScreen() {
       ) : (
         <FlatList
           data={ranking}
+          extraData={i18n.language}
           keyExtractor={(item) => item.user.id}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           renderItem={renderRankingItem}
           ListFooterComponent={
             <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-              Tempo estimado com base na duração dos episódios e filmes informada pela TMDB.
+              {t('feed.rankingNote')}
             </ThemedText>
           }
         />

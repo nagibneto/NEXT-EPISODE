@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -22,6 +23,7 @@ import {
   markEpisodeWatched,
   rateEpisode,
 } from '@/lib/db';
+import { formatDate } from '@/lib/locale';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   getSkippedEpisodes,
@@ -31,6 +33,7 @@ import {
 import {
   getEpisodeDetails,
   getShowDetailsCached,
+  getShowNames,
   stillUrl,
   type TmdbEpisode,
   type TmdbSeasonSummary,
@@ -38,6 +41,7 @@ import {
 
 export default function EpisodeScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams<{
@@ -73,7 +77,7 @@ export default function EpisodeScreen() {
     setError(null);
     getEpisodeDetails(showId, seasonNumber, episodeNumber)
       .then(setEpisode)
-      .catch((err) => setError(errorMessage(err, 'Erro ao carregar o episódio.')));
+      .catch((err) => setError(errorMessage(err, t('episode.loadError'))));
     getShowDetailsCached(showId)
       .then((show) => {
         setShowName(show.name);
@@ -101,7 +105,7 @@ export default function EpisodeScreen() {
       const avg = await getEpisodeAverageRating(showId, seasonNumber, episodeNumber);
       setAverage(avg);
     } catch (err) {
-      setError(errorMessage(err, 'Não foi possível salvar a nota.'));
+      setError(errorMessage(err, t('episode.rateError')));
     }
   }
 
@@ -114,9 +118,8 @@ export default function EpisodeScreen() {
     if (!user || followEnsured.current) return;
     try {
       const show = await getShowDetailsCached(showId);
-      await followShowsBulk(user.id, [
-        { tmdb_id: show.id, name: show.name, poster_path: show.poster_path },
-      ]);
+      const names = await getShowNames(show.id);
+      await followShowsBulk(user.id, [{ tmdb_id: show.id, ...names, poster_path: show.poster_path }]);
       followEnsured.current = true;
       syncEpisodeNotifications(user.id).catch(() => {});
     } catch {
@@ -139,7 +142,7 @@ export default function EpisodeScreen() {
       }
     } catch (err) {
       setWatched(!nextWatched);
-      setError(errorMessage(err, 'Não foi possível marcar como assistido.'));
+      setError(errorMessage(err, t('episode.watchToggleError')));
     } finally {
       setTogglingWatched(false);
     }
@@ -251,7 +254,7 @@ export default function EpisodeScreen() {
         seasonNumber={seasonNumber}
         episodeNumber={episodeNumber}
         watched={watched}
-        lockedText="Você ainda não marcou este episódio como assistido. Os comentários podem conter spoilers."
+        lockedText={t('episode.commentsLocked')}
         header={
           <GestureDetector gesture={swipeGesture}>
             <View style={styles.header}>
@@ -286,13 +289,13 @@ export default function EpisodeScreen() {
               </View>
               {episode.air_date && (
                 <ThemedText type="small" themeColor="textSecondary">
-                  {new Date(`${episode.air_date}T00:00:00`).toLocaleDateString('pt-BR', {
+                  {formatDate(`${episode.air_date}T00:00:00`, {
                     weekday: 'long',
                     day: '2-digit',
                     month: 'long',
                     year: 'numeric',
                   })}
-                  {episode.runtime ? ` · ${episode.runtime} min` : ''}
+                  {episode.runtime ? ` · ${episode.runtime} ${t('episode.minutesSuffix')}` : ''}
                 </ThemedText>
               )}
               {episode.overview ? (
@@ -312,7 +315,7 @@ export default function EpisodeScreen() {
                   onPress={() => previousEpisode && goToEpisode(previousEpisode, 'prev')}>
                   <Ionicons name="play-skip-back" size={20} color={theme.text} />
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
-                    Episódio anterior
+                    {t('episode.previousEpisode')}
                   </ThemedText>
                 </Pressable>
 
@@ -325,19 +328,21 @@ export default function EpisodeScreen() {
                   ]}
                   onPress={() => nextEpisode && goToEpisode(nextEpisode, 'next')}>
                   <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.text }}>
-                    Próximo episódio
+                    {t('episode.nextEpisode')}
                   </ThemedText>
                   <Ionicons name="play-skip-forward" size={20} color={theme.text} />
                 </Pressable>
               </View>
 
               <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
-                <ThemedText type="smallBold">Sua nota</ThemedText>
+                <ThemedText type="smallBold">{t('episode.yourRating')}</ThemedText>
                 <StarRating value={myRating} onChange={handleRate} />
                 {average && average.count > 0 && (
                   <ThemedText type="small" themeColor="textSecondary">
-                    Média da comunidade: {(average.average / 2).toFixed(1)}/5 ({average.count}{' '}
-                    {average.count === 1 ? 'voto' : 'votos'})
+                    {t('episode.communityAverage', {
+                      rating: (average.average / 2).toFixed(1),
+                      count: average.count,
+                    })}
                   </ThemedText>
                 )}
               </View>

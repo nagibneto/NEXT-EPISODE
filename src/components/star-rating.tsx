@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -25,6 +26,7 @@ export function formatStarRating(rating: number) {
  */
 export function StarRating({ value, onChange, disabled }: StarRatingProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const rating = value ?? 0;
 
   return (
@@ -50,7 +52,7 @@ export function StarRating({ value, onChange, disabled }: StarRatingProps) {
         );
       })}
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.label}>
-        {rating > 0 ? `${formatStarRating(rating)}/5` : 'Sem nota'}
+        {rating > 0 ? `${formatStarRating(rating)}/5` : t('starRating.noRating')}
       </ThemedText>
     </View>
   );

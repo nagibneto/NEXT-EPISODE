@@ -1,0 +1,31 @@
+{
+  "markWatchedAlert": {
+    "title": "Mark as watched",
+    "confirm": "Watched it"
+  },
+  "seasonEpisodeCompact": "S{{season}} | E{{episode}}",
+  "remainingEpisodes_one": "+{{count}} episode",
+  "remainingEpisodes_other": "+{{count}} episodes",
+  "upToDate": "You're all caught up 🎉",
+  "calculating": "…",
+  "modeTv": "Shows",
+  "modeMovie": "Movies",
+  "searchMoviesPlaceholder": "Search movies…",
+  "searchShowsPlaceholder": "Search shows…",
+  "movieFilterWatched": "Watched",
+  "movieFilterToWatch": "To watch",
+  "showFilterOngoing": "Ongoing",
+  "showFilterNotStarted": "Not started",
+  "showFilterEnded": "Finished",
+  "categories": "Categories",
+  "noMoviesFilterMatch": "No movies found with that filter.",
+  "noMoviesYetTitle": "No movies yet",
+  "noMoviesYetBody": "Use the Search tab to find movies you've already watched.",
+  "searchMoviesButton": "Search movies",
+  "noShowsFilterMatch": "No shows found with that filter.",
+  "noShowsYetTitle": "No shows yet",
+  "noShowsYetBody": "Use the Search tab to find and follow your favorite shows.",
+  "searchShowsButton": "Search shows",
+  "loadError": "Error loading your list.",
+  "markWatchedError": "Couldn't mark it as watched."
+}

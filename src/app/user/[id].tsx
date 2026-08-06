@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -20,6 +21,7 @@ import {
   type Profile,
 } from '@/lib/db';
 import { formatDuration, shortDuration } from '@/lib/duration';
+import { i18n } from '@/lib/i18n';
 import {
   episodeRuntime,
   FALLBACK_MOVIE_RUNTIME_MIN,
@@ -57,6 +59,7 @@ interface UserStats {
 /** Estatísticas públicas de um amigo, abertas ao tocar no avatar dele. */
 export default function UserStatsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -105,7 +108,7 @@ export default function UserStatsScreen() {
             } catch {
               return {
                 tmdb_show_id: count.tmdb_show_id,
-                name: `Série #${count.tmdb_show_id}`,
+                name: t('userProfile.showFallback', { id: count.tmdb_show_id }),
                 poster_path: null,
                 episodes: count.episode_count,
                 minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
@@ -146,7 +149,7 @@ export default function UserStatsScreen() {
           common,
         });
       } catch (err) {
-        if (!cancelled) setError(errorMessage(err, 'Erro ao carregar as estatísticas.'));
+        if (!cancelled) setError(errorMessage(err, t('userProfile.statsError')));
       }
     })();
 
@@ -193,7 +196,7 @@ export default function UserStatsScreen() {
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={36} color={theme.textSecondary} />
           <ThemedText themeColor="textSecondary" style={styles.message}>
-            As estatísticas de {name} são visíveis só para amigos.
+            {t('userProfile.visibleOnlyToFriends', { name })}
           </ThemedText>
         </View>
       ) : (
@@ -205,34 +208,37 @@ export default function UserStatsScreen() {
 
 function StatsBody({ stats, name }: { stats: UserStats; name: string }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const duration = formatDuration(stats.totalMinutes);
 
   return (
     <>
       <View style={[styles.heroCard, { backgroundColor: theme.backgroundElement }]}>
         <ThemedText type="small" themeColor="textSecondary">
-          Tempo total assistido
+          {t('userProfile.totalWatchTime')}
         </ThemedText>
         <View style={styles.durationRow}>
           {duration.months > 0 && (
-            <Block value={duration.months} label={duration.months === 1 ? 'mês' : 'meses'} />
+            <Block value={duration.months} label={t('userProfile.months', { count: duration.months })} />
           )}
-          <Block value={duration.days} label={duration.days === 1 ? 'dia' : 'dias'} />
-          <Block value={duration.hours} label="horas" />
-          <Block value={duration.minutes} label="min" />
+          <Block value={duration.days} label={t('userProfile.days', { count: duration.days })} />
+          <Block value={duration.hours} label={t('userProfile.hours')} />
+          <Block value={duration.minutes} label={t('userProfile.minutesShort')} />
         </View>
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard value={stats.totalEpisodes} label="Episódios" />
-        <StatCard value={stats.totalShows} label="Séries" />
-        <StatCard value={stats.totalMovies} label="Filmes" />
+        <StatCard value={stats.totalEpisodes} label={t('userProfile.episodesLabel')} />
+        <StatCard value={stats.totalShows} label={t('userProfile.showsLabel')} />
+        <StatCard value={stats.totalMovies} label={t('userProfile.moviesLabel')} />
       </View>
 
       {stats.common.length > 0 && (
         <View style={styles.commonSection}>
           <ThemedText type="smallBold" style={styles.commonSectionTitle}>
-            Séries em comum ({stats.common.length.toLocaleString('pt-BR')})
+            {t('userProfile.commonShowsHeader', {
+              count: stats.common.length.toLocaleString(i18n.language),
+            })}
           </ThemedText>
           <ScrollView
             horizontal
@@ -248,22 +254,20 @@ function StatsBody({ stats, name }: { stats: UserStats; name: string }) {
       {stats.shows.length > 0 && (
         <>
           <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Séries que mais assistiu
+            {t('userProfile.mostWatchedShows')}
           </ThemedText>
           {stats.shows.map((show) => (
             <ShowRow
               key={show.tmdb_show_id}
               show={show}
-              subtitle={`${show.episodes.toLocaleString('pt-BR')} ${
-                show.episodes === 1 ? 'episódio' : 'episódios'
-              } · ${shortDuration(show.minutes)}`}
+              subtitle={`${t('userProfile.episodesCount', { count: show.episodes })} · ${shortDuration(show.minutes)}`}
             />
           ))}
         </>
       )}
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-        Tempo estimado com base na duração dos episódios e filmes informada pela TMDB.
+        {t('userProfile.note')}
       </ThemedText>
     </>
   );
@@ -305,6 +309,7 @@ function ShowRow({ show, subtitle }: { show: ShowStat; subtitle: string }) {
 /** Card do carrossel de séries em comum: pôster grande + comparação dos dois lados embaixo. */
 function CommonShowCard({ show, friendName }: { show: CommonShow; friendName: string }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const poster = posterUrl(show.poster_path, 'w185');
   return (
     <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_show_id) } }} asChild>
@@ -318,10 +323,13 @@ function CommonShowCard({ show, friendName }: { show: CommonShow; friendName: st
           {show.name}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-          Você: {show.myEpisodes.toLocaleString('pt-BR')} ep
+          {t('userProfile.youEpisodes', { count: show.myEpisodes.toLocaleString(i18n.language) })}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-          {friendName}: {show.episodes.toLocaleString('pt-BR')} ep
+          {t('userProfile.friendEpisodes', {
+            name: friendName,
+            count: show.episodes.toLocaleString(i18n.language),
+          })}
         </ThemedText>
       </Pressable>
     </Link>
@@ -352,7 +360,7 @@ function StatCard({ value, label }: { value: number; label: string }) {
         adjustsFontSizeToFit
         minimumFontScale={0.5}
         style={{ color: theme.gold }}>
-        {value.toLocaleString('pt-BR')}
+        {value.toLocaleString(i18n.language)}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {label}

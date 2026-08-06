@@ -1,0 +1,13 @@
+{
+  "privacyExplanation": "Your number and your contacts' numbers are never visible to anyone, not even to other users of the app. We only use them, in a secure way, to find out who among your contacts already uses Next Episode.",
+  "phonePlaceholder": "Area code + number",
+  "chooseCountry": "Choose a country",
+  "searchCountry": "Search country",
+  "addPhone": "Add phone number",
+  "invalidPhone": "Enter a valid phone number (with area code).",
+  "scanButton": "Search my contacts",
+  "permissionDenied": "No access to contacts. Enable the permission in your phone settings to use this search.",
+  "openSettings": "Open settings",
+  "scanError": "Couldn't search your contacts. Try again.",
+  "noMatches": "No friends found in your contacts yet."
+}

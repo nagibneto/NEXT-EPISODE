@@ -1,0 +1,4 @@
+{
+  "missingApiKey": "Chave da TMDB ausente. Defina EXPO_PUBLIC_TMDB_API_KEY no arquivo .env (veja o README).",
+  "requestError": "TMDB {{status}} em {{path}}: {{body}}"
+}

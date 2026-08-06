@@ -1,0 +1,22 @@
+{
+  "searchPlaceholder": "Search by username or nickname…",
+  "findViaContacts": "Find via contacts",
+  "inviteFriends": "Invite friends",
+  "inviteMessage": "Come track shows with me on Next Episode! {{url}}",
+  "friendRequestsHeader": "Friend requests ({{count}})",
+  "sentRequestsHeader": "Sent requests ({{count}})",
+  "wantsToBeFriend": "@{{username}} wants to be your friend",
+  "accept": "Accept",
+  "decline": "Decline",
+  "add": "Add",
+  "friendsLabel": "Friends",
+  "pending": "Pending",
+  "noUsersFound": "No users found.",
+  "noFriendsYet": "You don't have any friends yet. Search for a user above to send a request.",
+  "searchError": "Error searching for users.",
+  "actionError": "Couldn't complete the action.",
+  "unfriendConfirmTitle": "Unfriend {{name}}? You'll both stop seeing each other's feed and ranking.",
+  "cancelRequestConfirmTitle": "Cancel the friend request sent to {{name}}?",
+  "unfriend": "Unfriend",
+  "cancelRequest": "Cancel request"
+}

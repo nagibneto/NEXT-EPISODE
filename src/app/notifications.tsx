@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -23,6 +24,8 @@ import {
   type MediaType,
   type Profile,
 } from '@/lib/db';
+import { i18n } from '@/lib/i18n';
+import { localizedTitle } from '@/lib/locale';
 import { relativeDate } from '@/lib/relative-date';
 import { airedEpisodeCount, getShowDetailsCached, posterUrl } from '@/lib/tmdb';
 
@@ -53,6 +56,7 @@ const dismissedKey = (userId: string) => `notifications-dismissed-v1:${userId}`;
 /** Linha de um pedido de amizade pendente: leva à tela de Amigos para aceitar/recusar. */
 function FriendRequestRow({ profile }: { profile: Profile }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   return (
     <Link href="/friends" asChild>
       {/* Link asChild perde estilos em array — flatten é obrigatório aqui. */}
@@ -64,7 +68,7 @@ function FriendRequestRow({ profile }: { profile: Profile }) {
             {profileDisplayName(profile)}
           </ThemedText>
           <ThemedText type="small" themeColor="accent">
-            quer ser seu amigo
+            {t('notifications.wantsToBeFriend')}
           </ThemedText>
         </View>
         <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
@@ -84,6 +88,7 @@ function NotificationRow({
   onDismiss: () => void;
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const uri = posterUrl(show.poster_path, 'w185');
   return (
     <Link href={{ pathname: '/show/[id]', params: { id: String(show.tmdb_id) } }} asChild>
@@ -104,10 +109,10 @@ function NotificationRow({
         )}
         <View style={styles.info}>
           <ThemedText type="smallBold" numberOfLines={1}>
-            {show.name}
+            {localizedTitle(show.name, show.name_en, i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="accent">
-            {newCount === 1 ? '1 episódio novo' : `${newCount} episódios novos`}
+            {t('notifications.newEpisodesCount', { count: newCount })}
           </ThemedText>
         </View>
         <Pressable hitSlop={8} onPress={onDismiss}>
@@ -121,6 +126,7 @@ function NotificationRow({
 /** Linha de uma curtida recebida: leva à série/filme curtido. */
 function LikeRow({ item }: { item: LikeItem }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const uri = posterUrl(item.poster_path, 'w185');
   const href =
     item.media_type === 'movie'
@@ -137,7 +143,7 @@ function LikeRow({ item }: { item: LikeItem }) {
             {profileDisplayName(item.liker)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            curtiu <ThemedText type="smallBold">{item.title}</ThemedText>
+            {t('notifications.liked')} <ThemedText type="smallBold">{item.title}</ThemedText>
           </ThemedText>
         </View>
         {uri ? (
@@ -154,8 +160,13 @@ function LikeRow({ item }: { item: LikeItem }) {
 /** Séries seguidas com episódios já exibidos que o usuário ainda não assistiu, pedidos de amizade e curtidas recebidas. */
 export default function NotificationsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
-  const [view, setView] = useState<NotificationsView>('novidades');
+  // Notificações de curtida abrem direto na aba "Reações" (ver use-notification-navigation).
+  const { view: initialView } = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = useState<NotificationsView>(
+    initialView === 'reacoes' ? 'reacoes' : 'novidades'
+  );
 
   const [items, setItems] = useState<NewEpisodesItem[] | null>(null);
   const [friendRequests, setFriendRequests] = useState<Profile[]>([]);
@@ -180,7 +191,7 @@ export default function NotificationsScreen() {
               const details = await getShowDetailsCached(id);
               return [id, { title: details.name, poster_path: details.poster_path }] as const;
             } catch {
-              return [id, { title: `Série #${id}`, poster_path: null }] as const;
+              return [id, { title: t('notifications.showFallback', { id }), poster_path: null }] as const;
             }
           })
         ),
@@ -188,7 +199,10 @@ export default function NotificationsScreen() {
       ]);
       const showMap = new Map(showEntries);
       const movieMap = new Map(
-        movieRows.map((m) => [m.tmdb_id, { title: m.title, poster_path: m.poster_path }])
+        movieRows.map((m) => [
+          m.tmdb_id,
+          { title: localizedTitle(m.title, m.title_en, i18n.language), poster_path: m.poster_path },
+        ])
       );
       setLikes(
         received.map((r) => {
@@ -197,14 +211,14 @@ export default function NotificationsScreen() {
             liker: r.liker,
             media_type: r.media_type,
             tmdb_id: r.tmdb_id,
-            title: info?.title ?? (r.media_type === 'movie' ? 'um filme' : 'uma série'),
+            title: info?.title ?? (r.media_type === 'movie' ? t('notifications.aMovie') : t('notifications.aShow')),
             poster_path: info?.poster_path ?? null,
             created_at: r.created_at,
           };
         })
       );
     } catch (err) {
-      setLikesError(errorMessage(err, 'Erro ao carregar curtidas.'));
+      setLikesError(errorMessage(err, t('notifications.loadLikesError')));
     }
   }, [user]);
 
@@ -256,7 +270,7 @@ export default function NotificationsScreen() {
               .sort((a, b) => b.newCount - a.newCount)
           );
         } catch (err) {
-          if (!cancelled) setError(errorMessage(err, 'Erro ao carregar novidades.'));
+          if (!cancelled) setError(errorMessage(err, t('notifications.loadNewsError')));
         }
       })();
       return () => {
@@ -280,10 +294,10 @@ export default function NotificationsScreen() {
 
   function clearAll() {
     if (!items || items.length === 0) return;
-    Alert.alert('Limpar notificações', 'Remover todas as novidades da lista?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('notifications.clearNotificationsTitle'), t('notifications.clearNotificationsMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Limpar',
+        text: t('notifications.clear'),
         style: 'destructive',
         onPress: () => {
           const current = items;
@@ -299,8 +313,8 @@ export default function NotificationsScreen() {
       <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
         {(
           [
-            { value: 'novidades', label: 'Novidades', icon: 'sparkles-outline' },
-            { value: 'reacoes', label: 'Reações', icon: 'heart-outline' },
+            { value: 'novidades', label: t('notifications.tabNews'), icon: 'sparkles-outline' },
+            { value: 'reacoes', label: t('notifications.tabReactions'), icon: 'heart-outline' },
           ] as const
         ).map((option) => (
           <Pressable
@@ -339,6 +353,10 @@ export default function NotificationsScreen() {
         ) : (
           <FlatList
             data={items}
+            // Os nomes de série vêm de localizedTitle(), que depende do idioma
+            // ativo, não do array "items" em si — sem isso a lista não
+            // re-renderiza sozinha ao trocar de idioma (ver FlatList.extraData).
+            extraData={i18n.language}
             keyExtractor={(item) => String(item.show.tmdb_id)}
             contentContainerStyle={[
               styles.list,
@@ -350,7 +368,7 @@ export default function NotificationsScreen() {
                   {friendRequests.length > 0 && (
                     <View style={styles.section}>
                       <ThemedText type="smallBold" style={styles.sectionTitle}>
-                        Pedidos de amizade ({friendRequests.length})
+                        {t('notifications.friendRequestsHeader', { count: friendRequests.length })}
                       </ThemedText>
                       {friendRequests.map((profile) => (
                         <FriendRequestRow key={profile.id} profile={profile} />
@@ -360,7 +378,7 @@ export default function NotificationsScreen() {
                   {items.length > 0 && (
                     <Pressable style={styles.clearAllButton} hitSlop={8} onPress={clearAll}>
                       <ThemedText type="small" themeColor="accent">
-                        Limpar tudo
+                        {t('notifications.clearAll')}
                       </ThemedText>
                     </Pressable>
                   )}
@@ -371,10 +389,10 @@ export default function NotificationsScreen() {
               friendRequests.length === 0 ? (
                 <View style={styles.center}>
                   <ThemedText type="subtitle" style={styles.message}>
-                    Nenhuma novidade
+                    {t('notifications.noNewsTitle')}
                   </ThemedText>
                   <ThemedText themeColor="textSecondary" style={styles.message}>
-                    Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.
+                    {t('notifications.noNewsBody')}
                   </ThemedText>
                 </View>
               ) : null
@@ -401,6 +419,7 @@ export default function NotificationsScreen() {
       ) : (
         <FlatList
           data={likes}
+          extraData={i18n.language}
           keyExtractor={(item, index) =>
             `${item.liker.id}:${item.media_type}:${item.tmdb_id}:${item.created_at}:${index}`
           }
@@ -409,10 +428,10 @@ export default function NotificationsScreen() {
             <View style={styles.center}>
               <Ionicons name="heart-outline" size={40} color={theme.textSecondary} />
               <ThemedText type="subtitle" style={styles.message}>
-                Nenhuma curtida ainda
+                {t('notifications.noLikesTitle')}
               </ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Quando um amigo curtir o que você assistiu, aparece aqui.
+                {t('notifications.noLikesBody')}
               </ThemedText>
             </View>
           }

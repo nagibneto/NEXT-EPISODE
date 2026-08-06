@@ -1,0 +1,5 @@
+{
+  "channelName": "New episodes",
+  "newEpisodeTitle": "New episode of {{showName}}!",
+  "newEpisodeBody": "{{code}} — \"{{episodeName}}\" airs today."
+}

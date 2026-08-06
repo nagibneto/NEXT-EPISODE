@@ -2,7 +2,7 @@
   "expo": {
     "name": "Next Episode",
     "slug": "next-episode",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nextepisode",
@@ -12,7 +12,10 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "pt-BR",
-        "CFBundleLocalizations": ["pt-BR"]
+        "CFBundleLocalizations": [
+          "pt-BR",
+          "en-US"
+        ]
       }
     },
     "android": {
@@ -46,6 +49,15 @@
           "backgroundColor": "#0A0A0C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 180
+        }
+      ],
+      "expo-localization",
+      "expo-web-browser",
+      "expo-apple-authentication",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "O app acessa seus contatos apenas para comparar números de telefone (por hash, sem enviar nenhum número em texto puro) e sugerir amigos que já usam o Next Episode."
         }
       ]
     ],

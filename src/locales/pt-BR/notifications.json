@@ -1,0 +1,22 @@
+{
+  "tabNews": "Novidades",
+  "tabReactions": "Reações",
+  "wantsToBeFriend": "quer ser seu amigo",
+  "newEpisodesCount_one": "{{count}} episódio novo",
+  "newEpisodesCount_other": "{{count}} episódios novos",
+  "liked": "curtiu",
+  "loadLikesError": "Erro ao carregar curtidas.",
+  "loadNewsError": "Erro ao carregar novidades.",
+  "aMovie": "um filme",
+  "aShow": "uma série",
+  "showFallback": "Série #{{id}}",
+  "clearNotificationsTitle": "Limpar notificações",
+  "clearNotificationsMessage": "Remover todas as novidades da lista?",
+  "clear": "Limpar",
+  "clearAll": "Limpar tudo",
+  "friendRequestsHeader": "Pedidos de amizade ({{count}})",
+  "noNewsTitle": "Nenhuma novidade",
+  "noNewsBody": "Quando suas séries tiverem episódios novos para assistir, elas aparecem aqui.",
+  "noLikesTitle": "Nenhuma curtida ainda",
+  "noLikesBody": "Quando um amigo curtir o que você assistiu, aparece aqui."
+}

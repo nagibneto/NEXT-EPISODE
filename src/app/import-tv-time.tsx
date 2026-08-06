@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -18,7 +19,7 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { followShowsBulk, importWatchedEpisodesBulk, importWatchedMoviesBulk } from '@/lib/db';
-import { posterUrl, searchMovies, searchShows } from '@/lib/tmdb';
+import { getMovieNames, getShowNames, posterUrl, searchMovies, searchShows } from '@/lib/tmdb';
 import {
   dedupeEpisodes,
   extractTvTimeCsvs,
@@ -31,6 +32,27 @@ import {
 } from '@/lib/tvtime-import';
 
 const GDPR_EXPORT_URL = 'https://gdpr.tvtime.com/gdpr/self-service';
+
+// Evita rajada de requisições à TMDB ao buscar o nome no outro idioma de
+// cada título importado (mesmo limite usado no casamento com a TMDB, ver
+// MATCH_CONCURRENCY em src/lib/tvtime-import.ts).
+const NAMES_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit);
+    const batchResults = await Promise.all(batch.map(fn));
+    batchResults.forEach((result, j) => {
+      results[i + j] = result;
+    });
+  }
+  return results;
+}
 
 type Step = 'intro' | 'matching' | 'review' | 'importing' | 'done';
 
@@ -76,6 +98,7 @@ function fromMovieResult(movie: { id: number; title: string; poster_path: string
 
 export default function ImportTvTimeScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +120,7 @@ export default function ImportTvTimeScreen() {
       const rows = parseTvTimeShowsCsv(showsCsv);
       const movies = moviesCsv ? parseTvTimeMoviesCsv(moviesCsv) : [];
       if (rows.length === 0 && movies.length === 0) {
-        setError('Não encontramos nenhum episódio ou filme assistido nesse arquivo.');
+        setError(t('importTvTime.noDataFoundError'));
         return;
       }
       const groups = groupBySeries(rows);
@@ -143,7 +166,7 @@ export default function ImportTvTimeScreen() {
       setItems([...showItems, ...movieItems]);
       setStep('review');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao ler o arquivo.');
+      setError(err instanceof Error ? err.message : t('importTvTime.readFileError'));
       setStep('intro');
     }
   }
@@ -192,11 +215,14 @@ export default function ImportTvTimeScreen() {
     setStep('importing');
     setProgress({ done: 0, total: merged.length + (mergedMovies.length > 0 ? 1 : 0) });
 
+    const showNames = await mapWithConcurrency(merged, NAMES_CONCURRENCY, ({ show }) =>
+      getShowNames(show.id)
+    );
     await followShowsBulk(
       user.id,
-      merged.map(({ show }) => ({
+      merged.map(({ show }, i) => ({
         tmdb_id: show.id,
-        name: show.name,
+        ...showNames[i],
         poster_path: show.poster_path,
       }))
     );
@@ -216,11 +242,14 @@ export default function ImportTvTimeScreen() {
       setProgress((prev) => ({ ...prev, done: i + 1 }));
     }
 
+    const movieNames = await mapWithConcurrency(mergedMovies, NAMES_CONCURRENCY, ({ movie }) =>
+      getMovieNames(movie.id)
+    );
     await importWatchedMoviesBulk(
       user.id,
-      mergedMovies.map(({ movie, watchedAt }) => ({
+      mergedMovies.map(({ movie, watchedAt }, i) => ({
         tmdb_id: movie.id,
-        title: movie.name,
+        ...movieNames[i],
         poster_path: movie.poster_path,
         watched_at: watchedAt,
       }))
@@ -238,30 +267,25 @@ export default function ImportTvTimeScreen() {
   if (step === 'intro') {
     return (
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
-        <ThemedText type="subtitle">Importar do TV Time</ThemedText>
+        <ThemedText type="subtitle">{t('importTvTime.title')}</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.paragraph}>
-          O TV Time vai desligar em 15/07/2026 e não tem API pública. Pra trazer seu
-          histórico de séries e filmes pra cá, exporte seus dados oficialmente pelo
-          site do TV Time e selecione o arquivo .zip aqui — não precisa extrair nada,
-          a gente cuida disso.
+          {t('importTvTime.introParagraph1')}
         </ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.paragraph}>
-          1. Abra o exportador do TV Time e faça login com sua conta.{'\n'}
-          2. Baixe o arquivo .zip que eles enviarem por e-mail.{'\n'}
-          3. Volte aqui e selecione esse .zip.
+          {t('importTvTime.introSteps')}
         </ThemedText>
 
         <Pressable
           style={[styles.button, { backgroundColor: theme.backgroundElement }]}
           onPress={() => Linking.openURL(GDPR_EXPORT_URL)}>
-          <ThemedText type="smallBold">Abrir exportador do TV Time</ThemedText>
+          <ThemedText type="smallBold">{t('importTvTime.openExporterButton')}</ThemedText>
         </Pressable>
 
         <Pressable
           style={[styles.button, { backgroundColor: theme.accent }]}
           onPress={handlePickFile}>
           <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-            Selecionar arquivo .zip
+            {t('importTvTime.selectFileButton')}
           </ThemedText>
         </Pressable>
 
@@ -280,8 +304,8 @@ export default function ImportTvTimeScreen() {
         <ActivityIndicator />
         <ThemedText themeColor="textSecondary" style={styles.paragraph}>
           {step === 'matching'
-            ? `Buscando seus títulos no TMDB… ${progress.done}/${progress.total}`
-            : `Importando… ${progress.done}/${progress.total}`}
+            ? t('importTvTime.matchingProgress', { done: progress.done, total: progress.total })
+            : t('importTvTime.importingProgress', { done: progress.done, total: progress.total })}
         </ThemedText>
       </View>
     );
@@ -290,11 +314,16 @@ export default function ImportTvTimeScreen() {
   if (step === 'done') {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <ThemedText type="subtitle">Importação concluída</ThemedText>
+        <ThemedText type="subtitle">{t('importTvTime.doneTitle')}</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.paragraph}>
-          {result.shows} séries seguidas, {result.episodes} episódios e{' '}
-          {result.movies} filmes importados.
-          {result.skipped > 0 ? ` ${result.skipped} títulos ignorados.` : ''}
+          {t('importTvTime.doneSummary', {
+            shows: result.shows,
+            episodes: result.episodes,
+            movies: result.movies,
+          })}
+          {result.skipped > 0
+            ? ` ${t('importTvTime.doneSkipped', { count: result.skipped })}`
+            : ''}
         </ThemedText>
       </View>
     );
@@ -311,20 +340,19 @@ export default function ImportTvTimeScreen() {
         contentContainerStyle={styles.reviewList}
         ListHeaderComponent={
           <ThemedText themeColor="textSecondary" style={styles.paragraph}>
-            Revise os títulos encontrados antes de importar. Desmarque os que não
-            reconhecemos direito ou troque o resultado.
+            {t('importTvTime.reviewInstructions')}
           </ThemedText>
         }
         renderItem={({ item, index }) => (
           <>
             {index === 0 && item.media === 'tv' && (
               <ThemedText type="smallBold" style={styles.sectionTitle}>
-                Séries
+                {t('importTvTime.sectionShows')}
               </ThemedText>
             )}
             {index === firstMovieIndex && (
               <ThemedText type="smallBold" style={styles.sectionTitle}>
-                Filmes
+                {t('importTvTime.sectionMovies')}
               </ThemedText>
             )}
             <ReviewRow
@@ -342,7 +370,7 @@ export default function ImportTvTimeScreen() {
         style={[styles.button, styles.importButton, { backgroundColor: theme.accent }]}
         onPress={handleImport}>
         <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-          Importar {includedCount} {includedCount === 1 ? 'título' : 'títulos'}
+          {t('importTvTime.importButton', { count: includedCount })}
         </ThemedText>
       </Pressable>
     </View>
@@ -361,6 +389,7 @@ function ReviewRow({
   onOpenSearch: () => void;
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [manualResults, setManualResults] = useState<Candidate[]>([]);
   const uri = posterUrl(item.selected?.poster_path ?? null, 'w185');
@@ -401,11 +430,14 @@ function ReviewRow({
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
             {isMovie
               ? `${item.tvTimeName}${item.selected?.year ? ` · ${item.selected.year}` : ''}`
-              : `${item.tvTimeName} · ${item.episodes.length} episódios`}
+              : t('importTvTime.showEpisodeCount', {
+                  name: item.tvTimeName,
+                  count: item.episodes.length,
+                })}
           </ThemedText>
           {!item.selected ? (
             <ThemedText type="small" themeColor="danger">
-              Não encontrado no TMDB
+              {t('importTvTime.notFoundOnTmdb')}
             </ThemedText>
           ) : null}
         </View>
@@ -420,7 +452,7 @@ function ReviewRow({
 
       <Pressable onPress={onOpenSearch} style={styles.changeButton}>
         <ThemedText type="link" themeColor="textSecondary">
-          {item.searchOpen ? 'Fechar' : 'Trocar'}
+          {item.searchOpen ? t('common.close') : t('importTvTime.change')}
         </ThemedText>
       </Pressable>
 
@@ -428,7 +460,11 @@ function ReviewRow({
         <View style={styles.searchBox}>
           <TextInput
             style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
-            placeholder={isMovie ? 'Buscar outro filme…' : 'Buscar outra série…'}
+            placeholder={
+              isMovie
+                ? t('importTvTime.searchMoviePlaceholder')
+                : t('importTvTime.searchShowPlaceholder')
+            }
             placeholderTextColor={theme.textSecondary}
             value={query}
             onChangeText={handleSearch}

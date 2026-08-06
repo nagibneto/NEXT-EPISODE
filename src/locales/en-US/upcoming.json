@@ -1,0 +1,9 @@
+{
+  "today": "Today! 🎉",
+  "tomorrow": "Tomorrow",
+  "inDays_one": "In {{count}} day",
+  "inDays_other": "In {{count}} days",
+  "loadError": "Failed to load upcoming episodes.",
+  "emptyTitle": "Nothing for now",
+  "emptyBody": "When one of your shows has a next episode announced, it'll show up here."
+}

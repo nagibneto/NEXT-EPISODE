@@ -18,9 +18,31 @@ export function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * supabase.functions.invoke() só devolve "Edge Function returned a non-2xx
+ * status code" em error.message quando a function responde com erro — a
+ * mensagem de verdade (a que a gente escreve com Response.json({ error })
+ * nas functions) fica escondida em error.context, que é a Response crua e
+ * precisa ser lida à parte. Usado por setPhoneNumber/matchContacts abaixo.
+ */
+async function edgeFunctionError(error: unknown, fallback: string): Promise<Error> {
+  const context = (error as { context?: Response } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = await context.json();
+      if (body && typeof body.error === 'string' && body.error) return new Error(body.error);
+    } catch {
+      // corpo não era JSON — segue com o fallback abaixo.
+    }
+  }
+  return new Error(errorMessage(error, fallback));
+}
+
 export interface FollowedShow {
   tmdb_id: number;
   name: string;
+  /** Nome em inglês; `null` em registros antigos ainda não migrados. */
+  name_en: string | null;
   poster_path: string | null;
   followed_at: string;
 }
@@ -31,6 +53,12 @@ export interface Profile {
   display_name: string | null;
   /** Índice do avatar escolhido (1–12, ver src/lib/avatars.ts); null = sem avatar. */
   avatar_id: number | null;
+}
+
+/** Profile do próprio usuário logado, com o campo que guarda choose-username.tsx (ver (tabs)/_layout.tsx). */
+export interface OwnProfile extends Profile {
+  /** true para quem entrou por login social e ainda não escolheu um @usuário definitivo. */
+  needs_username: boolean;
 }
 
 /** Séries e filmes compartilham as tabelas de notas/comentários; isto distingue os dois. */
@@ -78,6 +106,31 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   return data;
 }
 
+/** Como getProfile, mas traz needs_username — usado pela guarda de (tabs)/_layout.tsx. */
+export async function getOwnProfile(userId: string): Promise<OwnProfile | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_id, needs_username')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Usado só por choose-username.tsx: define o @usuário definitivo e libera o app. */
+export async function setUsernameAndClearFlag(userId: string, username: string) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ username: username.trim(), needs_username: false })
+    .eq('id', userId);
+  if (error) {
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error('Esse nome de usuário já está em uso.');
+    }
+    throw error;
+  }
+}
+
 export async function updateAvatar(userId: string, avatarId: number | null) {
   const { error } = await supabase
     .from('profiles')
@@ -94,6 +147,12 @@ export async function updateDisplayName(userId: string, displayName: string) {
   if (error) throw error;
 }
 
+/** Sincroniza o idioma ativo do app para as Edge Functions de push notificarem no idioma certo. */
+export async function updateLanguage(userId: string, language: 'pt-BR' | 'en-US') {
+  const { error } = await supabase.from('profiles').update({ language }).eq('id', userId);
+  if (error) throw error;
+}
+
 /** Apaga a conta autenticada e todos os dados dela (via Edge Function delete-account). */
 export async function deleteAccount() {
   const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
@@ -105,7 +164,7 @@ export async function deleteAccount() {
 export async function getFollowedShows(userId: string): Promise<FollowedShow[]> {
   const { data, error } = await supabase
     .from('followed_shows')
-    .select('tmdb_id, name, poster_path, followed_at')
+    .select('tmdb_id, name, name_en, poster_path, followed_at')
     .eq('user_id', userId)
     .order('followed_at', { ascending: false });
   if (error) throw error;
@@ -124,7 +183,7 @@ export async function isFollowing(userId: string, tmdbId: number): Promise<boole
 
 export async function followShow(
   userId: string,
-  show: { tmdb_id: number; name: string; poster_path: string | null }
+  show: { tmdb_id: number; name: string; name_en: string; poster_path: string | null }
 ) {
   const { error } = await supabase
     .from('followed_shows')
@@ -278,6 +337,8 @@ export async function unmarkSeasonWatched(
 export interface WatchedMovie {
   tmdb_id: number;
   title: string;
+  /** Título em inglês; `null` em registros antigos ainda não migrados. */
+  title_en: string | null;
   poster_path: string | null;
   watched_at: string;
 }
@@ -285,7 +346,7 @@ export interface WatchedMovie {
 export async function getWatchedMovies(userId: string): Promise<WatchedMovie[]> {
   const { data, error } = await supabase
     .from('watched_movies')
-    .select('tmdb_id, title, poster_path, watched_at')
+    .select('tmdb_id, title, title_en, poster_path, watched_at')
     .eq('user_id', userId)
     .order('watched_at', { ascending: false });
   if (error) throw error;
@@ -304,7 +365,7 @@ export async function isMovieWatched(userId: string, tmdbId: number): Promise<bo
 
 export async function markMovieWatched(
   userId: string,
-  movie: { tmdb_id: number; title: string; poster_path: string | null },
+  movie: { tmdb_id: number; title: string; title_en: string; poster_path: string | null },
   watched: boolean
 ) {
   if (watched) {
@@ -330,6 +391,8 @@ export interface FavoriteItem {
   media_type: MediaType;
   tmdb_id: number;
   title: string;
+  /** Título em inglês; `null` em registros antigos ainda não migrados. */
+  title_en: string | null;
   poster_path: string | null;
   favorited_at: string;
 }
@@ -337,7 +400,7 @@ export interface FavoriteItem {
 export async function getFavorites(userId: string): Promise<FavoriteItem[]> {
   const { data, error } = await supabase
     .from('favorites')
-    .select('media_type, tmdb_id, title, poster_path, favorited_at')
+    .select('media_type, tmdb_id, title, title_en, poster_path, favorited_at')
     .eq('user_id', userId)
     .order('favorited_at', { ascending: false });
   if (error) throw error;
@@ -361,7 +424,13 @@ export async function isFavorite(
 
 export async function addFavorite(
   userId: string,
-  item: { media_type: MediaType; tmdb_id: number; title: string; poster_path: string | null }
+  item: {
+    media_type: MediaType;
+    tmdb_id: number;
+    title: string;
+    title_en: string;
+    poster_path: string | null;
+  }
 ) {
   const { error } = await supabase
     .from('favorites')
@@ -384,6 +453,8 @@ export async function removeFavorite(userId: string, mediaType: MediaType, tmdbI
 export interface WatchlistMovie {
   tmdb_id: number;
   title: string;
+  /** Título em inglês; `null` em registros antigos ainda não migrados. */
+  title_en: string | null;
   poster_path: string | null;
   added_at: string;
 }
@@ -391,7 +462,7 @@ export interface WatchlistMovie {
 export async function getWatchlistMovies(userId: string): Promise<WatchlistMovie[]> {
   const { data, error } = await supabase
     .from('watchlist_movies')
-    .select('tmdb_id, title, poster_path, added_at')
+    .select('tmdb_id, title, title_en, poster_path, added_at')
     .eq('user_id', userId)
     .order('added_at', { ascending: false });
   if (error) throw error;
@@ -410,7 +481,7 @@ export async function isMovieInWatchlist(userId: string, tmdbId: number): Promis
 
 export async function addMovieToWatchlist(
   userId: string,
-  movie: { tmdb_id: number; title: string; poster_path: string | null }
+  movie: { tmdb_id: number; title: string; title_en: string; poster_path: string | null }
 ) {
   const { error } = await supabase
     .from('watchlist_movies')
@@ -624,7 +695,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 export async function followShowsBulk(
   userId: string,
-  shows: { tmdb_id: number; name: string; poster_path: string | null }[]
+  shows: { tmdb_id: number; name: string; name_en: string; poster_path: string | null }[]
 ) {
   if (shows.length === 0) return;
   const { error } = await supabase
@@ -638,7 +709,13 @@ export async function followShowsBulk(
 
 export async function importWatchedMoviesBulk(
   userId: string,
-  movies: { tmdb_id: number; title: string; poster_path: string | null; watched_at: string | null }[]
+  movies: {
+    tmdb_id: number;
+    title: string;
+    title_en: string;
+    poster_path: string | null;
+    watched_at: string | null;
+  }[]
 ) {
   if (movies.length === 0) return;
   for (const batch of chunk(movies, IMPORT_CHUNK_SIZE)) {
@@ -647,6 +724,7 @@ export async function importWatchedMoviesBulk(
         user_id: userId,
         tmdb_id: movie.tmdb_id,
         title: movie.title,
+        title_en: movie.title_en,
         poster_path: movie.poster_path,
         ...(movie.watched_at ? { watched_at: movie.watched_at } : {}),
       })),
@@ -795,6 +873,47 @@ export async function getBlockedUsers(userId: string): Promise<Profile[]> {
   return ((data as unknown as { profiles: Profile }[]) ?? []).map((row) => row.profiles);
 }
 
+// ---------- Telefone / achar amigos pelos contatos ----------
+
+export async function getMyPhoneNumber(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('phone_contacts')
+    .select('phone_number')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.phone_number ?? null;
+}
+
+/** Grava o telefone (já em E.164) via Edge Function — a tabela não aceita insert/update direto. */
+export async function setPhoneNumber(phoneNumber: string) {
+  const { error } = await supabase.functions.invoke('set-phone-number', {
+    body: { phone_number: phoneNumber },
+  });
+  if (error) throw await edgeFunctionError(error, 'Não foi possível salvar o telefone.');
+}
+
+export async function removePhoneNumber(userId: string) {
+  const { error } = await supabase.from('phone_contacts').delete().eq('user_id', userId);
+  if (error) throw error;
+}
+
+const CONTACT_HASH_BATCH_SIZE = 800;
+
+/** Manda os hashes SHA-256 dos contatos do celular (nunca o telefone em si) e recebe os perfis que baterem. */
+export async function matchContacts(hashes: string[]): Promise<Profile[]> {
+  const matches = new Map<string, Profile>();
+  for (let i = 0; i < hashes.length; i += CONTACT_HASH_BATCH_SIZE) {
+    const batch = hashes.slice(i, i + CONTACT_HASH_BATCH_SIZE);
+    const { data, error } = await supabase.functions.invoke<{ matches: Profile[] }>('match-contacts', {
+      body: { hashes: batch },
+    });
+    if (error) throw await edgeFunctionError(error, 'Não foi possível buscar nos contatos.');
+    for (const profile of data?.matches ?? []) matches.set(profile.id, profile);
+  }
+  return Array.from(matches.values());
+}
+
 // ---------- Feed social ----------
 
 export interface FeedWatchedItem {
@@ -813,6 +932,8 @@ export interface FeedWatchedMovieItem {
   user: Profile;
   tmdb_id: number;
   title: string;
+  /** Título em inglês; `null` em registros antigos ainda não migrados. */
+  title_en: string | null;
   poster_path: string | null;
   date: string;
   like_count: number;
@@ -865,7 +986,7 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
       .limit(120),
     supabase
       .from('watched_movies')
-      .select('user_id, tmdb_id, title, poster_path, watched_at')
+      .select('user_id, tmdb_id, title, title_en, poster_path, watched_at')
       .in('user_id', friendIds)
       .order('watched_at', { ascending: false })
       .limit(60),
@@ -916,6 +1037,7 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
       user: friendById.get(row.user_id)!,
       tmdb_id: row.tmdb_id,
       title: row.title,
+      title_en: row.title_en,
       poster_path: row.poster_path,
       date: row.watched_at,
       like_count: 0,
@@ -1152,11 +1274,13 @@ export async function getFeedLikesCountSince(userId: string, since: string | nul
 export async function getWatchedMoviesByIds(
   userId: string,
   tmdbIds: number[]
-): Promise<{ tmdb_id: number; title: string; poster_path: string | null }[]> {
+): Promise<
+  { tmdb_id: number; title: string; title_en: string | null; poster_path: string | null }[]
+> {
   if (tmdbIds.length === 0) return [];
   const { data, error } = await supabase
     .from('watched_movies')
-    .select('tmdb_id, title, poster_path')
+    .select('tmdb_id, title, title_en, poster_path')
     .eq('user_id', userId)
     .in('tmdb_id', tmdbIds);
   if (error) throw error;

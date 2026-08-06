@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -43,6 +44,7 @@ interface Stats {
 
 export default function StatsScreen() {
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export default function StatsScreen() {
             } catch {
               return {
                 tmdb_show_id: count.tmdb_show_id,
-                name: `Série #${count.tmdb_show_id}`,
+                name: t('stats.showFallbackName', { id: count.tmdb_show_id }),
                 poster_path: null,
                 episodes: count.episode_count,
                 minutes: count.episode_count * FALLBACK_RUNTIME_MIN,
@@ -112,7 +114,7 @@ export default function StatsScreen() {
         });
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Erro ao calcular as estatísticas.');
+          setError(err instanceof Error ? err.message : t('stats.loadError'));
         }
       }
     })();
@@ -137,7 +139,7 @@ export default function StatsScreen() {
       <View style={[styles.center, { backgroundColor: theme.background }]}>
         <ActivityIndicator />
         <ThemedText type="small" themeColor="textSecondary">
-          Calculando seu tempo assistido…
+          {t('stats.loadingText')}
         </ThemedText>
       </View>
     );
@@ -151,7 +153,7 @@ export default function StatsScreen() {
       contentContainerStyle={styles.container}>
       <View style={[styles.heroCard, { backgroundColor: theme.backgroundElement }]}>
         <ThemedText type="small" themeColor="textSecondary">
-          Tempo total assistido
+          {t('stats.totalWatchedTime')}
         </ThemedText>
         <View style={styles.durationRow}>
           {duration.months > 0 && (
@@ -160,7 +162,7 @@ export default function StatsScreen() {
                 {duration.months}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {duration.months === 1 ? 'mês' : 'meses'}
+                {t('stats.months', { count: duration.months })}
               </ThemedText>
             </View>
           )}
@@ -169,7 +171,7 @@ export default function StatsScreen() {
               {duration.days}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {duration.days === 1 ? 'dia' : 'dias'}
+              {t('stats.days', { count: duration.days })}
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
@@ -177,7 +179,7 @@ export default function StatsScreen() {
               {duration.hours}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              horas
+              {t('stats.hoursLabel')}
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
@@ -185,7 +187,7 @@ export default function StatsScreen() {
               {duration.minutes}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              min
+              {t('stats.minutesLabel')}
             </ThemedText>
           </View>
         </View>
@@ -202,7 +204,7 @@ export default function StatsScreen() {
             {shortDuration(stats.tvMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Tempo em séries
+            {t('stats.tvTime')}
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
@@ -215,7 +217,7 @@ export default function StatsScreen() {
             {shortDuration(stats.movieMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Tempo em filmes
+            {t('stats.movieTime')}
           </ThemedText>
         </View>
       </View>
@@ -228,10 +230,10 @@ export default function StatsScreen() {
             adjustsFontSizeToFit
             minimumFontScale={0.5}
             style={{ color: theme.gold }}>
-            {stats.totalEpisodes.toLocaleString('pt-BR')}
+            {stats.totalEpisodes.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Episódios
+            {t('stats.episodesLabel')}
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
@@ -241,10 +243,10 @@ export default function StatsScreen() {
             adjustsFontSizeToFit
             minimumFontScale={0.5}
             style={{ color: theme.gold }}>
-            {stats.totalShows.toLocaleString('pt-BR')}
+            {stats.totalShows.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Séries
+            {t('stats.showsLabel')}
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.backgroundElement }]}>
@@ -254,10 +256,10 @@ export default function StatsScreen() {
             adjustsFontSizeToFit
             minimumFontScale={0.5}
             style={{ color: theme.gold }}>
-            {stats.totalMovies.toLocaleString('pt-BR')}
+            {stats.totalMovies.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Filmes
+            {t('stats.moviesLabel')}
           </ThemedText>
         </View>
       </View>
@@ -265,7 +267,7 @@ export default function StatsScreen() {
       {stats.shows.length > 0 && (
         <>
           <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Tempo por série
+            {t('stats.timePerShow')}
           </ThemedText>
           {stats.shows.map((show) => {
             const poster = posterUrl(show.poster_path, 'w185');
@@ -301,9 +303,11 @@ export default function StatsScreen() {
                       <Ionicons name="chevron-forward" size={12} color={theme.accent} />
                     </View>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {show.episodes.toLocaleString('pt-BR')}{' '}
-                      {show.episodes === 1 ? 'episódio' : 'episódios'} ·{' '}
-                      {shortDuration(show.minutes)}
+                      {t('stats.episodeCount', {
+                        count: show.episodes,
+                        formattedCount: show.episodes.toLocaleString(i18n.language),
+                      })}{' '}
+                      · {shortDuration(show.minutes)}
                     </ThemedText>
                     <View style={styles.barRow}>
                       <View
@@ -323,7 +327,9 @@ export default function StatsScreen() {
                       </View>
                       {show.remainingMinutes > 0 && (
                         <ThemedText type="small" style={[styles.remaining, { color: theme.gold }]}>
-                          faltam {shortDuration(show.remainingMinutes)}
+                          {t('stats.remainingTime', {
+                            duration: shortDuration(show.remainingMinutes),
+                          })}
                         </ThemedText>
                       )}
                     </View>
@@ -336,7 +342,7 @@ export default function StatsScreen() {
       )}
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-        Tempo estimado com base na duração dos episódios e filmes informada pela TMDB.
+        {t('stats.note')}
       </ThemedText>
     </ScrollView>
   );

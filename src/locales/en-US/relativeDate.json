@@ -1,0 +1,6 @@
+{
+  "today": "today",
+  "yesterday": "yesterday",
+  "daysAgo_one": "{{count}} day ago",
+  "daysAgo_other": "{{count}} days ago"
+}

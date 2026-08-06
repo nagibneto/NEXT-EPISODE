@@ -1,0 +1,17 @@
+{
+  "chooseAvatar": "Choose your avatar",
+  "nicknamePlaceholder": "Your nickname",
+  "nicknameLengthError": "Nickname must be between 1 and 40 characters.",
+  "avatarSaveError": "Couldn't save the avatar.",
+  "nicknameSaveError": "Couldn't save the nickname.",
+  "deleteAccountTitle": "Delete account",
+  "deleteAccountMessage": "This permanently deletes your account and all your data (shows, ratings, comments, friendships). This action cannot be undone.",
+  "deleteAccountError": "Couldn't delete the account.",
+  "blockedUsers": "Blocked",
+  "theme": "Theme",
+  "language": "Language",
+  "signOut": "Sign out",
+  "deleteAccount": "Delete account",
+  "deletingAccount": "Deleting…",
+  "credit": "Show data provided by TMDB (themoviedb.org)."
+}

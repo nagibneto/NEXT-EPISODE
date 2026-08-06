@@ -1,0 +1,16 @@
+{
+  "loadError": "Couldn't load the show.",
+  "updateError": "Couldn't update.",
+  "updateErrorTitle": "Couldn't update",
+  "tryAgain": "Please try again.",
+  "unmarkSeasonTitle": "Unmark season",
+  "unmarkSeasonMessage": "Unmark all episodes of {{name}}?",
+  "unmarkButton": "Unmark",
+  "seasonsCount_one": "{{count}} season",
+  "seasonsCount_other": "{{count}} seasons",
+  "episodesWord": "episodes",
+  "nextEpisode": "Next episode",
+  "following": "✓ Following",
+  "follow": "+ Follow show",
+  "seasonsTitle": "Seasons"
+}

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { ActionSheet } from '@/components/action-sheet';
 
 interface SkippedEpisodesSheetProps {
@@ -19,18 +21,16 @@ export function SkippedEpisodesSheet({
   onSkip,
   onMarkAll,
 }: SkippedEpisodesSheetProps) {
+  const { t } = useTranslation();
+
   return (
     <ActionSheet
       visible={visible}
-      title={`Você está marcando um episódio avançado e deixou ${count} episódio${
-        count === 1 ? '' : 's'
-      } anterior${count === 1 ? '' : 'es'} como não assistido${
-        count === 1 ? '' : 's'
-      }. Quer deixá-los marcados como assistidos também?`}
+      title={t('skippedEpisodesSheet.message', { count })}
       onClose={onClose}
       options={[
-        { label: 'Só este episódio', onPress: onSkip },
-        { label: 'Marcar todos como assistidos', accent: true, onPress: onMarkAll },
+        { label: t('skippedEpisodesSheet.skipOption'), onPress: onSkip },
+        { label: t('skippedEpisodesSheet.markAllOption'), accent: true, onPress: onMarkAll },
       ]}
     />
   );

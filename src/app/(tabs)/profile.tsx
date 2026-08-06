@@ -1,10 +1,23 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
+import type { CountryCode } from 'libphonenumber-js';
 import { useCallback, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { BadgeDot } from '@/components/badge-dot';
+import { LanguageSelector } from '@/components/language-selector';
+import { PhoneInput } from '@/components/phone-input';
 import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
 import { UserAvatar } from '@/components/user-avatar';
@@ -15,16 +28,27 @@ import { useAuth } from '@/hooks/use-auth';
 import { AVATAR_IDS, avatarSource } from '@/lib/avatars';
 import {
   deleteAccount,
+  getMyPhoneNumber,
   getProfile,
   profileDisplayName,
+  removePhoneNumber,
+  setPhoneNumber,
   updateAvatar,
   updateDisplayName,
   type Profile,
 } from '@/lib/db';
 import { unregisterPushToken } from '@/lib/notifications';
+import { defaultCountryForLanguage, normalizePhoneNumber } from '@/lib/phone';
+
+/** Mostra só os 4 últimos dígitos, o resto vira "•" (mesma quantidade de caracteres). */
+function maskPhoneNumber(e164: string): string {
+  if (e164.length <= 4) return e164;
+  return '•'.repeat(e164.length - 4) + e164.slice(-4);
+}
 
 export default function ProfileScreen() {
   const theme = useTheme();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { user, signOut } = useAuth();
   const friendRequestCount = useIncomingFriendRequestCount();
@@ -35,6 +59,12 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumberState] = useState<string | null | undefined>(undefined);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>('BR');
+  const [phoneDigits, setPhoneDigits] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,6 +74,56 @@ export default function ProfileScreen() {
         .catch(() => {});
     }, [user])
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      getMyPhoneNumber(user.id)
+        .then(setPhoneNumberState)
+        .catch(() => setPhoneNumberState(null));
+    }, [user])
+  );
+
+  function startEditingPhone() {
+    setPhoneCountry(defaultCountryForLanguage(i18n.language));
+    setPhoneDigits('');
+    setPhoneError(null);
+    setEditingPhone(true);
+  }
+
+  async function handleSavePhone() {
+    setPhoneError(null);
+    const normalized = normalizePhoneNumber(phoneDigits, phoneCountry);
+    if (!normalized) {
+      setPhoneError(t('findFriendsContacts.invalidPhone'));
+      return;
+    }
+    setPhoneBusy(true);
+    try {
+      await setPhoneNumber(normalized);
+      setPhoneNumberState(normalized);
+      setEditingPhone(false);
+      setPhoneDigits('');
+    } catch (err) {
+      setPhoneError(err instanceof Error ? err.message : t('common.genericError'));
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
+
+  async function handleRemovePhone() {
+    if (!user) return;
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      await removePhoneNumber(user.id);
+      setPhoneNumberState(null);
+    } catch (err) {
+      setPhoneError(err instanceof Error ? err.message : t('common.genericError'));
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
 
   async function handleChooseAvatar(avatarId: number) {
     if (!user) return;
@@ -55,7 +135,7 @@ export default function ProfileScreen() {
       await updateAvatar(user.id, avatarId);
     } catch (err) {
       setProfile((prev) => (prev ? { ...prev, avatar_id: previous } : prev));
-      setError(err instanceof Error ? err.message : 'Não foi possível salvar o avatar.');
+      setError(err instanceof Error ? err.message : t('profile.avatarSaveError'));
     }
   }
 
@@ -69,7 +149,7 @@ export default function ProfileScreen() {
     if (!user) return;
     const trimmed = nickname.trim();
     if (trimmed.length < 1 || trimmed.length > 40) {
-      setError('O apelido precisa ter entre 1 e 40 caracteres.');
+      setError(t('profile.nicknameLengthError'));
       return;
     }
     setSaving(true);
@@ -79,7 +159,7 @@ export default function ProfileScreen() {
       setProfile((prev) => (prev ? { ...prev, display_name: trimmed } : prev));
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível salvar o apelido.');
+      setError(err instanceof Error ? err.message : t('profile.nicknameSaveError'));
     } finally {
       setSaving(false);
     }
@@ -92,12 +172,12 @@ export default function ProfileScreen() {
 
   function handleDeleteAccount() {
     Alert.alert(
-      'Excluir conta',
-      'Isso apaga sua conta e todos os seus dados (séries, avaliações, comentários, amizades) permanentemente. Essa ação não pode ser desfeita.',
+      t('profile.deleteAccountTitle'),
+      t('profile.deleteAccountMessage'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Excluir',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             setDeleting(true);
@@ -107,7 +187,7 @@ export default function ProfileScreen() {
               await deleteAccount();
               await signOut();
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'Não foi possível excluir a conta.');
+              setError(err instanceof Error ? err.message : t('profile.deleteAccountError'));
               setDeleting(false);
             }
           },
@@ -118,6 +198,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
         <View style={styles.avatarRow}>
           <Pressable hitSlop={4} onPress={() => setChoosingAvatar(true)}>
@@ -138,7 +219,7 @@ export default function ProfileScreen() {
                 styles.nicknameInput,
                 { backgroundColor: theme.backgroundSelected, color: theme.text },
               ]}
-              placeholder="Seu apelido"
+              placeholder={t('profile.nicknamePlaceholder')}
               placeholderTextColor={theme.textSecondary}
               maxLength={40}
               autoFocus
@@ -159,14 +240,73 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <View style={styles.nameRow}>
-            <ThemedText type="subtitle">
-              {profile ? profileDisplayName(profile) : '…'}
-            </ThemedText>
-            <Pressable hitSlop={8} onPress={startEditing}>
-              <Ionicons name="pencil" size={18} color={theme.accent} />
+            <View style={styles.nameRowLeft}>
+              <ThemedText type="subtitle">
+                {profile ? profileDisplayName(profile) : '…'}
+              </ThemedText>
+              <Pressable hitSlop={8} onPress={startEditing}>
+                <Ionicons name="pencil" size={18} color={theme.accent} />
+              </Pressable>
+            </View>
+            {!editingPhone && phoneNumber && (
+              <View style={styles.phoneRow}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {maskPhoneNumber(phoneNumber)}
+                </ThemedText>
+                <Pressable hitSlop={8} disabled={phoneBusy} onPress={handleRemovePhone}>
+                  <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                </Pressable>
+              </View>
+            )}
+            {!editingPhone && phoneNumber === null && (
+              <Pressable hitSlop={8} style={styles.phoneRow} onPress={startEditingPhone}>
+                <Ionicons name="call-outline" size={16} color={theme.accent} />
+                <ThemedText type="small" style={{ color: theme.accent }}>
+                  {t('findFriendsContacts.addPhone')}
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {editingPhone && (
+          <View style={styles.editRow}>
+            <PhoneInput
+              countryCode={phoneCountry}
+              nationalNumber={phoneDigits}
+              onChangeCountryCode={setPhoneCountry}
+              onChangeNationalNumber={setPhoneDigits}
+              autoFocus
+            />
+            <Pressable
+              hitSlop={8}
+              disabled={phoneBusy}
+              onPress={handleSavePhone}
+              style={[styles.iconButton, { backgroundColor: theme.accent, opacity: phoneBusy ? 0.6 : 1 }]}>
+              {phoneBusy ? (
+                <ActivityIndicator size="small" color={theme.accentText} />
+              ) : (
+                <Ionicons name="checkmark" size={18} color={theme.accentText} />
+              )}
+            </Pressable>
+            <Pressable
+              hitSlop={8}
+              disabled={phoneBusy}
+              onPress={() => {
+                setEditingPhone(false);
+                setPhoneDigits('');
+                setPhoneError(null);
+              }}>
+              <Ionicons name="close" size={22} color={theme.textSecondary} />
             </Pressable>
           </View>
         )}
+        {phoneError && (
+          <ThemedText type="small" themeColor="danger">
+            {phoneError}
+          </ThemedText>
+        )}
+
         {profile && (
           <ThemedText type="small" themeColor="textSecondary">
             @{profile.username}
@@ -175,6 +315,7 @@ export default function ProfileScreen() {
         <ThemedText type="small" themeColor="textSecondary">
           {user?.email}
         </ThemedText>
+
         {error && (
           <ThemedText type="small" themeColor="danger">
             {error}
@@ -193,7 +334,7 @@ export default function ProfileScreen() {
             // Impede que o toque dentro do cartão feche o modal.
             onPress={(event) => event.stopPropagation()}>
             <ThemedText type="subtitle" style={styles.avatarModalTitle}>
-              Escolha seu avatar
+              {t('profile.chooseAvatar')}
             </ThemedText>
             <View style={styles.avatarGrid}>
               {AVATAR_IDS.map((avatarId) => {
@@ -225,7 +366,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/favorites')}>
           <Ionicons name="star" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Favoritos
+            {t('common.nav.favorites')}
           </ThemedText>
         </Pressable>
 
@@ -234,7 +375,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/to-watch')}>
           <Ionicons name="bookmark" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Para assistir
+            {t('common.nav.toWatch')}
           </ThemedText>
         </Pressable>
 
@@ -243,7 +384,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/stats')}>
           <Ionicons name="stats-chart" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Estatísticas
+            {t('common.nav.stats')}
           </ThemedText>
         </Pressable>
 
@@ -253,7 +394,7 @@ export default function ProfileScreen() {
           <BadgeDot visible={friendRequestCount > 0} />
           <Ionicons name="people" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Amigos
+            {t('common.nav.friends')}
           </ThemedText>
         </Pressable>
 
@@ -262,7 +403,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/import-tv-time')}>
           <Ionicons name="cloud-download" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Importar do TV Time
+            {t('common.nav.importTvTime')}
           </ThemedText>
         </Pressable>
 
@@ -271,7 +412,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/blocked-users')}>
           <Ionicons name="hand-left" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Bloqueados
+            {t('profile.blockedUsers')}
           </ThemedText>
         </Pressable>
 
@@ -280,14 +421,21 @@ export default function ProfileScreen() {
           onPress={() => router.push('/notification-settings')}>
           <Ionicons name="notifications-outline" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Notificações
+            {t('common.nav.notifications')}
           </ThemedText>
         </Pressable>
 
         <View style={[styles.tile, { backgroundColor: theme.backgroundElement }]}>
           <ThemeSelector />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            Tema
+            {t('profile.theme')}
+          </ThemedText>
+        </View>
+
+        <View style={[styles.tile, { backgroundColor: theme.backgroundElement }]}>
+          <LanguageSelector />
+          <ThemedText type="smallBold" style={styles.tileLabel}>
+            {t('profile.language')}
           </ThemedText>
         </View>
 
@@ -296,7 +444,7 @@ export default function ProfileScreen() {
           onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={22} color={theme.danger} />
           <ThemedText type="smallBold" themeColor="danger" style={styles.tileLabel}>
-            Sair da conta
+            {t('profile.signOut')}
           </ThemedText>
         </Pressable>
 
@@ -309,14 +457,15 @@ export default function ProfileScreen() {
           onPress={handleDeleteAccount}>
           <Ionicons name="trash-outline" size={22} color={theme.danger} />
           <ThemedText type="smallBold" themeColor="danger" style={styles.tileLabel}>
-            {deleting ? 'Excluindo…' : 'Excluir conta'}
+            {deleting ? t('profile.deletingAccount') : t('profile.deleteAccount')}
           </ThemedText>
         </Pressable>
       </View>
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.credit}>
-        Dados de séries fornecidos por TMDB (themoviedb.org).
+        {t('profile.credit')}
       </ThemedText>
+      </ScrollView>
     </View>
   );
 }
@@ -324,6 +473,9 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: Spacing.three,
     gap: Spacing.three,
   },
@@ -378,12 +530,28 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  // Nome + lápis de editar, agrupados à esquerda (o telefone fica à direita,
+  // ver phoneRow, no mesmo nameRow).
+  nameRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexShrink: 1,
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  // Telefone, à direita na altura do nome — mais alto que @usuário/e-mail
+  // pra não ficar sozinho e "flutuando" numa linha vazia lá embaixo.
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
   },
   nicknameInput: {
     flex: 1,

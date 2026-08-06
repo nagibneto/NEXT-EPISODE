@@ -1,0 +1,22 @@
+{
+  "loadingText": "Calculating your watch time…",
+  "loadError": "Couldn't calculate your stats.",
+  "totalWatchedTime": "Total watch time",
+  "months_one": "month",
+  "months_other": "months",
+  "days_one": "day",
+  "days_other": "days",
+  "hoursLabel": "hours",
+  "minutesLabel": "min",
+  "tvTime": "Time on shows",
+  "movieTime": "Time on movies",
+  "episodesLabel": "Episodes",
+  "showsLabel": "Shows",
+  "moviesLabel": "Movies",
+  "timePerShow": "Time per show",
+  "showFallbackName": "Show #{{id}}",
+  "episodeCount_one": "{{formattedCount}} episode",
+  "episodeCount_other": "{{formattedCount}} episodes",
+  "remainingTime": "{{duration}} left",
+  "note": "Estimated time based on episode and movie durations from TMDB."
+}

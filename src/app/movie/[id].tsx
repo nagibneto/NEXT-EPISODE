@@ -3,6 +3,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { CastList } from '@/components/cast-list';
@@ -27,10 +28,17 @@ import {
   removeFavorite,
   removeMovieFromWatchlist,
 } from '@/lib/db';
-import { backdropUrl, getMovieDetails, posterUrl, type TmdbMovieDetails } from '@/lib/tmdb';
+import {
+  backdropUrl,
+  getMovieDetails,
+  getMovieNames,
+  posterUrl,
+  type TmdbMovieDetails,
+} from '@/lib/tmdb';
 
 export default function MovieDetailsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const movieId = Number(id);
@@ -47,7 +55,7 @@ export default function MovieDetailsScreen() {
   useEffect(() => {
     getMovieDetails(movieId)
       .then(setMovie)
-      .catch((err) => setError(errorMessage(err, 'Erro ao carregar o filme.')));
+      .catch((err) => setError(errorMessage(err, t('movie.loadError'))));
     getEpisodeAverageRating(movieId, 0, 0, 'movie')
       .then(setAverage)
       .catch(() => {});
@@ -71,16 +79,17 @@ export default function MovieDetailsScreen() {
     if (!user || !movie || watched === null) return;
     setBusy(true);
     try {
+      const names = await getMovieNames(movie.id);
       await markMovieWatched(
         user.id,
-        { tmdb_id: movie.id, title: movie.title, poster_path: movie.poster_path },
+        { tmdb_id: movie.id, ...names, poster_path: movie.poster_path },
         !watched
       );
       setWatched(!watched);
       // Marcar como assistido também tira o filme do "Para assistir".
       if (!watched) setInWatchlist(false);
     } catch (err) {
-      setError(errorMessage(err, 'Não foi possível atualizar.'));
+      setError(errorMessage(err, t('movie.updateError')));
     } finally {
       setBusy(false);
     }
@@ -93,9 +102,10 @@ export default function MovieDetailsScreen() {
     setInWatchlist(next);
     try {
       if (next) {
+        const names = await getMovieNames(movie.id);
         await addMovieToWatchlist(user.id, {
           tmdb_id: movie.id,
-          title: movie.title,
+          ...names,
           poster_path: movie.poster_path,
         });
       } else {
@@ -103,7 +113,7 @@ export default function MovieDetailsScreen() {
       }
     } catch (err) {
       setInWatchlist(!next);
-      setError(errorMessage(err, 'Não foi possível atualizar.'));
+      setError(errorMessage(err, t('movie.updateError')));
     }
   }
 
@@ -114,10 +124,12 @@ export default function MovieDetailsScreen() {
     setFavorite(next);
     try {
       if (next) {
+        const names = await getMovieNames(movie.id);
         await addFavorite(user.id, {
           media_type: 'movie',
           tmdb_id: movie.id,
-          title: movie.title,
+          title: names.title,
+          title_en: names.title_en,
           poster_path: movie.poster_path,
         });
       } else {
@@ -136,7 +148,7 @@ export default function MovieDetailsScreen() {
       const avg = await getEpisodeAverageRating(movieId, 0, 0, 'movie');
       setAverage(avg);
     } catch (err) {
-      setError(errorMessage(err, 'Não foi possível salvar a nota.'));
+      setError(errorMessage(err, t('movie.rateError')));
     }
   }
 
@@ -169,7 +181,7 @@ export default function MovieDetailsScreen() {
         mediaType="movie"
         tmdbId={movieId}
         watched={watched}
-        lockedText="Você ainda não marcou este filme como assistido. Os comentários podem conter spoilers."
+        lockedText={t('movie.commentsLocked')}
         header={
           <View style={styles.header}>
             <View>
@@ -203,7 +215,7 @@ export default function MovieDetailsScreen() {
                   {movie.genres.map((genre) => genre.name).join(' · ')}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {[year, movie.runtime ? `${movie.runtime} min` : null]
+                  {[year, movie.runtime ? `${movie.runtime} ${t('movie.minutesSuffix')}` : null]
                     .filter(Boolean)
                     .join(' · ')}
                 </ThemedText>
@@ -227,7 +239,7 @@ export default function MovieDetailsScreen() {
                 <ThemedText
                   type="smallBold"
                   style={{ color: watched ? theme.text : theme.accentText }}>
-                  {watched === null ? '…' : watched ? '✓ Assistido' : '+ Marcar como assistido'}
+                  {watched === null ? '…' : watched ? t('movie.watched') : t('movie.markWatched')}
                 </ThemedText>
               </Pressable>
               {/* Já assistiu? Não faz sentido oferecer o "Para assistir". */}
@@ -251,7 +263,7 @@ export default function MovieDetailsScreen() {
                   <ThemedText
                     type="smallBold"
                     style={{ color: inWatchlist ? theme.accent : theme.text }}>
-                    Para assistir
+                    {t('movie.toWatch')}
                   </ThemedText>
                 </Pressable>
               )}
@@ -266,12 +278,14 @@ export default function MovieDetailsScreen() {
             <WatchProviders media="movie" tmdbId={movieId} />
 
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText type="smallBold">Sua nota</ThemedText>
+              <ThemedText type="smallBold">{t('movie.yourRating')}</ThemedText>
               <StarRating value={myRating} onChange={handleRate} />
               {average && average.count > 0 && (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Média da comunidade: {(average.average / 2).toFixed(1)}/5 ({average.count}{' '}
-                  {average.count === 1 ? 'voto' : 'votos'})
+                  {t('movie.communityAverage', {
+                    rating: (average.average / 2).toFixed(1),
+                    count: average.count,
+                  })}
                 </ThemedText>
               )}
             </View>

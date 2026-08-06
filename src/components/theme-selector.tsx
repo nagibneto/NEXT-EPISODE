@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
 
 const OPTIONS = [
-  { value: 'light', label: 'Tema claro', icon: 'sunny-outline' },
-  { value: 'dark', label: 'Tema escuro', icon: 'moon-outline' },
+  { value: 'light', labelKey: 'themeSelector.lightTheme', icon: 'sunny-outline' },
+  { value: 'dark', labelKey: 'themeSelector.darkTheme', icon: 'moon-outline' },
 ] as const;
 
 /**
@@ -16,6 +17,7 @@ const OPTIONS = [
  */
 export function ThemeSelector() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { scheme, setPreference } = useThemePreference();
 
   return (
@@ -26,7 +28,7 @@ export function ThemeSelector() {
           <Pressable
             key={option.value}
             style={[styles.option, selected && { backgroundColor: theme.backgroundSelected }]}
-            accessibilityLabel={option.label}
+            accessibilityLabel={t(option.labelKey)}
             onPress={() => setPreference(option.value)}>
             <Ionicons
               name={option.icon}

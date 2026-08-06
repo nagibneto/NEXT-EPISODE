@@ -1,0 +1,13 @@
+{
+  "loadError": "Erro ao carregar o filme.",
+  "updateError": "Não foi possível atualizar.",
+  "rateError": "Não foi possível salvar a nota.",
+  "commentsLocked": "Você ainda não marcou este filme como assistido. Os comentários podem conter spoilers.",
+  "minutesSuffix": "min",
+  "watched": "✓ Assistido",
+  "markWatched": "+ Marcar como assistido",
+  "toWatch": "Para assistir",
+  "yourRating": "Sua nota",
+  "communityAverage_one": "Média da comunidade: {{rating}}/5 ({{count}} voto)",
+  "communityAverage_other": "Média da comunidade: {{rating}}/5 ({{count}} votos)"
+}

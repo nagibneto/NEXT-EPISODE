@@ -1,0 +1,14 @@
+{
+  "searchError": "Erro ao buscar.",
+  "tvPlaceholder": "Buscar séries…",
+  "moviePlaceholder": "Buscar filmes…",
+  "tvTab": "Séries",
+  "movieTab": "Filmes",
+  "filterResults": "Resultados do filtro",
+  "popularNow": "Populares no momento",
+  "justWatchData": " · dados JustWatch",
+  "categories": "Categorias",
+  "noShowsFound": "Nenhuma série encontrada.",
+  "noMoviesFound": "Nenhum filme encontrado.",
+  "castPrefix": "Elenco: {{name}}"
+}

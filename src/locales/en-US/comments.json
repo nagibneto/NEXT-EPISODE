@@ -1,0 +1,22 @@
+{
+  "loadError": "We couldn't load the comments.",
+  "sendError": "We couldn't post your comment.",
+  "spoilerFlagAlertTitle": "Flag sent",
+  "spoilerFlagAlertBody": "Thanks for letting us know — enough flags will hide the comment.",
+  "reportAlertTitle": "Report sent",
+  "reportAlertBody": "Thanks for letting us know — we'll take a look.",
+  "blockAlertTitle": "Block user",
+  "blockAlertBody": "You'll stop seeing each other's content, and any friendship between you will be ended.",
+  "blockConfirm": "Block",
+  "reply": "Reply",
+  "title": "Comments",
+  "titleWithCount": "Comments ({{count}})",
+  "lockedTitle": "Comments locked",
+  "revealAnyway": "Show comments anyway",
+  "emptyState": "Be the first to comment!",
+  "replyingTo": "Replying to {{name}}",
+  "commentPlaceholder": "Write a comment…",
+  "flagSpoiler": "Flag as spoiler",
+  "reportComment": "Report comment",
+  "blockUser": "Block user"
+}

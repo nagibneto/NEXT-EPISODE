@@ -1,0 +1,22 @@
+{
+  "statsError": "Error loading stats.",
+  "showFallback": "Show #{{id}}",
+  "visibleOnlyToFriends": "{{name}}'s stats are only visible to friends.",
+  "totalWatchTime": "Total watch time",
+  "months_one": "month",
+  "months_other": "months",
+  "days_one": "day",
+  "days_other": "days",
+  "hours": "hours",
+  "minutesShort": "min",
+  "episodesLabel": "Episodes",
+  "showsLabel": "Shows",
+  "moviesLabel": "Movies",
+  "commonShowsHeader": "Shows in common ({{count}})",
+  "mostWatchedShows": "Most watched shows",
+  "episodesCount_one": "{{count}} episode",
+  "episodesCount_other": "{{count}} episodes",
+  "youEpisodes": "You: {{count}} ep",
+  "friendEpisodes": "{{name}}: {{count}} ep",
+  "note": "Estimated time based on episode and movie durations reported by TMDB."
+}

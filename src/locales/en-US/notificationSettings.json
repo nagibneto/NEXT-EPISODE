@@ -1,0 +1,23 @@
+{
+  "intro": "Choose what you want to receive push notifications for.",
+  "loadError": "Error loading preferences.",
+  "saveError": "Couldn't save the preference.",
+  "options": {
+    "new_episodes": {
+      "label": "New episodes",
+      "description": "When a show you follow has a new episode airing."
+    },
+    "friend_requests": {
+      "label": "Friend requests",
+      "description": "When someone wants to be your friend."
+    },
+    "friend_accepted": {
+      "label": "Accepted requests",
+      "description": "When someone accepts your friend request."
+    },
+    "feed_likes": {
+      "label": "Likes on what you watched",
+      "description": "When a friend likes a show or movie you watched."
+    }
+  }
+}

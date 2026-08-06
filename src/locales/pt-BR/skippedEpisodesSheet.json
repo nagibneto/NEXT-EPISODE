@@ -1,0 +1,6 @@
+{
+  "message_one": "Você está marcando um episódio avançado e deixou {{count}} episódio anterior como não assistido. Quer deixá-los marcados como assistidos também?",
+  "message_other": "Você está marcando um episódio avançado e deixou {{count}} episódios anteriores como não assistidos. Quer deixá-los marcados como assistidos também?",
+  "skipOption": "Só este episódio",
+  "markAllOption": "Marcar todos como assistidos"
+}

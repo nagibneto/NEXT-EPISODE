@@ -1,0 +1,13 @@
+{
+  "privacyExplanation": "Seu número e os números dos seus contatos não ficam visíveis para ninguém, nem para outros usuários do app. A gente só usa eles, de um jeito seguro, para descobrir quem dos seus contatos já usa o Next Episode.",
+  "phonePlaceholder": "DDD + número",
+  "chooseCountry": "Escolha o país",
+  "searchCountry": "Buscar país",
+  "addPhone": "Adicionar telefone",
+  "invalidPhone": "Digite um telefone válido (com DDD).",
+  "scanButton": "Buscar nos meus contatos",
+  "permissionDenied": "Sem acesso aos contatos. Ative a permissão nas configurações do celular para usar essa busca.",
+  "openSettings": "Abrir configurações",
+  "scanError": "Não foi possível buscar nos seus contatos. Tente de novo.",
+  "noMatches": "Nenhum amigo encontrado nos seus contatos por enquanto."
+}

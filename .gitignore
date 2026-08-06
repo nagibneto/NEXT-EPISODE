@@ -21,6 +21,9 @@ expo-env.d.ts
 # Supabase CLI (estado local do "supabase link")
 supabase/.temp/
 
+# Chaves privadas baixadas de provedores (ex.: AuthKey_*.p8 do Sign in with Apple)
+/keys/
+
 # Metro
 .metro-health-check*
 

@@ -1,64 +1,48 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { FlatList, Platform, Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActionSheet } from '@/components/action-sheet';
+import { FriendStatusButton } from '@/components/friend-status-button';
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  acceptFriendRequest,
-  getFriends,
-  getIncomingFriendRequests,
-  getOutgoingFriendRequests,
-  profileDisplayName,
-  removeFriendRequest,
-  searchProfiles,
-  sendFriendRequest,
-  type Profile,
-} from '@/lib/db';
+import { useFriendRelations } from '@/hooks/use-friend-relations';
+import { profileDisplayName, searchProfiles, type Profile } from '@/lib/db';
 
-type FriendStatus = 'friend' | 'incoming' | 'outgoing' | 'none';
+// Link de cada loja para o convite (ver friends.json / handleInvite abaixo).
+const APP_STORE_URL = 'https://apps.apple.com/br/app/next-episode/id6789371179';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.nagibneto.nextepisode';
 
 export default function FriendsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Profile[] | null>(null);
-  const [friends, setFriends] = useState<Profile[]>([]);
-  const [incoming, setIncoming] = useState<Profile[]>([]);
-  const [outgoing, setOutgoing] = useState<Profile[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const {
+    friends,
+    incoming,
+    outgoing,
+    busyIds,
+    error,
+    statusFor,
+    send,
+    accept,
+    remove,
+  } = useFriendRelations(user?.id);
   // Desfazer amizade e cancelar pedido pedem confirmação — são ações que o
   // usuário não consegue desfazer sozinho depois.
   const [confirming, setConfirming] = useState<{
     profile: Profile;
     kind: 'friend' | 'outgoing';
   } | null>(null);
-
-  const loadRelations = useCallback(() => {
-    if (!user) return;
-    Promise.all([
-      getFriends(user.id),
-      getIncomingFriendRequests(user.id),
-      getOutgoingFriendRequests(user.id),
-    ])
-      .then(([friendsList, incomingList, outgoingList]) => {
-        setFriends(friendsList);
-        setIncoming(incomingList);
-        setOutgoing(outgoingList);
-      })
-      .catch(() => {});
-  }, [user]);
-
-  useEffect(() => {
-    loadRelations();
-  }, [loadRelations]);
 
   // Busca com debounce simples enquanto o usuário digita.
   useEffect(() => {
@@ -72,105 +56,20 @@ export default function FriendsScreen() {
       searchProfiles(term, user.id)
         .then(setResults)
         .catch((err) =>
-          setError(err instanceof Error ? err.message : 'Erro ao buscar usuários.')
+          setSearchError(err instanceof Error ? err.message : t('friends.searchError'))
         );
     }, 350);
     return () => clearTimeout(timer);
   }, [query, user]);
 
-  function statusFor(profileId: string): FriendStatus {
-    if (friends.some((p) => p.id === profileId)) return 'friend';
-    if (incoming.some((p) => p.id === profileId)) return 'incoming';
-    if (outgoing.some((p) => p.id === profileId)) return 'outgoing';
-    return 'none';
+  function handleInvite() {
+    const storeUrl = Platform.OS === 'ios' ? APP_STORE_URL : PLAY_STORE_URL;
+    Share.share({ message: t('friends.inviteMessage', { url: storeUrl }) }).catch(() => {});
   }
 
-  async function withBusy(id: string, action: () => Promise<void>) {
-    if (!user) return;
-    setBusyIds((prev) => new Set(prev).add(id));
-    setError(null);
-    try {
-      await action();
-      loadRelations();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível concluir a ação.');
-    } finally {
-      setBusyIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  }
-
-  const handleSendRequest = (profile: Profile) =>
-    withBusy(profile.id, () => sendFriendRequest(user!.id, profile.id));
-  const handleAccept = (profile: Profile) =>
-    withBusy(profile.id, () => acceptFriendRequest(user!.id, profile.id));
-  const handleRemove = (profile: Profile) =>
-    withBusy(profile.id, () => removeFriendRequest(user!.id, profile.id));
-
-  function renderStatusButton(profile: Profile) {
-    const status = statusFor(profile.id);
-    const busy = busyIds.has(profile.id);
-
-    if (status === 'friend') {
-      return (
-        <View style={styles.statusGroup}>
-          <View style={[styles.statusPill, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold">Amigos</ThemedText>
-          </View>
-          <Pressable
-            hitSlop={8}
-            disabled={busy}
-            onPress={() => setConfirming({ profile, kind: 'friend' })}
-            style={styles.removeButton}>
-            <Ionicons name="person-remove-outline" size={20} color={theme.danger} />
-          </Pressable>
-        </View>
-      );
-    }
-    if (status === 'incoming') {
-      return (
-        <Pressable
-          disabled={busy}
-          onPress={() => handleAccept(profile)}
-          style={[styles.actionButton, { backgroundColor: theme.accent }]}>
-          <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-            Aceitar
-          </ThemedText>
-        </Pressable>
-      );
-    }
-    if (status === 'outgoing') {
-      return (
-        <View style={styles.statusGroup}>
-          <View style={[styles.statusPill, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold" themeColor="textSecondary">
-              Pendente
-            </ThemedText>
-          </View>
-          <Pressable
-            hitSlop={8}
-            disabled={busy}
-            onPress={() => setConfirming({ profile, kind: 'outgoing' })}
-            style={styles.removeButton}>
-            <Ionicons name="close-circle-outline" size={20} color={theme.danger} />
-          </Pressable>
-        </View>
-      );
-    }
-    return (
-      <Pressable
-        disabled={busy}
-        onPress={() => handleSendRequest(profile)}
-        style={[styles.actionButton, { backgroundColor: theme.accent }]}>
-        <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-          Adicionar
-        </ThemedText>
-      </Pressable>
-    );
-  }
+  const handleSendRequest = (profile: Profile) => send(profile, t('friends.actionError'));
+  const handleAccept = (profile: Profile) => accept(profile, t('friends.actionError'));
+  const handleRemove = (profile: Profile) => remove(profile, t('friends.actionError'));
 
   function renderProfile({ item }: { item: Profile }) {
     return (
@@ -187,7 +86,13 @@ export default function FriendsScreen() {
             </ThemedText>
           </View>
         </Pressable>
-        {renderStatusButton(item)}
+        <FriendStatusButton
+          status={statusFor(item.id)}
+          busy={busyIds.has(item.id)}
+          onSend={() => handleSendRequest(item)}
+          onAccept={() => handleAccept(item)}
+          onRequestRemove={() => setConfirming({ profile: item, kind: 'friend' })}
+        />
       </View>
     );
   }
@@ -204,7 +109,7 @@ export default function FriendsScreen() {
           <View style={styles.rowInfo}>
             <ThemedText type="smallBold">{profileDisplayName(item)}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              @{item.username} quer ser seu amigo
+              {t('friends.wantsToBeFriend', { username: item.username })}
             </ThemedText>
           </View>
         </Pressable>
@@ -213,14 +118,14 @@ export default function FriendsScreen() {
             disabled={busy}
             onPress={() => handleRemove(item)}
             style={[styles.smallButton, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold">Recusar</ThemedText>
+            <ThemedText type="smallBold">{t('friends.decline')}</ThemedText>
           </Pressable>
           <Pressable
             disabled={busy}
             onPress={() => handleAccept(item)}
             style={[styles.smallButton, { backgroundColor: theme.accent }]}>
             <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-              Aceitar
+              {t('friends.accept')}
             </ThemedText>
           </Pressable>
         </View>
@@ -237,7 +142,7 @@ export default function FriendsScreen() {
         <Ionicons name="search" size={18} color={theme.textSecondary} />
         <TextInput
           style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Buscar por nome de usuário ou apelido…"
+          placeholder={t('friends.searchPlaceholder')}
           placeholderTextColor={theme.textSecondary}
           autoCapitalize="none"
           value={query}
@@ -245,24 +150,28 @@ export default function FriendsScreen() {
         />
       </View>
 
-      {/* TODO: habilitar quando o link de convite (deep link) estiver pronto. */}
       <Pressable
-        disabled
-        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name="share-outline" size={18} color={theme.textSecondary} />
-        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.inviteLabel}>
-          Convidar amigos
+        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}
+        onPress={() => router.push('/find-friends-contacts')}>
+        <Ionicons name="people-outline" size={18} color={theme.text} />
+        <ThemedText type="smallBold" style={styles.inviteLabel}>
+          {t('friends.findViaContacts')}
         </ThemedText>
-        <View style={[styles.soonBadge, { backgroundColor: theme.backgroundSelected }]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Em breve
-          </ThemedText>
-        </View>
+        <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
       </Pressable>
 
-      {error && (
+      <Pressable
+        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}
+        onPress={handleInvite}>
+        <Ionicons name="share-outline" size={18} color={theme.text} />
+        <ThemedText type="smallBold" style={styles.inviteLabel}>
+          {t('friends.inviteFriends')}
+        </ThemedText>
+      </Pressable>
+
+      {(error || searchError) && (
         <ThemedText type="small" themeColor="danger" style={styles.message}>
-          {error}
+          {error || searchError}
         </ThemedText>
       )}
 
@@ -275,7 +184,7 @@ export default function FriendsScreen() {
           !showingSearch && incoming.length > 0 ? (
             <View style={styles.section}>
               <ThemedText type="smallBold" style={styles.sectionTitle}>
-                Pedidos de amizade ({incoming.length})
+                {t('friends.friendRequestsHeader', { count: incoming.length })}
               </ThemedText>
               {incoming.map(renderIncomingRow)}
             </View>
@@ -285,7 +194,7 @@ export default function FriendsScreen() {
           !showingSearch && outgoing.length > 0 ? (
             <View style={styles.section}>
               <ThemedText type="smallBold" style={styles.sectionTitle}>
-                Pedidos enviados ({outgoing.length})
+                {t('friends.sentRequestsHeader', { count: outgoing.length })}
               </ThemedText>
               {outgoing.map((item) => (
                 <View key={item.id}>{renderProfile({ item })}</View>
@@ -295,9 +204,7 @@ export default function FriendsScreen() {
         }
         ListEmptyComponent={
           <ThemedText type="small" themeColor="textSecondary" style={styles.message}>
-            {showingSearch
-              ? 'Nenhum usuário encontrado.'
-              : 'Você ainda não tem amigos. Busque um usuário acima para mandar um pedido.'}
+            {showingSearch ? t('friends.noUsersFound') : t('friends.noFriendsYet')}
           </ThemedText>
         }
         renderItem={renderProfile}
@@ -307,16 +214,18 @@ export default function FriendsScreen() {
         visible={confirming !== null}
         title={
           confirming?.kind === 'friend'
-            ? `Desfazer amizade com ${profileDisplayName(confirming.profile)}? Vocês deixam de ver o feed e o ranking um do outro.`
+            ? t('friends.unfriendConfirmTitle', { name: profileDisplayName(confirming.profile) })
             : confirming
-              ? `Cancelar o pedido de amizade enviado para ${profileDisplayName(confirming.profile)}?`
+              ? t('friends.cancelRequestConfirmTitle', {
+                  name: profileDisplayName(confirming.profile),
+                })
               : undefined
         }
         options={
           confirming
             ? [
                 {
-                  label: confirming.kind === 'friend' ? 'Desfazer amizade' : 'Cancelar pedido',
+                  label: confirming.kind === 'friend' ? t('friends.unfriend') : t('friends.cancelRequest'),
                   icon:
                     confirming.kind === 'friend' ? 'person-remove-outline' : 'close-circle-outline',
                   destructive: true,
@@ -378,26 +287,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  actionButton: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 8,
-  },
-  // "Amigos"/"Pendente" viram só rótulo; quem remove é o ícone ao lado, para
-  // não apagar a relação num toque acidental.
-  statusGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  statusPill: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 8,
-  },
-  removeButton: {
-    padding: Spacing.half,
-  },
   requestButtons: {
     flexDirection: 'row',
     gap: Spacing.two,
@@ -421,10 +310,5 @@ const styles = StyleSheet.create({
   },
   inviteLabel: {
     flex: 1,
-  },
-  soonBadge: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 4,
   },
 });

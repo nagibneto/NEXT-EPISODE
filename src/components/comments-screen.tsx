@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +37,7 @@ import {
   type EpisodeComment,
   type MediaType,
 } from '@/lib/db';
+import { formatDate } from '@/lib/locale';
 import { uploadCommentImage } from '@/lib/storage';
 
 interface CommentsScreenProps {
@@ -71,6 +73,7 @@ export function CommentsScreen({
   lockedText,
 }: CommentsScreenProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -125,7 +128,7 @@ export function CommentsScreen({
       setComments(list);
       return list;
     } catch (err) {
-      setError(errorMessage(err, 'Não foi possível carregar os comentários.'));
+      setError(errorMessage(err, t('comments.loadError')));
       // Encerra o spinner; a lista aparece vazia com o erro visível acima.
       setComments([]);
       return null;
@@ -189,7 +192,7 @@ export function CommentsScreen({
       // Respostas ficam aninhadas na thread do pai — é até ele que se rola.
       if (list) scrollToComment(list, parentId ?? newId);
     } catch (err) {
-      setError(errorMessage(err, 'Não foi possível enviar o comentário.'));
+      setError(errorMessage(err, t('comments.sendError')));
     } finally {
       setSending(false);
     }
@@ -237,27 +240,24 @@ export function CommentsScreen({
   function handleSpoilerFlag(comment: EpisodeComment) {
     if (!user) return;
     markCommentSpoiler(comment.id, user.id).catch(() => {});
-    alertAfterSheet(
-      'Sinalização enviada',
-      'Obrigado por avisar — com sinalizações suficientes o comentário será ocultado.'
-    );
+    alertAfterSheet(t('comments.spoilerFlagAlertTitle'), t('comments.spoilerFlagAlertBody'));
   }
 
   function handleReport(comment: EpisodeComment) {
     if (!user) return;
     reportComment(comment.id, user.id).catch(() => {});
-    alertAfterSheet('Denúncia enviada', 'Obrigado por avisar — vamos revisar.');
+    alertAfterSheet(t('comments.reportAlertTitle'), t('comments.reportAlertBody'));
   }
 
   function handleBlock(comment: EpisodeComment) {
     if (!user) return;
     alertAfterSheet(
-      'Bloquear usuário',
-      'Vocês deixam de ver o conteúdo um do outro e a amizade (se houver) é desfeita.',
+      t('comments.blockAlertTitle'),
+      t('comments.blockAlertBody'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Bloquear',
+          text: t('comments.blockConfirm'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -286,7 +286,7 @@ export function CommentsScreen({
           </View>
           <View style={styles.commentHeaderRight}>
             <ThemedText type="small" themeColor="textSecondary">
-              {new Date(item.created_at).toLocaleDateString('pt-BR')}
+              {formatDate(item.created_at)}
             </ThemedText>
             {user?.id !== item.user_id && (
               <Pressable hitSlop={8} onPress={() => setMenuComment(item)}>
@@ -315,14 +315,14 @@ export function CommentsScreen({
             </Pressable>
             <Pressable hitSlop={8} onPress={() => setReplyTo(item)}>
               <ThemedText type="small" themeColor="textSecondary">
-                Responder
+                {t('comments.reply')}
               </ThemedText>
             </Pressable>
           </View>
           {user?.id === item.user_id && (
             <Pressable hitSlop={8} onPress={() => handleDeleteComment(item.id)}>
               <ThemedText type="small" themeColor="danger">
-                Excluir
+                {t('common.delete')}
               </ThemedText>
             </Pressable>
           )}
@@ -358,12 +358,14 @@ export function CommentsScreen({
 
             {commentsUnlocked ? (
               <ThemedText type="smallBold" style={styles.commentsTitle}>
-                Comentários {comments ? `(${comments.length})` : ''}
+                {comments
+                  ? t('comments.titleWithCount', { count: comments.length })
+                  : t('comments.title')}
               </ThemedText>
             ) : (
               <View style={[styles.lockedCard, { backgroundColor: theme.backgroundElement }]}>
                 <Ionicons name="eye-off-outline" size={22} color={theme.textSecondary} />
-                <ThemedText type="smallBold">Comentários bloqueados</ThemedText>
+                <ThemedText type="smallBold">{t('comments.lockedTitle')}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
                   {lockedText}
                 </ThemedText>
@@ -371,7 +373,7 @@ export function CommentsScreen({
                   style={[styles.revealButton, { backgroundColor: theme.accent }]}
                   onPress={() => setCommentsRevealed(true)}>
                   <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-                    Mostrar comentários mesmo assim
+                    {t('comments.revealAnyway')}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -383,7 +385,7 @@ export function CommentsScreen({
             <ActivityIndicator style={{ marginTop: Spacing.three }} />
           ) : (
             <ThemedText type="small" themeColor="textSecondary" style={styles.message}>
-              Seja o primeiro a comentar!
+              {t('comments.emptyState')}
             </ThemedText>
           )
         }
@@ -412,7 +414,7 @@ export function CommentsScreen({
                 themeColor="textSecondary"
                 numberOfLines={1}
                 style={{ flex: 1 }}>
-                Respondendo a {profileDisplayName(replyTo.profiles)}
+                {t('comments.replyingTo', { name: profileDisplayName(replyTo.profiles) })}
               </ThemedText>
               <Pressable hitSlop={8} onPress={() => setReplyTo(null)}>
                 <Ionicons name="close" size={16} color={theme.textSecondary} />
@@ -444,7 +446,7 @@ export function CommentsScreen({
             </Pressable>
             <TextInput
               style={[styles.input, { backgroundColor: theme.backgroundElement, color: theme.text }]}
-              placeholder="Escreva um comentário…"
+              placeholder={t('comments.commentPlaceholder')}
               placeholderTextColor={theme.textSecondary}
               value={newComment}
               onChangeText={setNewComment}
@@ -476,17 +478,17 @@ export function CommentsScreen({
           menuComment
             ? [
                 {
-                  label: 'Sinalizar como spoiler',
+                  label: t('comments.flagSpoiler'),
                   icon: 'eye-off-outline',
                   onPress: () => handleSpoilerFlag(menuComment),
                 },
                 {
-                  label: 'Denunciar comentário',
+                  label: t('comments.reportComment'),
                   icon: 'flag-outline',
                   onPress: () => handleReport(menuComment),
                 },
                 {
-                  label: 'Bloquear usuário',
+                  label: t('comments.blockUser'),
                   icon: 'ban-outline',
                   destructive: true,
                   onPress: () => handleBlock(menuComment),

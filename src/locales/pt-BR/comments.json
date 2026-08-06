@@ -1,0 +1,22 @@
+{
+  "loadError": "Não foi possível carregar os comentários.",
+  "sendError": "Não foi possível enviar o comentário.",
+  "spoilerFlagAlertTitle": "Sinalização enviada",
+  "spoilerFlagAlertBody": "Obrigado por avisar — com sinalizações suficientes o comentário será ocultado.",
+  "reportAlertTitle": "Denúncia enviada",
+  "reportAlertBody": "Obrigado por avisar — vamos revisar.",
+  "blockAlertTitle": "Bloquear usuário",
+  "blockAlertBody": "Vocês deixam de ver o conteúdo um do outro e a amizade (se houver) é desfeita.",
+  "blockConfirm": "Bloquear",
+  "reply": "Responder",
+  "title": "Comentários",
+  "titleWithCount": "Comentários ({{count}})",
+  "lockedTitle": "Comentários bloqueados",
+  "revealAnyway": "Mostrar comentários mesmo assim",
+  "emptyState": "Seja o primeiro a comentar!",
+  "replyingTo": "Respondendo a {{name}}",
+  "commentPlaceholder": "Escreva um comentário…",
+  "flagSpoiler": "Sinalizar como spoiler",
+  "reportComment": "Denunciar comentário",
+  "blockUser": "Bloquear usuário"
+}

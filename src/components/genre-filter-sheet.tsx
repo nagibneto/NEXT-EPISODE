@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -23,6 +24,7 @@ export function GenreFilterSheet({
   onClose,
 }: GenreFilterSheetProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   function choose(id: number | null) {
     onSelect(id);
@@ -37,7 +39,7 @@ export function GenreFilterSheet({
           // Evita que o toque num chip feche o modal pelo overlay por baixo.
           onPress={() => {}}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">Categoria</ThemedText>
+            <ThemedText type="subtitle">{t('genreFilterSheet.category')}</ThemedText>
             <Pressable hitSlop={8} onPress={onClose}>
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </Pressable>
@@ -52,7 +54,7 @@ export function GenreFilterSheet({
               <ThemedText
                 type="small"
                 style={{ color: selectedId === null ? theme.accentText : theme.text }}>
-                Todas
+                {t('genreFilterSheet.all')}
               </ThemedText>
             </Pressable>
             {genres.map((genre) => (

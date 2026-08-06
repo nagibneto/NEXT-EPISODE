@@ -1,0 +1,16 @@
+{
+  "loadError": "Erro ao carregar a série.",
+  "updateError": "Não foi possível atualizar.",
+  "updateErrorTitle": "Não foi possível atualizar",
+  "tryAgain": "Tente novamente.",
+  "unmarkSeasonTitle": "Desmarcar temporada",
+  "unmarkSeasonMessage": "Desmarcar todos os episódios de {{name}}?",
+  "unmarkButton": "Desmarcar",
+  "seasonsCount_one": "{{count}} temporada",
+  "seasonsCount_other": "{{count}} temporadas",
+  "episodesWord": "episódios",
+  "nextEpisode": "Próximo episódio",
+  "following": "✓ Seguindo",
+  "follow": "+ Seguir série",
+  "seasonsTitle": "Temporadas"
+}

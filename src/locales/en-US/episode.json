@@ -1,0 +1,12 @@
+{
+  "loadError": "Couldn't load the episode.",
+  "rateError": "Couldn't save your rating.",
+  "watchToggleError": "Couldn't mark as watched.",
+  "commentsLocked": "You haven't marked this episode as watched yet. Comments may contain spoilers.",
+  "minutesSuffix": "min",
+  "previousEpisode": "Previous episode",
+  "nextEpisode": "Next episode",
+  "yourRating": "Your rating",
+  "communityAverage_one": "Community average: {{rating}}/5 ({{count}} vote)",
+  "communityAverage_other": "Community average: {{rating}}/5 ({{count}} votes)"
+}

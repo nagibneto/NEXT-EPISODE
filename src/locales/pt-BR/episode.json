@@ -1,0 +1,12 @@
+{
+  "loadError": "Erro ao carregar o episódio.",
+  "rateError": "Não foi possível salvar a nota.",
+  "watchToggleError": "Não foi possível marcar como assistido.",
+  "commentsLocked": "Você ainda não marcou este episódio como assistido. Os comentários podem conter spoilers.",
+  "minutesSuffix": "min",
+  "previousEpisode": "Episódio anterior",
+  "nextEpisode": "Próximo episódio",
+  "yourRating": "Sua nota",
+  "communityAverage_one": "Média da comunidade: {{rating}}/5 ({{count}} voto)",
+  "communityAverage_other": "Média da comunidade: {{rating}}/5 ({{count}} votos)"
+}

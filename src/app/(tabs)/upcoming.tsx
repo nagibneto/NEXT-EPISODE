@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,6 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { getFollowedShows } from '@/lib/db';
+import { formatDate } from '@/lib/locale';
 import { getShowDetails, posterUrl, type TmdbEpisode } from '@/lib/tmdb';
 
 interface UpcomingItem {
@@ -17,19 +19,20 @@ interface UpcomingItem {
   episode: TmdbEpisode;
 }
 
-function formatAirDate(airDate: string): string {
+function formatAirDate(airDate: string, t: ReturnType<typeof useTranslation>['t']): string {
   const date = new Date(`${airDate}T00:00:00`);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diffDays = Math.round((date.getTime() - today.getTime()) / 86_400_000);
-  if (diffDays === 0) return 'Hoje! 🎉';
-  if (diffDays === 1) return 'Amanhã';
-  if (diffDays < 7) return `Em ${diffDays} dias`;
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  if (diffDays === 0) return t('upcoming.today');
+  if (diffDays === 1) return t('upcoming.tomorrow');
+  if (diffDays < 7) return t('upcoming.inDays', { count: diffDays });
+  return formatDate(`${airDate}T00:00:00`, { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
 export default function UpcomingScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [items, setItems] = useState<UpcomingItem[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,9 +66,9 @@ export default function UpcomingScreen() {
       upcoming.sort((a, b) => (a.episode.air_date! < b.episode.air_date! ? -1 : 1));
       setItems(upcoming);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar os próximos episódios.');
+      setError(err instanceof Error ? err.message : t('upcoming.loadError'));
     }
-  }, [user]);
+  }, [user, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -104,10 +107,10 @@ export default function UpcomingScreen() {
           ListEmptyComponent={
             <View style={styles.center}>
               <ThemedText type="subtitle" style={styles.message}>
-                Nada por enquanto
+                {t('upcoming.emptyTitle')}
               </ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.message}>
-                Quando alguma das suas séries tiver um próximo episódio anunciado, ele aparece aqui.
+                {t('upcoming.emptyBody')}
               </ThemedText>
             </View>
           }
@@ -134,7 +137,7 @@ export default function UpcomingScreen() {
                       {item.episode.name ? ` — ${item.episode.name}` : ''}
                     </ThemedText>
                     <ThemedText type="smallBold" style={{ color: theme.accent }}>
-                      {formatAirDate(item.episode.air_date!)}
+                      {formatAirDate(item.episode.air_date!, t)}
                     </ThemedText>
                   </View>
                 </Pressable>

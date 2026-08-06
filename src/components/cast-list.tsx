@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +15,7 @@ import { getMovieCredits, getShowCredits, posterUrl, type TmdbCastMember } from 
  */
 export function CastList({ media, tmdbId }: { media: 'tv' | 'movie'; tmdbId: number }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [cast, setCast] = useState<TmdbCastMember[] | null>(null);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function CastList({ media, tmdbId }: { media: 'tv' | 'movie'; tmdbId: num
   return (
     <View style={styles.container}>
       <ThemedText type="smallBold" style={styles.title}>
-        Elenco
+        {t('castList.title')}
       </ThemedText>
       <ScrollView
         horizontal

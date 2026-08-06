@@ -1,5 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
 import { MediaGrid, type MediaGridItem } from '@/components/media-grid';
@@ -13,9 +14,12 @@ import {
   getWatchedCounts,
   getWatchlistMovies,
 } from '@/lib/db';
+import { i18n } from '@/lib/i18n';
+import { localizedTitle } from '@/lib/locale';
 
 export default function ToWatchScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [items, setItems] = useState<MediaGridItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,18 +40,18 @@ export default function ToWatchScreen() {
             .map((show) => ({
               media: 'tv',
               tmdb_id: show.tmdb_id,
-              title: show.name,
+              title: localizedTitle(show.name, show.name_en, i18n.language),
               poster_path: show.poster_path,
             }));
           const pendingMovies: MediaGridItem[] = movies.map((movie) => ({
             media: 'movie',
             tmdb_id: movie.tmdb_id,
-            title: movie.title,
+            title: localizedTitle(movie.title, movie.title_en, i18n.language),
             poster_path: movie.poster_path,
           }));
           setItems([...pendingShows, ...pendingMovies]);
         })
-        .catch((err) => setError(errorMessage(err, 'Erro ao carregar a lista.')));
+        .catch((err) => setError(errorMessage(err, t('toWatch.loadError'))));
     }, [user])
   );
 
@@ -64,8 +68,8 @@ export default function ToWatchScreen() {
   return (
     <MediaGrid
       items={items}
-      emptyTitle="Nada para assistir ainda"
-      emptyText="Siga uma série (sem marcar episódios) ou adicione um filme em Para assistir para ele aparecer aqui."
+      emptyTitle={t('toWatch.emptyTitle')}
+      emptyText={t('toWatch.emptyText')}
     />
   );
 }

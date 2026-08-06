@@ -1,0 +1,14 @@
+{
+  "searchError": "Search failed.",
+  "tvPlaceholder": "Search shows…",
+  "moviePlaceholder": "Search movies…",
+  "tvTab": "Shows",
+  "movieTab": "Movies",
+  "filterResults": "Filtered results",
+  "popularNow": "Popular right now",
+  "justWatchData": " · data from JustWatch",
+  "categories": "Categories",
+  "noShowsFound": "No shows found.",
+  "noMoviesFound": "No movies found.",
+  "castPrefix": "Cast: {{name}}"
+}

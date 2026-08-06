@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(node --check scripts/backfill-i18n-titles.js)",
+      "Bash(node scripts/backfill-i18n-titles.js --dry-run)",
+      "Bash(npx tsc *)",
+      "Bash(node scripts/backfill-i18n-titles.js)",
+      "Bash(npx expo *)",
+      "Bash(timeout 45 bash -c 'until curl -sf http://localhost:8098 >/dev/null 2>&1; do sleep 2; done')",
+      "Bash(curl -sf http://localhost:8098)"
+    ]
+  },
   "enabledPlugins": {
     "expo@claude-plugins-official": true
   }

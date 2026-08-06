@@ -1,0 +1,22 @@
+{
+  "tabNews": "News",
+  "tabReactions": "Reactions",
+  "wantsToBeFriend": "wants to be your friend",
+  "newEpisodesCount_one": "{{count}} new episode",
+  "newEpisodesCount_other": "{{count}} new episodes",
+  "liked": "liked",
+  "loadLikesError": "Error loading likes.",
+  "loadNewsError": "Error loading news.",
+  "aMovie": "a movie",
+  "aShow": "a show",
+  "showFallback": "Show #{{id}}",
+  "clearNotificationsTitle": "Clear notifications",
+  "clearNotificationsMessage": "Remove all news from the list?",
+  "clear": "Clear",
+  "clearAll": "Clear all",
+  "friendRequestsHeader": "Friend requests ({{count}})",
+  "noNewsTitle": "No news",
+  "noNewsBody": "When your shows have new episodes to watch, they'll show up here.",
+  "noLikesTitle": "No likes yet",
+  "noLikesBody": "When a friend likes something you've watched, it shows up here."
+}

@@ -11,6 +11,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { deletePushToken, getFollowedShows, savePushToken } from './db';
+import { i18n } from './i18n';
 import { getShowDetails } from './tmdb';
 
 Notifications.setNotificationHandler({
@@ -25,7 +26,7 @@ Notifications.setNotificationHandler({
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('episodios', {
-      name: 'Novos episódios',
+      name: i18n.t('pushNotifications.channelName'),
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
@@ -100,12 +101,13 @@ export async function syncEpisodeNotifications(userId: string) {
       const fireDate = new Date(`${next.air_date}T09:00:00`);
       if (fireDate <= now) continue;
 
+      const code = `S${next.season_number.toString().padStart(2, '0')}E${next.episode_number
+        .toString()
+        .padStart(2, '0')}`;
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `Novo episódio de ${details.name}!`,
-          body: `S${next.season_number.toString().padStart(2, '0')}E${next.episode_number
-            .toString()
-            .padStart(2, '0')} — "${next.name}" estreia hoje.`,
+          title: i18n.t('pushNotifications.newEpisodeTitle', { showName: details.name }),
+          body: i18n.t('pushNotifications.newEpisodeBody', { code, episodeName: next.name }),
           data: {
             tmdbShowId: show.tmdb_id,
             seasonNumber: next.season_number,

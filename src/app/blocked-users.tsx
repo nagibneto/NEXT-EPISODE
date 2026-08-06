@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +11,7 @@ import { getBlockedUsers, profileDisplayName, unblockUser, type Profile } from '
 
 export default function BlockedUsersScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [blocked, setBlocked] = useState<Profile[] | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -47,7 +49,7 @@ export default function BlockedUsersScreen() {
         ListEmptyComponent={
           blocked !== null ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.message}>
-              Você não bloqueou ninguém.
+              {t('blockedUsers.noBlockedUsers')}
             </ThemedText>
           ) : null
         }
@@ -64,7 +66,7 @@ export default function BlockedUsersScreen() {
               disabled={busyIds.has(item.id)}
               onPress={() => handleUnblock(item)}
               style={[styles.button, { backgroundColor: theme.backgroundSelected }]}>
-              <ThemedText type="smallBold">Desbloquear</ThemedText>
+              <ThemedText type="smallBold">{t('blockedUsers.unblock')}</ThemedText>
             </Pressable>
           </View>
         )}

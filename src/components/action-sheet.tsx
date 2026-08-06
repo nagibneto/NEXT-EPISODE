@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +34,7 @@ export function ActionSheet({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -83,7 +85,7 @@ export function ActionSheet({
               { backgroundColor: pressed ? theme.backgroundSelected : theme.background },
             ]}
             onPress={onClose}>
-            <ThemedText type="smallBold">Cancelar</ThemedText>
+            <ThemedText type="smallBold">{t('common.cancel')}</ThemedText>
           </Pressable>
         </View>
       </View>

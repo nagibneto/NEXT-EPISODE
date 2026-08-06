@@ -1,0 +1,17 @@
+{
+  "chooseAvatar": "Escolha seu avatar",
+  "nicknamePlaceholder": "Seu apelido",
+  "nicknameLengthError": "O apelido precisa ter entre 1 e 40 caracteres.",
+  "avatarSaveError": "Não foi possível salvar o avatar.",
+  "nicknameSaveError": "Não foi possível salvar o apelido.",
+  "deleteAccountTitle": "Excluir conta",
+  "deleteAccountMessage": "Isso apaga sua conta e todos os seus dados (séries, avaliações, comentários, amizades) permanentemente. Essa ação não pode ser desfeita.",
+  "deleteAccountError": "Não foi possível excluir a conta.",
+  "blockedUsers": "Bloqueados",
+  "theme": "Tema",
+  "language": "Idioma",
+  "signOut": "Sair da conta",
+  "deleteAccount": "Excluir conta",
+  "deletingAccount": "Excluindo…",
+  "credit": "Dados de séries fornecidos por TMDB (themoviedb.org)."
+}

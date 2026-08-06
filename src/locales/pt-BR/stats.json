@@ -1,0 +1,22 @@
+{
+  "loadingText": "Calculando seu tempo assistido…",
+  "loadError": "Erro ao calcular as estatísticas.",
+  "totalWatchedTime": "Tempo total assistido",
+  "months_one": "mês",
+  "months_other": "meses",
+  "days_one": "dia",
+  "days_other": "dias",
+  "hoursLabel": "horas",
+  "minutesLabel": "min",
+  "tvTime": "Tempo em séries",
+  "movieTime": "Tempo em filmes",
+  "episodesLabel": "Episódios",
+  "showsLabel": "Séries",
+  "moviesLabel": "Filmes",
+  "timePerShow": "Tempo por série",
+  "showFallbackName": "Série #{{id}}",
+  "episodeCount_one": "{{formattedCount}} episódio",
+  "episodeCount_other": "{{formattedCount}} episódios",
+  "remainingTime": "faltam {{duration}}",
+  "note": "Tempo estimado com base na duração dos episódios e filmes informada pela TMDB."
+}
