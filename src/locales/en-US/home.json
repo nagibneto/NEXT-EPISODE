@@ -12,6 +12,8 @@
   "modeMovie": "Movies",
   "searchMoviesPlaceholder": "Search movies…",
   "searchShowsPlaceholder": "Search shows…",
+  "searchMoviesPlaceholderEmpty": "Mark movies in the Search tab to filter here",
+  "searchShowsPlaceholderEmpty": "Follow shows in the Search tab to filter here",
   "movieFilterWatched": "Watched",
   "movieFilterToWatch": "To watch",
   "showFilterOngoing": "Ongoing",

@@ -66,6 +66,42 @@ function fromMovie(movie: TmdbMovieSummary): SearchResult {
 }
 
 /**
+ * A busca da TMDB é por palavra: "mind hunter" não acha "Mindhunter" porque
+ * o título é uma palavra só. Quando a query tem espaço, tenta de novo colada
+ * ("mindhunter") e junta o que achar — só na primeira página, mesmo esquema
+ * do searchByCast abaixo.
+ */
+async function searchJoined(
+  query: string,
+  media: SearchMode,
+  seenIds: Set<number>
+): Promise<SearchResult[]> {
+  const joined = query.replace(/\s+/g, '');
+  if (joined === query || joined.length < 3) return [];
+  try {
+    const extra: SearchResult[] = [];
+    if (media === 'tv') {
+      const { results } = await searchShows(joined);
+      for (const item of results) {
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+        extra.push(fromShow(item));
+      }
+    } else {
+      const { results } = await searchMovies(joined);
+      for (const item of results) {
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+        extra.push(fromMovie(item));
+      }
+    }
+    return extra;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Quando a busca por título não é suficiente, procura por atores com esse
  * nome e junta os títulos em que eles são conhecidos — só na primeira
  * página, para não complicar a paginação.
@@ -170,7 +206,9 @@ export default function SearchScreen() {
             : await getPopularShows(pageNumber);
         const items = data.results.map(fromShow);
         if (trimmed && pageNumber === 1) {
-          items.push(...(await searchByCast(trimmed, 'tv', new Set(items.map((i) => i.id)))));
+          const seenIds = new Set(items.map((i) => i.id));
+          items.push(...(await searchJoined(trimmed, 'tv', seenIds)));
+          items.push(...(await searchByCast(trimmed, 'tv', seenIds)));
         }
         return { items, totalPages: data.total_pages };
       }
@@ -181,7 +219,9 @@ export default function SearchScreen() {
           : await getPopularMovies(pageNumber);
       const items = data.results.map(fromMovie);
       if (trimmed && pageNumber === 1) {
-        items.push(...(await searchByCast(trimmed, 'movie', new Set(items.map((i) => i.id)))));
+        const seenIds = new Set(items.map((i) => i.id));
+        items.push(...(await searchJoined(trimmed, 'movie', seenIds)));
+        items.push(...(await searchByCast(trimmed, 'movie', seenIds)));
       }
       return { items, totalPages: data.total_pages };
     },

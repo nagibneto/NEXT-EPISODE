@@ -12,6 +12,8 @@
   "modeMovie": "Filmes",
   "searchMoviesPlaceholder": "Buscar filmes…",
   "searchShowsPlaceholder": "Buscar séries…",
+  "searchMoviesPlaceholderEmpty": "Marque filmes na aba Buscar para filtrar aqui",
+  "searchShowsPlaceholderEmpty": "Siga séries na aba Buscar para filtrar aqui",
   "movieFilterWatched": "Assistidos",
   "movieFilterToWatch": "Para assistir",
   "showFilterOngoing": "Em andamento",

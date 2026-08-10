@@ -795,6 +795,12 @@ export default function MyShowsScreen() {
   const showingMovies = mode === 'movie';
   const viewMode = showingMovies ? movieViewMode : tvViewMode;
   const setViewMode = showingMovies ? setMovieViewMode : setTvViewMode;
+  // A caixa de busca do topo só filtra o que já está na watchlist — com ela
+  // vazia, digitar ali não acha nada. Desativa e explica que é a aba Buscar
+  // que traz títulos novos da TMDB.
+  const hasAnyItems = showingMovies
+    ? (movies ?? []).length + (movieWatchlist ?? []).length > 0
+    : (shows ?? []).length > 0;
   // Com filtro ativo mostramos "nada encontrado", mas se a pessoa não tem
   // título nenhum o convite para buscar é mais útil (o filtro vem ligado por
   // padrão e não pode esconder o estado de watchlist vazia).
@@ -845,17 +851,29 @@ export default function MyShowsScreen() {
             </ThemedText>
           </Pressable>
         </View>
-        <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
+        <View
+          style={[
+            styles.inputWrap,
+            { backgroundColor: theme.backgroundElement },
+            !hasAnyItems && styles.inputWrapDisabled,
+          ]}>
           <Ionicons name="search" size={16} color={theme.textSecondary} />
           <TextInput
             style={[styles.input, { color: theme.text }]}
             placeholder={
-              showingMovies ? t('home.searchMoviesPlaceholder') : t('home.searchShowsPlaceholder')
+              hasAnyItems
+                ? showingMovies
+                  ? t('home.searchMoviesPlaceholder')
+                  : t('home.searchShowsPlaceholder')
+                : showingMovies
+                  ? t('home.searchMoviesPlaceholderEmpty')
+                  : t('home.searchShowsPlaceholderEmpty')
             }
             placeholderTextColor={theme.textSecondary}
             value={query}
             onChangeText={setQuery}
             autoCorrect={false}
+            editable={hasAnyItems}
           />
           {query.length > 0 && (
             <Pressable hitSlop={8} onPress={() => setQuery('')}>
@@ -1202,6 +1220,9 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     borderRadius: 999,
     paddingHorizontal: Spacing.three,
+  },
+  inputWrapDisabled: {
+    opacity: 0.5,
   },
   input: {
     flex: 1,
