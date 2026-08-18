@@ -78,22 +78,23 @@ Deno.serve(async (req) => {
   }
 
   const pepperedHashes = await Promise.all(hashes.map(pepperedHash));
-  const inList = pepperedHashes.join(',');
   const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-  const { data, error } = await adminClient
-    .from('phone_contacts')
-    .select('user_id, profiles!phone_contacts_user_id_fkey(id, username, display_name, avatar_id)')
-    .or(`phone_hash.in.(${inList}),phone_hash_national.in.(${inList}),phone_hash_local.in.(${inList})`)
-    .neq('user_id', user.id);
+  // RPC (POST) em vez de .or(...).in(...) via REST: com milhares de hashes
+  // isso montaria uma URL gigante e o fetch quebraria com "Invalid URL"
+  // (ver comentário da função match_phone_contact_hashes no schema.sql).
+  const { data, error } = await adminClient.rpc('match_phone_contact_hashes', {
+    hashes: pepperedHashes,
+    excluding_user_id: user.id,
+  });
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  type Row = { profiles: { id: string; username: string; display_name: string | null; avatar_id: number | null } };
-  const matches = ((data as unknown as Row[]) ?? [])
-    .map((row) => row.profiles)
-    .filter((profile) => profile && !REVIEWER_USERNAMES.includes(profile.username));
+  type Row = { id: string; username: string; display_name: string | null; avatar_id: number | null };
+  const matches = ((data as unknown as Row[]) ?? []).filter(
+    (profile) => !REVIEWER_USERNAMES.includes(profile.username)
+  );
 
   return Response.json({ matches });
 });

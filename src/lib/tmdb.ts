@@ -50,6 +50,11 @@ export interface TmdbShowSummary {
   backdrop_path: string | null;
   first_air_date: string | null;
   vote_average: number;
+  /** Campos que só vêm em listagens (busca, discover, recomendações), não no detalhe. */
+  genre_ids?: number[];
+  vote_count?: number;
+  popularity?: number;
+  adult?: boolean;
 }
 
 export interface TmdbEpisode {
@@ -241,6 +246,11 @@ export interface TmdbMovieSummary {
   backdrop_path: string | null;
   release_date: string | null;
   vote_average: number;
+  /** Campos que só vêm em listagens (busca, discover, recomendações), não no detalhe. */
+  genre_ids?: number[];
+  vote_count?: number;
+  popularity?: number;
+  adult?: boolean;
 }
 
 export interface TmdbMovieDetails extends TmdbMovieSummary {
@@ -330,6 +340,25 @@ export function airedEpisodeCount(details: {
     .filter((s) => s.season_number > 0 && s.season_number < last.season_number)
     .reduce((acc, s) => acc + s.episode_count, 0);
   return previousSeasons + last.episode_number;
+}
+
+/**
+ * Quantos episódios de uma temporada específica já foram ao ar. O
+ * `episode_count` do TMDB conta episódios anunciados que ainda não estrearam,
+ * então uma temporada futura precisa valer zero — senão quem terminou a série
+ * nunca é considerado em dia só porque a próxima temporada já está no catálogo.
+ */
+export function airedEpisodesInSeason(
+  details: { last_episode_to_air: { season_number: number; episode_number: number } | null },
+  season: { season_number: number; episode_count: number }
+) {
+  const last = details.last_episode_to_air;
+  // Sem episódio exibido registrado, assume o que o TMDB informa (séries
+  // antigas às vezes não têm o campo preenchido).
+  if (!last) return season.episode_count;
+  if (season.season_number < last.season_number) return season.episode_count;
+  if (season.season_number === last.season_number) return last.episode_number;
+  return 0;
 }
 
 // ---------- Onde assistir ----------
@@ -480,12 +509,154 @@ export interface TmdbCastMember {
   order: number;
 }
 
+/**
+ * Elenco de série no formato "agregado" (todas as temporadas). O
+ * `/tv/{id}/credits` devolve só o elenco do último episódio — em animação
+ * costuma vir vazio (X-Men '97: 0 contra 93 aqui) e em série longa traz um
+ * punhado de nomes. Este é o endpoint certo para série.
+ */
+interface TmdbAggregateCastMember {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  order: number;
+  total_episode_count: number;
+  roles: { character: string; episode_count: number }[];
+}
+
+export function getShowAggregateCredits(showId: number) {
+  return get<{ cast: TmdbAggregateCastMember[] }>(`/tv/${showId}/aggregate_credits`);
+}
+
+/** Papéis que não representam o título e poluem "elenco principal". */
+const GENERIC_ROLE =
+  /additional voices|vozes adicionais|uncredited|não creditado|himself|herself|themselves|narrator|narrador/i;
+
 export function getShowCredits(showId: number) {
   return get<{ cast: TmdbCastMember[] }>(`/tv/${showId}/credits`);
 }
 
 export function getMovieCredits(movieId: number) {
   return get<{ cast: TmdbCastMember[] }>(`/movie/${movieId}/credits`);
+}
+
+/**
+ * Elenco principal do título, já ordenado por relevância e sem papéis
+ * genéricos. Série usa o elenco agregado; filme, os créditos normais.
+ */
+function loadMainCast(media: 'tv' | 'movie', tmdbId: number): Promise<TmdbCastMember[]> {
+  if (media === 'movie') {
+    // Créditos de filme já vêm na ordem de bilhetagem.
+    return getMovieCredits(tmdbId).then((data) => data.cast);
+  }
+  return getShowAggregateCredits(tmdbId).then((data) => {
+    const named = data.cast.filter(
+      (member) => !member.roles.every((role) => GENERIC_ROLE.test(role.character ?? ''))
+    );
+    // Se sobrou nada (elenco todo marcado como genérico), é melhor mostrar
+    // a lista original do que lista nenhuma.
+    const cast = named.length > 0 ? named : data.cast;
+    return (
+      cast
+        // Número de episódios é o critério confiável de protagonismo: o
+        // campo `order` vem inutilizável em animação (papéis de 1 episódio
+        // apareciam na frente do Cyclops em X-Men '97).
+        .sort(
+          (a, b) =>
+            b.total_episode_count - a.total_episode_count || (a.order ?? 9999) - (b.order ?? 9999)
+        )
+        .map((member) => ({
+          id: member.id,
+          name: member.name,
+          profile_path: member.profile_path,
+          order: member.order,
+          character: member.roles[0]?.character ?? '',
+        }))
+    );
+  });
+}
+
+// A tela de detalhes pede o elenco duas vezes (carrossel de elenco e motor de
+// recomendações); o cache evita a requisição repetida.
+const creditsCache = new Map<string, Promise<TmdbCastMember[]>>();
+
+export function getCreditsCached(media: 'tv' | 'movie', tmdbId: number) {
+  const key = `${media}-${tmdbId}-${currentLanguage}`;
+  let cached = creditsCache.get(key);
+  if (!cached) {
+    cached = loadMainCast(media, tmdbId)
+      .catch((error) => {
+        // Não guarda falhas no cache para permitir nova tentativa.
+        creditsCache.delete(key);
+        throw error;
+      });
+    creditsCache.set(key, cached);
+  }
+  return cached;
+}
+
+// ---------- Recomendações ----------
+
+/**
+ * "Quem viu isso também viu" (`recommendations`) e "parecidos" (`similar`) do
+ * próprio TMDB. São listas diferentes: a primeira é comportamental, a segunda
+ * vem de gênero/palavras-chave.
+ */
+export function getRelatedShows(showId: number, kind: 'recommendations' | 'similar') {
+  return get<{ results: TmdbShowSummary[] }>(`/tv/${showId}/${kind}`);
+}
+
+export function getRelatedMovies(movieId: number, kind: 'recommendations' | 'similar') {
+  return get<{ results: TmdbMovieSummary[] }>(`/movie/${movieId}/${kind}`);
+}
+
+/** Séries em que a pessoa atuou. `episode_count` separa papel fixo de ponta. */
+export function getPersonShowCredits(personId: number) {
+  return get<{ cast: (TmdbShowSummary & { episode_count?: number })[] }>(
+    `/person/${personId}/tv_credits`
+  );
+}
+
+/** Filmes em que a pessoa atuou. `order` é a posição dela no elenco. */
+export function getPersonMovieCredits(personId: number) {
+  return get<{ cast: (TmdbMovieSummary & { order?: number })[] }>(
+    `/person/${personId}/movie_credits`
+  );
+}
+
+/** Quantos anos para trás contam como lançamento "novo" nas recomendações. */
+const RECENT_YEARS = 3;
+
+function recentDateFloor() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - RECENT_YEARS);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Títulos recentes e populares dos mesmos gêneros — a fatia "novidades em alta"
+ * das recomendações. Os gêneros são combinados com AND para a lista ficar
+ * realmente parecida, não só "o que está popular".
+ */
+export function discoverRecentShows(genreIds: number[]) {
+  return get<{ results: TmdbShowSummary[] }>('/discover/tv', {
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    include_null_first_air_dates: 'false',
+    'first_air_date.gte': recentDateFloor(),
+    'vote_count.gte': '100',
+    ...(genreIds.length > 0 ? { with_genres: genreIds.join(',') } : {}),
+  });
+}
+
+export function discoverRecentMovies(genreIds: number[]) {
+  return get<{ results: TmdbMovieSummary[] }>('/discover/movie', {
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    'primary_release_date.gte': recentDateFloor(),
+    'vote_count.gte': '100',
+    ...(genreIds.length > 0 ? { with_genres: genreIds.join(',') } : {}),
+  });
 }
 
 // ---------- Busca por pessoas (permite achar títulos pelo nome do ator) ----------

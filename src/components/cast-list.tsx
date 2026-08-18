@@ -6,7 +6,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getMovieCredits, getShowCredits, posterUrl, type TmdbCastMember } from '@/lib/tmdb';
+import { getCreditsCached, posterUrl, type TmdbCastMember } from '@/lib/tmdb';
 
 /**
  * Elenco principal do título, em carrossel horizontal. Não renderiza nada
@@ -21,10 +21,9 @@ export function CastList({ media, tmdbId }: { media: 'tv' | 'movie'; tmdbId: num
   useEffect(() => {
     let cancelled = false;
     setCast(null);
-    const request = media === 'tv' ? getShowCredits(tmdbId) : getMovieCredits(tmdbId);
-    request
-      .then((data) => {
-        if (!cancelled) setCast(data.cast.slice(0, 20));
+    getCreditsCached(media, tmdbId)
+      .then((cast) => {
+        if (!cancelled) setCast(cast.slice(0, 20));
       })
       .catch(() => {});
     return () => {

@@ -639,6 +639,30 @@ create index if not exists phone_contacts_hash_idx on public.phone_contacts (pho
 create index if not exists phone_contacts_hash_national_idx on public.phone_contacts (phone_hash_national);
 create index if not exists phone_contacts_hash_local_idx on public.phone_contacts (phone_hash_local);
 
+-- RPC em vez de ".or(phone_hash.in.(...))" direto pela REST: com milhares de
+-- hashes peperados (64 hex chars cada, comparados contra 3 colunas), esse
+-- filtro monta uma URL de dezenas de milhares de caracteres e o fetch da
+-- Edge Function (supabase/functions/match-contacts) estoura com
+-- "TypeError: Invalid URL". Recebendo os hashes como parâmetro de função
+-- (vai no body do POST, não na querystring), o tamanho da requisição não
+-- depende mais da quantidade de contatos do usuário.
+create or replace function public.match_phone_contact_hashes(hashes text[], excluding_user_id uuid)
+returns table (id uuid, username text, display_name text, avatar_id integer)
+language sql
+security invoker
+set search_path = public
+as $$
+  select distinct p.id, p.username, p.display_name, p.avatar_id
+  from public.phone_contacts pc
+  join public.profiles p on p.id = pc.user_id
+  where pc.user_id <> excluding_user_id
+    and (
+      pc.phone_hash = any(hashes)
+      or pc.phone_hash_national = any(hashes)
+      or pc.phone_hash_local = any(hashes)
+    );
+$$;
+
 -- ---------- Estatísticas ----------
 -- Conta episódios assistidos por série sem esbarrar no limite de linhas da API.
 -- last_watched_at alimenta a ordenação da watchlist (série marcada mais

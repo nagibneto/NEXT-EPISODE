@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { CastList } from '@/components/cast-list';
+import { Recommendations } from '@/components/recommendations';
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
@@ -27,6 +28,7 @@ import {
 import { formatDate } from '@/lib/locale';
 import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
+  airedEpisodesInSeason,
   backdropUrl,
   getSeasonAverageRatings,
   getSeasonDetailsCached,
@@ -253,6 +255,21 @@ export default function ShowDetailsScreen() {
   const next = show.next_episode_to_air;
   const seasons = show.seasons.filter((season) => season.season_number > 0);
 
+  /**
+   * O usuário viu tudo o que já estreou. Temporada anunciada mas ainda não
+   * lançada não conta: quem terminou as 3 temporadas no ar merece as
+   * indicações mesmo com a 4ª já listada no TMDB para daqui a dois meses.
+   */
+  const airedBySeason = seasons.map((season) => ({
+    season,
+    aired: airedEpisodesInSeason(show, season),
+  }));
+  const finished =
+    airedBySeason.some(({ aired }) => aired > 0) &&
+    airedBySeason.every(
+      ({ season, aired }) => aired === 0 || (watchedBySeason.get(season.season_number) ?? 0) >= aired
+    );
+
   return (
     <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: show.name }} />
@@ -320,6 +337,8 @@ export default function ShowDetailsScreen() {
           {show.overview}
         </ThemedText>
       ) : null}
+
+      <Recommendations media="tv" tmdbId={show.id} genres={show.genres} enabled={finished} />
 
       <View style={styles.topCardsRow}>
         <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
@@ -487,6 +506,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     paddingHorizontal: Spacing.three,
+    // Respiro do card acima (o elenco pode não existir, e aí "Temporadas"
+    // encostaria no "Assista em").
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
     fontSize: 18,
   },

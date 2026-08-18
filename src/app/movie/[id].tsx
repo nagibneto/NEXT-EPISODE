@@ -8,6 +8,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { CastList } from '@/components/cast-list';
 import { CommentsScreen } from '@/components/comments-screen';
+import { Recommendations } from '@/components/recommendations';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
@@ -275,6 +276,14 @@ export default function MovieDetailsScreen() {
               </ThemedText>
             ) : null}
 
+            <Recommendations
+              media="movie"
+              tmdbId={movieId}
+              genres={movie.genres}
+              enabled={watched === true}
+              style={styles.recommendations}
+            />
+
             <WatchProviders media="movie" tmdbId={movieId} />
 
             <View style={[styles.ratingCard, { backgroundColor: theme.backgroundElement }]}>
@@ -373,5 +382,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  // Anula o padding da lista de comentários para o carrossel correr até a
+  // borda da tela, como nas outras telas.
+  recommendations: {
+    marginHorizontal: -Spacing.three,
   },
 });

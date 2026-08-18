@@ -24,6 +24,7 @@ import notifications from './notifications.json';
 import notificationSettings from './notificationSettings.json';
 import profile from './profile.json';
 import pushNotifications from './pushNotifications.json';
+import recommendations from './recommendations.json';
 import relativeDate from './relativeDate.json';
 import resetPassword from './resetPassword.json';
 import search from './search.json';
@@ -61,6 +62,7 @@ export default {
   notificationSettings,
   profile,
   pushNotifications,
+  recommendations,
   relativeDate,
   resetPassword,
   search,

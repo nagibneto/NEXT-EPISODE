@@ -1,0 +1,8 @@
+{
+  "title": "Você também pode gostar",
+  "reason": {
+    "actor": "Com {{value}}",
+    "fans": "Quem viu também viu",
+    "trending": "{{value}} em alta"
+  }
+}
