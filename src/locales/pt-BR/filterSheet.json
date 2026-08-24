@@ -1,4 +1,13 @@
 {
   "category": "Categoria",
-  "all": "Todas"
+  "all": "Todas",
+  "year": "Ano",
+  "anyYear": "Qualquer ano",
+  "range": "{{from}} até {{to}}",
+  "yearHint": "Arraste os pontos para um ano só ou um intervalo",
+  "thisYear": "Este ano",
+  "lastFiveYears": "Últimos 5 anos",
+  "decade": "Anos {{decade}}",
+  "clear": "Limpar",
+  "apply": "Aplicar"
 }

@@ -1,4 +1,13 @@
 {
   "category": "Category",
-  "all": "All"
+  "all": "All",
+  "year": "Year",
+  "anyYear": "Any year",
+  "range": "{{from}} to {{to}}",
+  "yearHint": "Drag the handles for a single year or a range",
+  "thisYear": "This year",
+  "lastFiveYears": "Last 5 years",
+  "decade": "{{decade}}s",
+  "clear": "Clear",
+  "apply": "Apply"
 }

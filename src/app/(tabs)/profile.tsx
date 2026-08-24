@@ -37,6 +37,7 @@ import {
   updateDisplayName,
   type Profile,
 } from '@/lib/db';
+import { inviteStoreUrl, shareInvite } from '@/lib/invite';
 import { unregisterPushToken } from '@/lib/notifications';
 import { defaultCountryForLanguage, normalizePhoneNumber } from '@/lib/phone';
 
@@ -163,6 +164,13 @@ export default function ProfileScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleInvite() {
+    shareInvite(
+      t('profile.inviteMessage', { url: inviteStoreUrl() }),
+      t('profile.inviteSubject')
+    );
   }
 
   async function handleSignOut() {
@@ -409,10 +417,10 @@ export default function ProfileScreen() {
 
         <Pressable
           style={[styles.tile, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => router.push('/blocked-users')}>
-          <Ionicons name="hand-left" size={22} color={theme.accent} />
+          onPress={handleInvite}>
+          <Ionicons name="person-add" size={22} color={theme.accent} />
           <ThemedText type="smallBold" style={styles.tileLabel}>
-            {t('profile.blockedUsers')}
+            {t('profile.inviteFriends')}
           </ThemedText>
         </Pressable>
 

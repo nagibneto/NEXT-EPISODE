@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 
-import { GenreFilterSheet } from '@/components/genre-filter-sheet';
+import { DiscoverFilterSheet, type YearRange } from '@/components/discover-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -43,6 +43,8 @@ interface SearchResult {
   name: string;
   poster_path: string | null;
   year?: string;
+  /** Média do TMDB (0–10); 0 quando o título ainda não tem votos. */
+  rating?: number;
   /** Preenchido quando o resultado veio de uma busca por ator, não pelo título. */
   viaActor?: string;
 }
@@ -53,6 +55,7 @@ function fromShow(show: TmdbShowSummary): SearchResult {
     name: show.name,
     poster_path: show.poster_path,
     year: show.first_air_date ? show.first_air_date.slice(0, 4) : undefined,
+    rating: show.vote_average,
   };
 }
 
@@ -62,6 +65,7 @@ function fromMovie(movie: TmdbMovieSummary): SearchResult {
     name: movie.title,
     poster_path: movie.poster_path,
     year: movie.release_date ? movie.release_date.slice(0, 4) : undefined,
+    rating: movie.vote_average,
   };
 }
 
@@ -175,6 +179,7 @@ export default function SearchScreen() {
   const [minRating, setMinRating] = useState<number | null>(null);
   const [providers, setProviders] = useState<TmdbWatchProvider[]>([]);
   const [providerId, setProviderId] = useState<number | null>(null);
+  const [yearRange, setYearRange] = useState<YearRange | null>(null);
   // Invalida respostas de requisições antigas quando query/modo/filtros mudam,
   // para uma busca lenta não sobrescrever a lista da busca atual.
   const requestId = useRef(0);
@@ -186,6 +191,7 @@ export default function SearchScreen() {
     setGenreId(null);
     setMinRating(null);
     setProviderId(null);
+    setYearRange(null);
     getGenres(mode)
       .then(setGenres)
       .catch(() => setGenres([]));
@@ -197,12 +203,17 @@ export default function SearchScreen() {
   const fetchResults = useCallback(
     async (pageNumber: number) => {
       const trimmed = query.trim();
-      const hasFilters = genreId !== null || minRating !== null || providerId !== null;
+      const hasFilters =
+        genreId !== null || minRating !== null || providerId !== null || yearRange !== null;
+      const yearFilters = {
+        yearFrom: yearRange?.from ?? null,
+        yearTo: yearRange?.to ?? null,
+      };
       if (mode === 'tv') {
         const data = trimmed
           ? await searchShows(trimmed, pageNumber)
           : hasFilters
-            ? await discoverShows({ genreId, minRating, providerId, page: pageNumber })
+            ? await discoverShows({ genreId, minRating, providerId, ...yearFilters, page: pageNumber })
             : await getPopularShows(pageNumber);
         const items = data.results.map(fromShow);
         if (trimmed && pageNumber === 1) {
@@ -215,7 +226,7 @@ export default function SearchScreen() {
       const data = trimmed
         ? await searchMovies(trimmed, pageNumber)
         : hasFilters
-          ? await discoverMovies({ genreId, minRating, providerId, page: pageNumber })
+          ? await discoverMovies({ genreId, minRating, providerId, ...yearFilters, page: pageNumber })
           : await getPopularMovies(pageNumber);
       const items = data.results.map(fromMovie);
       if (trimmed && pageNumber === 1) {
@@ -225,7 +236,7 @@ export default function SearchScreen() {
       }
       return { items, totalPages: data.total_pages };
     },
-    [query, mode, genreId, minRating, providerId]
+    [query, mode, genreId, minRating, providerId, yearRange]
   );
 
   useEffect(() => {
@@ -277,7 +288,19 @@ export default function SearchScreen() {
     }
   }
 
-  const hasFilters = genreId !== null || minRating !== null || providerId !== null;
+  const hasFilters =
+    genreId !== null || minRating !== null || providerId !== null || yearRange !== null;
+  const yearLabel = yearRange
+    ? yearRange.from === yearRange.to
+      ? String(yearRange.from)
+      : `${yearRange.from}–${yearRange.to}`
+    : null;
+  const genreName = genres.find((genre) => genre.id === genreId)?.name ?? null;
+  const filterActive = genreId !== null || yearRange !== null;
+  // O botão resume o que está filtrando: sem filtro fica "Categorias", com
+  // filtro mostra gênero e/ou ano escolhidos.
+  const filterLabel =
+    [genreName, yearLabel].filter(Boolean).join(' · ') || t('search.categories');
 
   return (
     // Pressable de fundo: tocar em qualquer área "morta" da tela fecha o
@@ -361,27 +384,28 @@ export default function SearchScreen() {
       </View>
       {!query.trim() && (
         <>
-          {/* Categorias abre o mesmo bottom sheet da watchlist; ao lado, a
-              faixa de streamings do Brasil rola na horizontal. */}
+          {/* O botão abre o sheet de filtros (categoria e ano) e resume o que
+              está ativo; ao lado, a faixa de streamings rola na horizontal. */}
           <View style={styles.discoverRow}>
             <Pressable
               style={[
                 styles.categoriesButton,
                 {
                   backgroundColor: theme.backgroundElement,
-                  borderColor: genreId !== null ? theme.accent : theme.backgroundSelected,
+                  borderColor: filterActive ? theme.accent : theme.backgroundSelected,
                 },
               ]}
               onPress={() => setGenreSheetOpen(true)}>
               <Ionicons
                 name="filter"
                 size={13}
-                color={genreId !== null ? theme.accent : theme.textSecondary}
+                color={filterActive ? theme.accent : theme.textSecondary}
               />
               <ThemedText
                 type="small"
-                style={{ color: genreId !== null ? theme.accent : theme.text }}>
-                {t('search.categories')}
+                numberOfLines={1}
+                style={{ color: filterActive ? theme.accent : theme.text }}>
+                {filterLabel}
               </ThemedText>
             </Pressable>
             <ScrollView
@@ -420,11 +444,13 @@ export default function SearchScreen() {
           </ThemedText>
         </>
       )}
-      <GenreFilterSheet
+      <DiscoverFilterSheet
         visible={genreSheetOpen}
         genres={genres}
         selectedId={genreId}
         onSelect={setGenreId}
+        yearRange={yearRange}
+        onYearChange={setYearRange}
         onClose={() => setGenreSheetOpen(false)}
       />
       {error ? (
@@ -457,6 +483,7 @@ export default function SearchScreen() {
               name={item.name}
               posterPath={item.poster_path}
               subtitle={item.viaActor ? t('search.castPrefix', { name: item.viaActor }) : item.year}
+              rating={item.rating}
               media={mode}
             />
           )}
@@ -537,6 +564,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one + 2,
+    // Com gênero e ano escolhidos o rótulo cresce; o teto evita que ele
+    // empurre a faixa de streamings para fora da tela.
+    maxWidth: '55%',
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: Spacing.two + Spacing.half,

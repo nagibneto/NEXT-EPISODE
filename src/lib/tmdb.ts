@@ -170,10 +170,14 @@ export interface DiscoverFilters {
   minRating?: number | null;
   /** Streaming (id de watch provider do TMDB) onde o título está disponível no Brasil. */
   providerId?: number | null;
+  /** Ano inicial de lançamento/estreia (inclusivo). */
+  yearFrom?: number | null;
+  /** Ano final de lançamento/estreia (inclusivo). Igual a `yearFrom` filtra um ano só. */
+  yearTo?: number | null;
   page?: number;
 }
 
-function discoverParams(filters: DiscoverFilters) {
+function discoverParams(filters: DiscoverFilters, media: 'tv' | 'movie') {
   const params: Record<string, string> = {
     sort_by: 'popularity.desc',
     include_adult: 'false',
@@ -192,20 +196,26 @@ function discoverParams(filters: DiscoverFilters) {
     // O filtro de provider só funciona amarrado a uma região.
     params.watch_region = currentRegion();
   }
+  // O intervalo de anos vira faixa de datas: séries usam a estreia, filmes a
+  // data de lançamento principal. Os nomes dos parâmetros diferem entre os
+  // dois endpoints do /discover.
+  const dateField = media === 'tv' ? 'first_air_date' : 'primary_release_date';
+  if (filters.yearFrom) params[`${dateField}.gte`] = `${filters.yearFrom}-01-01`;
+  if (filters.yearTo) params[`${dateField}.lte`] = `${filters.yearTo}-12-31`;
   return params;
 }
 
 export function discoverShows(filters: DiscoverFilters = {}) {
   return get<{ results: TmdbShowSummary[]; total_pages: number }>(
     '/discover/tv',
-    discoverParams(filters)
+    discoverParams(filters, 'tv')
   );
 }
 
 export function discoverMovies(filters: DiscoverFilters = {}) {
   return get<{ results: TmdbMovieSummary[]; total_pages: number }>(
     '/discover/movie',
-    discoverParams(filters)
+    discoverParams(filters, 'movie')
   );
 }
 

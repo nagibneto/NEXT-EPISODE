@@ -21,7 +21,7 @@ import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
-import { GenreFilterSheet } from '@/components/genre-filter-sheet';
+import { DiscoverFilterSheet } from '@/components/discover-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -1013,7 +1013,7 @@ export default function MyShowsScreen() {
           onPress={() => setViewMode('list')}
         />
       </View>
-      <GenreFilterSheet
+      <DiscoverFilterSheet
         visible={genreSheetOpen}
         genres={genres}
         selectedId={genreFilter}

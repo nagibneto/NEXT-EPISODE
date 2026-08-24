@@ -12,9 +12,9 @@ import common from './common.json';
 import episode from './episode.json';
 import favorites from './favorites.json';
 import feed from './feed.json';
+import filterSheet from './filterSheet.json';
 import findFriendsContacts from './findFriendsContacts.json';
 import friends from './friends.json';
-import genreFilterSheet from './genreFilterSheet.json';
 import home from './home.json';
 import importTvTime from './importTvTime.json';
 import login from './login.json';
@@ -50,9 +50,9 @@ export default {
   episode,
   favorites,
   feed,
+  filterSheet,
   findFriendsContacts,
   friends,
-  genreFilterSheet,
   home,
   importTvTime,
   login,

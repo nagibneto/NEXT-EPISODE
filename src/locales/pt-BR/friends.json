@@ -1,8 +1,7 @@
 {
   "searchPlaceholder": "Buscar por nome de usuário ou apelido…",
   "findViaContacts": "Encontrar pelos contatos",
-  "inviteFriends": "Convidar amigos",
-  "inviteMessage": "Vem acompanhar suas séries comigo no Next Episode! {{url}}",
+  "friendsHeader": "Amigos ({{count}})",
   "friendRequestsHeader": "Pedidos de amizade ({{count}})",
   "sentRequestsHeader": "Pedidos enviados ({{count}})",
   "wantsToBeFriend": "@{{username}} quer ser seu amigo",

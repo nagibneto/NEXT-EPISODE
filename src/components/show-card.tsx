@@ -1,5 +1,7 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,15 +14,31 @@ interface ShowCardProps {
   name: string;
   posterPath: string | null;
   subtitle?: string;
+  /** Nota do TMDB (0–10) exibida ao lado do subtítulo; 0/ausente esconde a nota. */
+  rating?: number;
   /** Para onde o card leva: série (padrão) ou filme. */
   media?: 'tv' | 'movie';
   /** Andamento na série (0–1, episódios assistidos ÷ exibidos); omitido = sem barra. */
   progress?: number;
 }
 
-export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv', progress }: ShowCardProps) {
+export function ShowCard({
+  tmdbId,
+  name,
+  posterPath,
+  subtitle,
+  rating,
+  media = 'tv',
+  progress,
+}: ShowCardProps) {
   const theme = useTheme();
+  const { i18n } = useTranslation();
   const uri = posterUrl(posterPath);
+  // Sem títulos votados o TMDB devolve 0 — nesse caso não mostra nota nenhuma.
+  const ratingLabel =
+    rating && rating > 0
+      ? rating.toFixed(1).replace('.', i18n.language.startsWith('pt') ? ',' : '.')
+      : null;
 
   return (
     <Link
@@ -60,10 +78,26 @@ export function ShowCard({ tmdbId, name, posterPath, subtitle, media = 'tv', pro
         <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>
           {name}
         </ThemedText>
-        {subtitle ? (
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {subtitle}
-          </ThemedText>
+        {subtitle || ratingLabel ? (
+          <View style={styles.metaRow}>
+            {subtitle ? (
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+                numberOfLines={1}
+                style={styles.metaText}>
+                {subtitle}
+              </ThemedText>
+            ) : null}
+            {ratingLabel ? (
+              <View style={styles.rating}>
+                <Ionicons name="star" size={11} color={theme.gold} />
+                <ThemedText type="small" themeColor="textSecondary">
+                  {ratingLabel}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
         ) : null}
       </Pressable>
     </Link>
@@ -91,6 +125,22 @@ const styles = StyleSheet.create({
   },
   name: {
     marginTop: Spacing.one,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Respiro entre o ano e a nota: com menos que isso a estrela cola no ano.
+    gap: Spacing.two,
+  },
+  metaText: {
+    // Encolhe antes da nota: com nome de ator longo, o ano/elenco corta e a
+    // nota continua visível.
+    flexShrink: 1,
+  },
+  rating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   progressTrack: {
     height: 3,

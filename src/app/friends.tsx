@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Platform, Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActionSheet } from '@/components/action-sheet';
 import { FriendStatusButton } from '@/components/friend-status-button';
@@ -13,10 +13,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useFriendRelations } from '@/hooks/use-friend-relations';
 import { profileDisplayName, searchProfiles, type Profile } from '@/lib/db';
-
-// Link de cada loja para o convite (ver friends.json / handleInvite abaixo).
-const APP_STORE_URL = 'https://apps.apple.com/br/app/next-episode/id6789371179';
-const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.nagibneto.nextepisode';
 
 export default function FriendsScreen() {
   const theme = useTheme();
@@ -61,11 +57,6 @@ export default function FriendsScreen() {
     }, 350);
     return () => clearTimeout(timer);
   }, [query, user]);
-
-  function handleInvite() {
-    const storeUrl = Platform.OS === 'ios' ? APP_STORE_URL : PLAY_STORE_URL;
-    Share.share({ message: t('friends.inviteMessage', { url: storeUrl }) }).catch(() => {});
-  }
 
   const handleSendRequest = (profile: Profile) => send(profile, t('friends.actionError'));
   const handleAccept = (profile: Profile) => accept(profile, t('friends.actionError'));
@@ -151,22 +142,13 @@ export default function FriendsScreen() {
       </View>
 
       <Pressable
-        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}
+        style={[styles.linkRow, { backgroundColor: theme.backgroundElement }]}
         onPress={() => router.push('/find-friends-contacts')}>
         <Ionicons name="people-outline" size={18} color={theme.text} />
-        <ThemedText type="smallBold" style={styles.inviteLabel}>
+        <ThemedText type="smallBold" style={styles.linkLabel}>
           {t('friends.findViaContacts')}
         </ThemedText>
         <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-      </Pressable>
-
-      <Pressable
-        style={[styles.inviteButton, { backgroundColor: theme.backgroundElement }]}
-        onPress={handleInvite}>
-        <Ionicons name="share-outline" size={18} color={theme.text} />
-        <ThemedText type="smallBold" style={styles.inviteLabel}>
-          {t('friends.inviteFriends')}
-        </ThemedText>
       </Pressable>
 
       {(error || searchError) && (
@@ -181,26 +163,48 @@ export default function FriendsScreen() {
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          !showingSearch && incoming.length > 0 ? (
-            <View style={styles.section}>
+          showingSearch ? null : (
+            <View>
+              {incoming.length > 0 && (
+                <View style={styles.section}>
+                  <ThemedText type="smallBold" style={styles.sectionTitle}>
+                    {t('friends.friendRequestsHeader', { count: incoming.length })}
+                  </ThemedText>
+                  {incoming.map(renderIncomingRow)}
+                </View>
+              )}
+              {outgoing.length > 0 && (
+                <View style={styles.section}>
+                  <ThemedText type="smallBold" style={styles.sectionTitle}>
+                    {t('friends.sentRequestsHeader', { count: outgoing.length })}
+                  </ThemedText>
+                  {outgoing.map((item) => (
+                    <View key={item.id}>{renderProfile({ item })}</View>
+                  ))}
+                </View>
+              )}
               <ThemedText type="smallBold" style={styles.sectionTitle}>
-                {t('friends.friendRequestsHeader', { count: incoming.length })}
+                {t('friends.friendsHeader', { count: friends.length })}
               </ThemedText>
-              {incoming.map(renderIncomingRow)}
             </View>
-          ) : null
+          )
         }
         ListFooterComponent={
-          !showingSearch && outgoing.length > 0 ? (
-            <View style={styles.section}>
-              <ThemedText type="smallBold" style={styles.sectionTitle}>
-                {t('friends.sentRequestsHeader', { count: outgoing.length })}
+          showingSearch ? null : (
+            <Pressable
+              style={[
+                styles.linkRow,
+                styles.footerLink,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+              onPress={() => router.push('/blocked-users')}>
+              <Ionicons name="hand-left-outline" size={18} color={theme.text} />
+              <ThemedText type="smallBold" style={styles.linkLabel}>
+                {t('common.nav.blockedUsers')}
               </ThemedText>
-              {outgoing.map((item) => (
-                <View key={item.id}>{renderProfile({ item })}</View>
-              ))}
-            </View>
-          ) : null
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </Pressable>
+          )
         }
         ListEmptyComponent={
           <ThemedText type="small" themeColor="textSecondary" style={styles.message}>
@@ -300,7 +304,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.three,
   },
-  inviteButton: {
+  footerLink: {
+    marginTop: Spacing.three,
+  },
+  linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
@@ -308,7 +315,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: Spacing.two,
   },
-  inviteLabel: {
+  linkLabel: {
     flex: 1,
   },
 });

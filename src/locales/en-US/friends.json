@@ -1,8 +1,7 @@
 {
   "searchPlaceholder": "Search by username or nickname…",
   "findViaContacts": "Find via contacts",
-  "inviteFriends": "Invite friends",
-  "inviteMessage": "Come track shows with me on Next Episode! {{url}}",
+  "friendsHeader": "Friends ({{count}})",
   "friendRequestsHeader": "Friend requests ({{count}})",
   "sentRequestsHeader": "Sent requests ({{count}})",
   "wantsToBeFriend": "@{{username}} wants to be your friend",
