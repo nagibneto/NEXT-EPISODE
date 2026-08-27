@@ -1044,8 +1044,25 @@ export async function getFriendsFeed(userId: string): Promise<FeedItem[]> {
       liked_by_me: false,
     }));
 
+  // Só entra no feed o comentário de episódio que o próprio usuário logado já
+  // assistiu — evita expor spoiler de episódios que ele ainda não viu.
+  const commentShowIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.tmdb_show_id)));
+  let myWatchedSet = new Set<string>();
+  if (commentShowIds.length > 0) {
+    const { data: myWatchedRows, error: myWatchedError } = await supabase
+      .from('watched_episodes')
+      .select('tmdb_show_id, season_number, episode_number')
+      .eq('user_id', userId)
+      .in('tmdb_show_id', commentShowIds);
+    if (myWatchedError) throw myWatchedError;
+    myWatchedSet = new Set(
+      (myWatchedRows ?? []).map((row) => `${row.tmdb_show_id}:${row.season_number}:${row.episode_number}`)
+    );
+  }
+
   const comments: FeedCommentItem[] = (commentsRes.data ?? [])
     .filter((row) => friendById.has(row.user_id))
+    .filter((row) => myWatchedSet.has(`${row.tmdb_show_id}:${row.season_number}:${row.episode_number}`))
     .map((row) => ({
       type: 'comment',
       user: friendById.get(row.user_id)!,
