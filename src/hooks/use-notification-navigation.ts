@@ -13,6 +13,10 @@ function navigateForNotificationData(data: Record<string, unknown> | undefined) 
     router.push({ pathname: '/notifications', params: { view: 'reacoes' } });
     return;
   }
+  if (data.type === 'quiz') {
+    router.push('/quiz');
+    return;
+  }
   // Notificações de episódio novo (local ou o cron notify-new-episodes) não
   // levam "type", só os IDs do episódio.
   if (data.tmdbShowId != null) {

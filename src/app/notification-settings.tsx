@@ -12,12 +12,14 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from '@/lib/db';
+import { scheduleDailyQuizNotification } from '@/lib/notifications';
 
 const OPTION_KEYS: (keyof NotificationPreferences)[] = [
   'new_episodes',
   'friend_requests',
   'friend_accepted',
   'feed_likes',
+  'daily_quiz',
 ];
 
 export default function NotificationSettingsScreen() {
@@ -47,6 +49,12 @@ export default function NotificationSettingsScreen() {
     setPrefs({ ...prefs, [key]: value });
     try {
       await updateNotificationPreferences(user.id, { [key]: value });
+      // Diferente das demais (push remoto, decididas no servidor): a do quiz é
+      // uma notificação local já agendada no aparelho, então precisa reagendar
+      // (ou cancelar) na hora para o toggle surtir efeito imediato.
+      if (key === 'daily_quiz') {
+        scheduleDailyQuizNotification(user.id).catch(() => {});
+      }
     } catch (err) {
       setPrefs(previous);
       setError(errorMessage(err, t('notificationSettings.saveError')));

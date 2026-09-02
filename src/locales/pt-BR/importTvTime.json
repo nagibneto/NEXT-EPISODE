@@ -1,8 +1,6 @@
 {
   "title": "Importar do TV Time",
-  "introParagraph1": "O TV Time vai desligar em 15/07/2026 e não tem API pública. Pra trazer seu histórico de séries e filmes pra cá, exporte seus dados oficialmente pelo site do TV Time e selecione o arquivo .zip aqui — não precisa extrair nada, a gente cuida disso.",
-  "introSteps": "1. Abra o exportador do TV Time e faça login com sua conta.\n2. Baixe o arquivo .zip que eles enviarem por e-mail.\n3. Volte aqui e selecione esse .zip.",
-  "openExporterButton": "Abrir exportador do TV Time",
+  "introParagraph1": "O TV Time saiu do ar e não dá mais para exportar dados pelo site deles. Se você já tinha baixado o arquivo .zip com seu histórico antes do encerramento, selecione ele abaixo — não precisa extrair nada, a gente cuida disso.",
   "selectFileButton": "Selecionar arquivo .zip",
   "noDataFoundError": "Não encontramos nenhum episódio ou filme assistido nesse arquivo.",
   "readFileError": "Erro ao ler o arquivo.",

@@ -371,6 +371,19 @@ export function airedEpisodesInSeason(
   return 0;
 }
 
+/** Se este episódio é o mais recente já exibido da série inteira. */
+export function isLatestAiredEpisode(
+  lastEpisodeToAir: { season_number: number; episode_number: number } | null,
+  seasonNumber: number,
+  episodeNumber: number
+) {
+  return (
+    !!lastEpisodeToAir &&
+    lastEpisodeToAir.season_number === seasonNumber &&
+    lastEpisodeToAir.episode_number === episodeNumber
+  );
+}
+
 // ---------- Onde assistir ----------
 
 export interface TmdbWatchProvider {

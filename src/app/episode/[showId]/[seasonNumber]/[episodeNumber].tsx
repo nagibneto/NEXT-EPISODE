@@ -8,6 +8,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 import { CommentsScreen } from '@/components/comments-screen';
+import { ShareWatchedSheet } from '@/components/share-watched-sheet';
 import { SkippedEpisodesSheet } from '@/components/skipped-episodes-sheet';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
@@ -34,6 +35,7 @@ import {
   getEpisodeDetails,
   getShowDetailsCached,
   getShowNames,
+  isLatestAiredEpisode,
   stillUrl,
   type TmdbEpisode,
   type TmdbSeasonSummary,
@@ -56,12 +58,14 @@ export default function EpisodeScreen() {
   const [episode, setEpisode] = useState<TmdbEpisode | null>(null);
   const [showName, setShowName] = useState<string | null>(null);
   const [seasons, setSeasons] = useState<TmdbSeasonSummary[] | null>(null);
+  const [lastEpisodeToAir, setLastEpisodeToAir] = useState<TmdbEpisode | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [watched, setWatched] = useState<boolean | null>(null);
   const [togglingWatched, setTogglingWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skippedPrompt, setSkippedPrompt] = useState<SkippedEpisode[] | null>(null);
+  const [shareVisible, setShareVisible] = useState(false);
   // Evita repetir o upsert de "seguir" a cada vez que o episódio é marcado nesta tela.
   const followEnsured = useRef(false);
 
@@ -82,6 +86,7 @@ export default function EpisodeScreen() {
       .then((show) => {
         setShowName(show.name);
         setSeasons(show.seasons);
+        setLastEpisodeToAir(show.last_episode_to_air);
       })
       .catch(() => {});
     getEpisodeAverageRating(showId, seasonNumber, episodeNumber)
@@ -136,7 +141,13 @@ export default function EpisodeScreen() {
     setWatched(nextWatched);
     try {
       await markEpisodeWatched(userId, showId, seasonNumber, episodeNumber, nextWatched);
-      if (nextWatched) ensureFollowing();
+      if (nextWatched) {
+        ensureFollowing();
+        const isLastOfSeason = !!currentSeason && episodeNumber === currentSeason.episode_count;
+        if (isLastOfSeason || isLatestAiredEpisode(lastEpisodeToAir, seasonNumber, episodeNumber)) {
+          setShareVisible(true);
+        }
+      }
       if (extraSkipped.length > 0) {
         await markSkippedEpisodesWatched(userId, showId, extraSkipped);
       }
@@ -362,6 +373,14 @@ export default function EpisodeScreen() {
         onMarkAll={() => {
           if (user && skippedPrompt) commitWatched(user.id, true, skippedPrompt);
         }}
+      />
+      <ShareWatchedSheet
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        imageUrl={still}
+        badgeLabel={t('shareWatchedSheet.episodeBadge')}
+        title={showName ?? episode.name}
+        subtitle={`${code} — ${episode.name}`}
       />
     </>
   );

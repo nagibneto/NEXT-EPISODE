@@ -18,6 +18,7 @@ import {
 import { BadgeDot } from '@/components/badge-dot';
 import { LanguageSelector } from '@/components/language-selector';
 import { PhoneInput } from '@/components/phone-input';
+import { QuizCard } from '@/components/quiz-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
 import { UserAvatar } from '@/components/user-avatar';
@@ -367,6 +368,8 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <QuizCard />
 
       <View style={styles.grid}>
         <Pressable

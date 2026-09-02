@@ -18,6 +18,10 @@
     "feed_likes": {
       "label": "Curtidas no que você assistiu",
       "description": "Quando um amigo curte uma série ou filme que você assistiu."
+    },
+    "daily_quiz": {
+      "label": "Quiz do dia",
+      "description": "Lembrete às 20h para responder a pergunta do dia."
     }
   }
 }

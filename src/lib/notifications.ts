@@ -10,8 +10,9 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { deletePushToken, getFollowedShows, savePushToken } from './db';
+import { deletePushToken, getFollowedShows, getNotificationPreferences, savePushToken } from './db';
 import { i18n } from './i18n';
+import { getQuizState } from './quiz';
 import { getShowDetails } from './tmdb';
 
 Notifications.setNotificationHandler({
@@ -29,11 +30,72 @@ export async function requestNotificationPermission(): Promise<boolean> {
       name: i18n.t('pushNotifications.channelName'),
       importance: Notifications.AndroidImportance.HIGH,
     });
+    await Notifications.setNotificationChannelAsync('quiz', {
+      name: i18n.t('pushNotifications.quizChannelName'),
+      importance: Notifications.AndroidImportance.HIGH,
+    });
   }
   const settings = await Notifications.getPermissionsAsync();
   if (settings.granted) return true;
   const request = await Notifications.requestPermissionsAsync();
   return request.granted;
+}
+
+// ---------- Quiz diário (notificação local) ----------
+
+/** Identificador fixo: reagendar cancela e recria só esta, sem tocar nas de episódio. */
+const QUIZ_NOTIFICATION_ID = 'daily-quiz';
+
+/** Horário local em que a notificação do quiz é entregue todo dia. */
+export const QUIZ_NOTIFICATION_HOUR = 20;
+export const QUIZ_NOTIFICATION_MINUTE = 0;
+
+/**
+ * (Re)agenda a notificação diária do quiz para as 20h locais. É idempotente:
+ * pode ser chamada a cada abertura do app. Fica separada de
+ * syncEpisodeNotifications porque aquela cancela todas as agendadas.
+ *
+ * O texto muda entre "inicie" e "mantenha sua escalada" conforme o usuário já
+ * tenha respondido algum quiz antes — mesmo critério do QuizDayPrompt, mas
+ * aqui reavaliado a cada reagendamento (a notificação repete todo dia com o
+ * texto fixado na última vez que foi agendada).
+ *
+ * Respeita a preferência `daily_quiz` (Perfil → Notificações): desligada,
+ * cancela a notificação em vez de reagendar.
+ */
+export async function scheduleDailyQuizNotification(userId: string) {
+  if (Platform.OS === 'web') return;
+  const granted = await requestNotificationPermission();
+  if (!granted) return;
+
+  const prefs = await getNotificationPreferences(userId).catch(() => null);
+  if (prefs && !prefs.daily_quiz) {
+    await Notifications.cancelScheduledNotificationAsync(QUIZ_NOTIFICATION_ID).catch(() => {});
+    return;
+  }
+
+  const hasAnsweredBefore = await getQuizState(userId)
+    .then((state) => state.totalAnswered > 0)
+    // Sem rede: mantém o texto "padrão" (mantenha), que é o que já existia.
+    .catch(() => true);
+
+  await Notifications.cancelScheduledNotificationAsync(QUIZ_NOTIFICATION_ID).catch(() => {});
+  await Notifications.scheduleNotificationAsync({
+    identifier: QUIZ_NOTIFICATION_ID,
+    content: {
+      title: i18n.t('pushNotifications.quizTitle'),
+      body: i18n.t(
+        hasAnsweredBefore ? 'pushNotifications.quizBodyContinue' : 'pushNotifications.quizBodyStart'
+      ),
+      data: { type: 'quiz' },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour: QUIZ_NOTIFICATION_HOUR,
+      minute: QUIZ_NOTIFICATION_MINUTE,
+      channelId: Platform.OS === 'android' ? 'quiz' : undefined,
+    },
+  });
 }
 
 // ---------- Push remoto (Expo Push + Edge Function no Supabase) ----------
@@ -124,4 +186,8 @@ export async function syncEpisodeNotifications(userId: string) {
       // Falha em uma série não deve impedir as demais.
     }
   }
+
+  // cancelAllScheduledNotificationsAsync acima apagou a do quiz também —
+  // reagenda para ela não sumir quando o usuário segue/deixa de seguir séries.
+  await scheduleDailyQuizNotification(userId);
 }

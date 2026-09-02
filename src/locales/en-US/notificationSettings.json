@@ -18,6 +18,10 @@
     "feed_likes": {
       "label": "Likes on what you watched",
       "description": "When a friend likes a show or movie you watched."
+    },
+    "daily_quiz": {
+      "label": "Daily quiz",
+      "description": "8 PM reminder to answer today's question."
     }
   }
 }

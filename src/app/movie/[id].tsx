@@ -9,6 +9,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { CastList } from '@/components/cast-list';
 import { CommentsScreen } from '@/components/comments-screen';
 import { Recommendations } from '@/components/recommendations';
+import { ShareWatchedSheet } from '@/components/share-watched-sheet';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
@@ -52,6 +53,7 @@ export default function MovieDetailsScreen() {
   const [average, setAverage] = useState<{ average: number; count: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   useEffect(() => {
     getMovieDetails(movieId)
@@ -88,7 +90,10 @@ export default function MovieDetailsScreen() {
       );
       setWatched(!watched);
       // Marcar como assistido também tira o filme do "Para assistir".
-      if (!watched) setInWatchlist(false);
+      if (!watched) {
+        setInWatchlist(false);
+        setShareVisible(true);
+      }
     } catch (err) {
       setError(errorMessage(err, t('movie.updateError')));
     } finally {
@@ -268,6 +273,14 @@ export default function MovieDetailsScreen() {
                   </ThemedText>
                 </Pressable>
               )}
+              {watched === true && (
+                <Pressable
+                  hitSlop={8}
+                  style={[styles.shareIconButton, { backgroundColor: theme.backgroundElement }]}
+                  onPress={() => setShareVisible(true)}>
+                  <Ionicons name="share-social-outline" size={20} color={theme.text} />
+                </Pressable>
+              )}
             </View>
 
             {movie.overview ? (
@@ -304,6 +317,14 @@ export default function MovieDetailsScreen() {
             {error && <ThemedText themeColor="danger">{error}</ThemedText>}
           </View>
         }
+      />
+      <ShareWatchedSheet
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        imageUrl={backdrop ?? poster}
+        badgeLabel={t('shareWatchedSheet.movieBadge')}
+        title={movie.title}
+        subtitle={year ?? undefined}
       />
     </>
   );
@@ -377,6 +398,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: Spacing.one,
+  },
+  shareIconButton: {
+    width: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ratingCard: {
     borderRadius: 12,

@@ -1,0 +1,33 @@
+{
+  "navTitle": "Quiz do dia",
+  "card": {
+    "title": "Quiz do dia",
+    "subtitle": "Dias seguidos de acerto"
+  },
+  "modal": {
+    "title": "O quiz de hoje chegou!",
+    "subtitlePrefix": "Uma pergunta rápida sobre cinema e séries.",
+    "subtitleStart": "Acerte e inicie sua escalada.",
+    "subtitleContinue": "Acerte e mantenha sua escalada.",
+    "answer": "Responder agora",
+    "later": "Deixar pra depois"
+  },
+  "screen": {
+    "loading": "Carregando o quiz…",
+    "submit": "Responder",
+    "explanationLabel": "Por quê",
+    "wellDone": "Muito bem!",
+    "wrongExclaim": "Errou!",
+    "statScore": "Meus pontos",
+    "statStreak": "Minha escalada",
+    "statBest": "Meu recorde",
+    "comeBackTomorrowPrefix": "Amanhã tem uma nova pergunta a partir das ",
+    "comeBackTomorrowBold": "20h.",
+    "loadError": "Não foi possível carregar o quiz.",
+    "submitError": "Não foi possível salvar sua resposta. Tente de novo.",
+    "noQuizToday": "Nenhum quiz hoje. Novas perguntas em breve!",
+    "leaderboardTitle": "Escalada dos amigos",
+    "leaderboardYou": "Você",
+    "leaderboardEmpty": "Adicione amigos para comparar as escaladas"
+  }
+}

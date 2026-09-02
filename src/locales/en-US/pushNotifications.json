@@ -1,5 +1,9 @@
 {
   "channelName": "New episodes",
   "newEpisodeTitle": "New episode of {{showName}}!",
-  "newEpisodeBody": "{{code}} — \"{{episodeName}}\" airs today."
+  "newEpisodeBody": "{{code}} — \"{{episodeName}}\" airs today.",
+  "quizChannelName": "Daily quiz",
+  "quizTitle": "Today's quiz is out! 🎬",
+  "quizBodyStart": "Answer today's question and start your streak.",
+  "quizBodyContinue": "Answer today's question and keep your streak going."
 }

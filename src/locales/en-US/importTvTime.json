@@ -1,8 +1,6 @@
 {
   "title": "Import from TV Time",
-  "introParagraph1": "TV Time is shutting down on 07/15/2026 and has no public API. To bring your show and movie history here, officially export your data from the TV Time website and select the .zip file here — no need to extract anything, we'll take care of that.",
-  "introSteps": "1. Open the TV Time exporter and log in with your account.\n2. Download the .zip file they email you.\n3. Come back here and select that .zip.",
-  "openExporterButton": "Open TV Time exporter",
+  "introParagraph1": "TV Time has shut down and it's no longer possible to export data from their website. If you'd already downloaded the .zip file with your history before it closed, select it below — no need to extract anything, we'll take care of that.",
   "selectFileButton": "Select .zip file",
   "noDataFoundError": "We couldn't find any watched episodes or movies in that file.",
   "readFileError": "Error reading the file.",

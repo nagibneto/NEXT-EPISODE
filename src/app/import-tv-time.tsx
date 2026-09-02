@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,8 +29,6 @@ import {
   parseTvTimeShowsCsv,
   type TvTimeEpisodeRow,
 } from '@/lib/tvtime-import';
-
-const GDPR_EXPORT_URL = 'https://gdpr.tvtime.com/gdpr/self-service';
 
 // Evita rajada de requisições à TMDB ao buscar o nome no outro idioma de
 // cada título importado (mesmo limite usado no casamento com a TMDB, ver
@@ -271,15 +268,6 @@ export default function ImportTvTimeScreen() {
         <ThemedText themeColor="textSecondary" style={styles.paragraph}>
           {t('importTvTime.introParagraph1')}
         </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.paragraph}>
-          {t('importTvTime.introSteps')}
-        </ThemedText>
-
-        <Pressable
-          style={[styles.button, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => Linking.openURL(GDPR_EXPORT_URL)}>
-          <ThemedText type="smallBold">{t('importTvTime.openExporterButton')}</ThemedText>
-        </Pressable>
 
         <Pressable
           style={[styles.button, { backgroundColor: theme.accent }]}

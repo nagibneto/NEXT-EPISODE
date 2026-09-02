@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { ShareWatchedSheet } from '@/components/share-watched-sheet';
 import { SkippedEpisodesSheet } from '@/components/skipped-episodes-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -24,7 +25,10 @@ import {
   getSeasonDetails,
   getShowDetailsCached,
   getShowNames,
+  isLatestAiredEpisode,
+  posterUrl,
   stillUrl,
+  type TmdbEpisode,
   type TmdbSeasonDetails,
 } from '@/lib/tmdb';
 import {
@@ -43,12 +47,20 @@ export default function SeasonScreen() {
 
   const [season, setSeason] = useState<TmdbSeasonDetails | null>(null);
   const [watched, setWatched] = useState<Set<number>>(new Set());
+  const [showName, setShowName] = useState<string | null>(null);
+  const [lastEpisodeToAir, setLastEpisodeToAir] = useState<TmdbEpisode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [markingSeason, setMarkingSeason] = useState(false);
   // Episódio sendo marcado que deixou episódios anteriores pulados, aguardando confirmação.
   const [skippedPrompt, setSkippedPrompt] = useState<{
     episodeNumber: number;
     skipped: SkippedEpisode[];
+  } | null>(null);
+  const [shareCard, setShareCard] = useState<{
+    imageUrl: string | null;
+    badgeLabel: string;
+    title: string;
+    subtitle?: string;
   } | null>(null);
   // Evita repetir o upsert de "seguir" a cada episódio marcado nesta tela.
   const followEnsured = useRef(false);
@@ -77,6 +89,12 @@ export default function SeasonScreen() {
       .catch((err) =>
         setError(err instanceof Error ? err.message : t('season.loadError'))
       );
+    getShowDetailsCached(showId)
+      .then((show) => {
+        setShowName(show.name);
+        setLastEpisodeToAir(show.last_episode_to_air);
+      })
+      .catch(() => {});
   }, [showId, seasonNumber]);
 
   // Refaz a busca de assistidos toda vez que a tela volta ao foco, para
@@ -131,7 +149,19 @@ export default function SeasonScreen() {
       });
       try {
         await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, nextWatched);
-        if (nextWatched) ensureFollowing();
+        if (nextWatched) {
+          ensureFollowing();
+          const isLastOfSeason = !!season && episodeNumber === season.episodes.length;
+          if (isLastOfSeason || isLatestAiredEpisode(lastEpisodeToAir, seasonNumber, episodeNumber)) {
+            const ep = season?.episodes.find((e) => e.episode_number === episodeNumber);
+            setShareCard({
+              imageUrl: stillUrl(ep?.still_path ?? null, 'original') ?? posterUrl(season?.poster_path ?? null, 'w500'),
+              badgeLabel: t('shareWatchedSheet.seasonBadge'),
+              title: showName ?? season?.name ?? '',
+              subtitle: [`${t('common.nav.season')} ${seasonNumber}`, ep?.name].filter(Boolean).join(' · '),
+            });
+          }
+        }
         if (extraSkipped.length > 0) {
           await markSkippedEpisodesWatched(user.id, showId, extraSkipped);
         }
@@ -144,7 +174,7 @@ export default function SeasonScreen() {
         });
       }
     },
-    [user, showId, seasonNumber, ensureFollowing]
+    [user, showId, seasonNumber, ensureFollowing, season, lastEpisodeToAir, showName, t]
   );
 
   const toggleWatched = useCallback(
@@ -198,7 +228,7 @@ export default function SeasonScreen() {
     releasedEpisodes.every((episode) => watched.has(episode.episode_number));
 
   async function toggleSeasonWatched() {
-    if (!user || markingSeason) return;
+    if (!user || !season || markingSeason) return;
     setMarkingSeason(true);
     const previous = watched;
     try {
@@ -214,6 +244,19 @@ export default function SeasonScreen() {
           releasedEpisodes.map((episode) => episode.episode_number)
         );
         ensureFollowing();
+        const finale = releasedEpisodes[releasedEpisodes.length - 1];
+        const isLastOfSeason = finale.episode_number === season.episodes.length;
+        if (
+          isLastOfSeason ||
+          isLatestAiredEpisode(lastEpisodeToAir, seasonNumber, finale.episode_number)
+        ) {
+          setShareCard({
+            imageUrl: posterUrl(season.poster_path, 'w500') ?? stillUrl(finale.still_path, 'original'),
+            badgeLabel: t('shareWatchedSheet.seasonBadge'),
+            title: showName ?? season.name,
+            subtitle: `${t('common.nav.season')} ${seasonNumber}`,
+          });
+        }
       }
     } catch {
       // Desfaz a atualização otimista se a API falhar.
@@ -316,6 +359,14 @@ export default function SeasonScreen() {
         onMarkAll={() => {
           if (skippedPrompt) commitWatched(skippedPrompt.episodeNumber, true, skippedPrompt.skipped);
         }}
+      />
+      <ShareWatchedSheet
+        visible={shareCard !== null}
+        onClose={() => setShareCard(null)}
+        imageUrl={shareCard?.imageUrl ?? null}
+        badgeLabel={shareCard?.badgeLabel ?? ''}
+        title={shareCard?.title ?? ''}
+        subtitle={shareCard?.subtitle}
       />
     </View>
   );

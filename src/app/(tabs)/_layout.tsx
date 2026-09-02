@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AppHeaderTitle, HeaderActions } from '@/components/app-header';
+import { QuizDayPrompt } from '@/components/quiz-day-prompt';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -44,60 +45,63 @@ export default function TabsLayout() {
   if (needsUsername) return <Redirect href="/choose-username" />;
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: theme.accent,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t('tabs.watchlist'),
-          headerTitle: () => <AppHeaderTitle />,
-          headerTitleAlign: 'left',
-          headerRight: () => <HeaderActions />,
-          tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: t('tabs.search'),
-          headerTitle: () => <AppHeaderTitle title={t('tabs.search')} />,
-          headerTitleAlign: 'left',
-          headerRight: () => <HeaderActions />,
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="upcoming"
-        options={{
-          title: t('tabs.upcoming'),
-          headerTitle: () => <AppHeaderTitle title={t('tabs.upcoming')} />,
-          headerTitleAlign: 'left',
-          headerRight: () => <HeaderActions />,
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="feed"
-        options={{
-          title: t('tabs.feed'),
-          headerTitle: () => <AppHeaderTitle title={t('tabs.feed')} />,
-          headerTitleAlign: 'left',
-          headerRight: () => <HeaderActions />,
-          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: t('tabs.profile'),
-          headerTitle: () => <AppHeaderTitle title={t('tabs.profile')} />,
-          headerTitleAlign: 'left',
-          headerRight: () => <HeaderActions showAvatar={false} />,
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
-        }}
-      />
-    </Tabs>
+    <>
+      <QuizDayPrompt />
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: theme.accent,
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: t('tabs.watchlist'),
+            headerTitle: () => <AppHeaderTitle />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: t('tabs.search'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.search')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="upcoming"
+          options={{
+            title: t('tabs.upcoming'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.upcoming')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="feed"
+          options={{
+            title: t('tabs.feed'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.feed')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: t('tabs.profile'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.profile')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions showAvatar={false} />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          }}
+        />
+      </Tabs>
+    </>
   );
 }

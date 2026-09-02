@@ -1,0 +1,33 @@
+{
+  "navTitle": "Daily quiz",
+  "card": {
+    "title": "Daily quiz",
+    "subtitle": "Days answered right in a row"
+  },
+  "modal": {
+    "title": "Today's quiz is here!",
+    "subtitlePrefix": "One quick question about movies and TV.",
+    "subtitleStart": "Get it right to start your streak.",
+    "subtitleContinue": "Get it right to keep your streak going.",
+    "answer": "Answer now",
+    "later": "Maybe later"
+  },
+  "screen": {
+    "loading": "Loading the quiz…",
+    "submit": "Submit",
+    "explanationLabel": "Why",
+    "wellDone": "Well done!",
+    "wrongExclaim": "Wrong!",
+    "statScore": "My points",
+    "statStreak": "My streak",
+    "statBest": "My best",
+    "comeBackTomorrowPrefix": "A new question drops tomorrow at ",
+    "comeBackTomorrowBold": "8 PM.",
+    "loadError": "Couldn't load the quiz.",
+    "submitError": "Couldn't save your answer. Please try again.",
+    "noQuizToday": "No quiz today. New questions coming soon!",
+    "leaderboardTitle": "Friends' streaks",
+    "leaderboardYou": "You",
+    "leaderboardEmpty": "Add friends to compare streaks"
+  }
+}

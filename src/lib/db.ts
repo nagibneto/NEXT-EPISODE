@@ -1311,6 +1311,8 @@ export interface NotificationPreferences {
   friend_requests: boolean;
   friend_accepted: boolean;
   feed_likes: boolean;
+  /** Diferente das demais (push remoto): controla a notificação local diária do quiz. */
+  daily_quiz: boolean;
 }
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -1318,13 +1320,14 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   friend_requests: true,
   friend_accepted: true,
   feed_likes: true,
+  daily_quiz: true,
 };
 
 /** Ausência de linha = tudo ativado (mesmo padrão do trigger em supabase/schema.sql). */
 export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
   const { data, error } = await supabase
     .from('notification_preferences')
-    .select('new_episodes, friend_requests, friend_accepted, feed_likes')
+    .select('new_episodes, friend_requests, friend_accepted, feed_likes, daily_quiz')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;

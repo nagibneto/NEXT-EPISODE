@@ -992,12 +992,58 @@ create table if not exists public.notification_preferences (
   updated_at timestamptz not null default now()
 );
 
+-- Diferente das demais colunas (todas de push remoto), esta controla a
+-- notificação local diária do quiz (ver scheduleDailyQuizNotification).
+alter table public.notification_preferences
+  add column if not exists daily_quiz boolean not null default true;
+
 alter table public.notification_preferences enable row level security;
 
 drop policy if exists "Usuário gerencia as próprias preferências de notificação" on public.notification_preferences;
 create policy "Usuário gerencia as próprias preferências de notificação"
   on public.notification_preferences for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- Quiz diário ----------
+-- Uma pergunta por dia sobre cinema e séries. O usuário responde uma vez ao
+-- dia (chave primária user_id + quiz_date, no fuso do aparelho) e o streak de
+-- acertos consecutivos é calculado no cliente a partir do histórico (ver
+-- src/lib/quiz.ts). Sem policy de update/delete de propósito: a resposta do
+-- dia é definitiva, ninguém reescreve o próprio histórico para forjar streak.
+create table if not exists public.quiz_answers (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  quiz_date date not null,
+  question_id text not null,
+  selected_index integer not null,
+  is_correct boolean not null,
+  answered_at timestamptz not null default now(),
+  primary key (user_id, quiz_date)
+);
+
+alter table public.quiz_answers enable row level security;
+
+drop policy if exists "Usuário vê as próprias respostas do quiz" on public.quiz_answers;
+create policy "Usuário vê as próprias respostas do quiz"
+  on public.quiz_answers for select to authenticated using (auth.uid() = user_id);
+
+drop policy if exists "Usuário cria as próprias respostas do quiz" on public.quiz_answers;
+create policy "Usuário cria as próprias respostas do quiz"
+  on public.quiz_answers for insert to authenticated with check (auth.uid() = user_id);
+
+-- Amigos (pedido aceito) veem as respostas uns dos outros — alimenta o placar
+-- de escaladas na tela do quiz (mesmo padrão de watched_episodes/watched_movies).
+drop policy if exists "Amigos veem respostas do quiz" on public.quiz_answers;
+create policy "Amigos veem respostas do quiz"
+  on public.quiz_answers for select to authenticated
+  using (
+    exists (
+      select 1 from public.user_follows
+      where follower_id = auth.uid() and followed_id = user_id and status = 'accepted'
+    )
+  );
+
+create index if not exists quiz_answers_user_date_idx
+  on public.quiz_answers (user_id, quiz_date desc);
 
 -- ---------- Permissões das funções de trigger ----------
 -- Precisa ficar no fim do arquivo: "create or replace function" concede

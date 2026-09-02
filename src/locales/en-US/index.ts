@@ -24,11 +24,13 @@ import notifications from './notifications.json';
 import notificationSettings from './notificationSettings.json';
 import profile from './profile.json';
 import pushNotifications from './pushNotifications.json';
+import quiz from './quiz.json';
 import recommendations from './recommendations.json';
 import relativeDate from './relativeDate.json';
 import resetPassword from './resetPassword.json';
 import search from './search.json';
 import season from './season.json';
+import shareWatchedSheet from './shareWatchedSheet.json';
 import show from './show.json';
 import skippedEpisodesSheet from './skippedEpisodesSheet.json';
 import starRating from './starRating.json';
@@ -62,11 +64,13 @@ export default {
   notificationSettings,
   profile,
   pushNotifications,
+  quiz,
   recommendations,
   relativeDate,
   resetPassword,
   search,
   season,
+  shareWatchedSheet,
   show,
   skippedEpisodesSheet,
   starRating,

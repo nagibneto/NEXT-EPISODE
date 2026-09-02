@@ -2,7 +2,7 @@
   "expo": {
     "name": "Next Episode",
     "slug": "next-episode",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nextepisode",
@@ -15,7 +15,8 @@
         "CFBundleLocalizations": [
           "pt-BR",
           "en-US"
-        ]
+        ],
+        "NSPhotoLibraryAddUsageDescription": "O app usa a galeria para compartilhar o cartão de conquista no Instagram Stories."
       }
     },
     "android": {
@@ -59,7 +60,19 @@
         {
           "contactsPermission": "O app acessa seus contatos apenas para comparar números de telefone (por hash, sem enviar nenhum número em texto puro) e sugerir amigos que já usam o Next Episode."
         }
-      ]
+      ],
+      [
+        "react-native-share",
+        {
+          "ios": [
+            "instagram-stories"
+          ],
+          "android": [
+            "com.instagram.android"
+          ]
+        }
+      ],
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true,

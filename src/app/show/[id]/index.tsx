@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } fro
 
 import { CastList } from '@/components/cast-list';
 import { Recommendations } from '@/components/recommendations';
+import { ShareWatchedSheet } from '@/components/share-watched-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { WatchProviders } from '@/components/watch-providers';
 import { Spacing } from '@/constants/theme';
@@ -56,6 +57,7 @@ export default function ShowDetailsScreen() {
   const [busy, setBusy] = useState(false);
   // Temporada com marcação em massa em andamento (número dela, ou null).
   const [seasonBusy, setSeasonBusy] = useState<number | null>(null);
+  const [shareVisible, setShareVisible] = useState(false);
 
   useEffect(() => {
     getShowDetails(showId)
@@ -270,157 +272,181 @@ export default function ShowDetailsScreen() {
       ({ season, aired }) => aired === 0 || (watchedBySeason.get(season.season_number) ?? 0) >= aired
     );
 
+  const totalAired = airedBySeason.reduce((sum, { aired }) => sum + aired, 0);
+  const totalWatched = airedBySeason.reduce(
+    (sum, { season, aired }) => sum + Math.min(watchedBySeason.get(season.season_number) ?? 0, aired),
+    0
+  );
+
   return (
-    <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: show.name }} />
+    <>
+      <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
+        <Stack.Screen options={{ title: show.name }} />
 
-      <View>
-        {backdrop && (
-          <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />
-        )}
-        {/* Estrelinha solta sobre o backdrop (o header nativo do iOS 26 põe
-            um círculo de vidro em volta de qualquer botão, então ela vive
-            aqui, onde controlamos o visual). */}
-        <Pressable
-          hitSlop={8}
-          disabled={favorite === null}
-          onPress={toggleFavorite}
-          style={[styles.favoriteButton, !backdrop && styles.favoriteButtonInline]}>
-          <MaterialCommunityIcons
-            name={favorite ? 'star' : 'star-outline'}
-            size={32}
-            // Sem backdrop o fundo é o da tela — branco sumiria no tema claro.
-            color={favorite ? theme.gold : backdrop ? '#ffffff' : theme.textSecondary}
-            style={backdrop ? styles.favoriteIcon : undefined}
-          />
-        </Pressable>
-      </View>
-
-      <View style={styles.header}>
-        {poster && <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />}
-        <View style={styles.headerText}>
-          <ThemedText type="smallBold" style={styles.title}>
-            {show.name}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {show.genres.map((genre) => genre.name).join(' · ')}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {t('show.seasonsCount', { count: show.number_of_seasons })} ·{' '}
-            {show.number_of_episodes} {t('show.episodesWord')}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            ⭐ {show.vote_average.toFixed(1)} (TMDB)
-          </ThemedText>
+        <View>
+          {backdrop && (
+            <Image source={{ uri: backdrop }} style={styles.backdrop} contentFit="cover" />
+          )}
+          {/* Estrelinha solta sobre o backdrop (o header nativo do iOS 26 põe
+              um círculo de vidro em volta de qualquer botão, então ela vive
+              aqui, onde controlamos o visual). */}
+          <Pressable
+            hitSlop={8}
+            disabled={favorite === null}
+            onPress={toggleFavorite}
+            style={[styles.favoriteButton, !backdrop && styles.favoriteButtonInline]}>
+            <MaterialCommunityIcons
+              name={favorite ? 'star' : 'star-outline'}
+              size={32}
+              // Sem backdrop o fundo é o da tela — branco sumiria no tema claro.
+              color={favorite ? theme.gold : backdrop ? '#ffffff' : theme.textSecondary}
+              style={backdrop ? styles.favoriteIcon : undefined}
+            />
+          </Pressable>
         </View>
-      </View>
 
-      <Pressable
-        style={[
-          styles.followButton,
-          {
-            backgroundColor: following ? theme.backgroundElement : theme.accent,
-            opacity: busy || following === null ? 0.6 : 1,
-          },
-        ]}
-        disabled={busy || following === null}
-        onPress={toggleFollow}>
-        <ThemedText
-          type="smallBold"
-          style={{ color: following ? theme.text : theme.accentText }}>
-          {following === null ? '…' : following ? t('show.following') : t('show.follow')}
-        </ThemedText>
-      </Pressable>
-
-      {show.overview ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.overview}>
-          {show.overview}
-        </ThemedText>
-      ) : null}
-
-      <Recommendations media="tv" tmdbId={show.id} genres={show.genres} enabled={finished} />
-
-      <View style={styles.topCardsRow}>
-        <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
-
-        {next?.air_date && (
-          <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
-            <ThemedText type="smallBold" style={{ color: theme.accent }}>
-              {t('show.nextEpisode')}
-            </ThemedText>
-            <ThemedText type="small">
-              S{String(next.season_number).padStart(2, '0')}E
-              {String(next.episode_number).padStart(2, '0')}
-              {next.name ? ` — ${next.name}` : ''}
+        <View style={styles.header}>
+          {poster && <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />}
+          <View style={styles.headerText}>
+            <ThemedText type="smallBold" style={styles.title}>
+              {show.name}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {formatDate(`${next.air_date}T00:00:00`, {
-                weekday: 'long',
-                day: '2-digit',
-                month: 'long',
-              })}
+              {show.genres.map((genre) => genre.name).join(' · ')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {t('show.seasonsCount', { count: show.number_of_seasons })} ·{' '}
+              {show.number_of_episodes} {t('show.episodesWord')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              ⭐ {show.vote_average.toFixed(1)} (TMDB)
             </ThemedText>
           </View>
-        )}
-      </View>
+        </View>
 
-      <CastList media="tv" tmdbId={show.id} />
+        <View style={styles.followRow}>
+          <Pressable
+            style={[
+              styles.followButton,
+              {
+                backgroundColor: following ? theme.backgroundElement : theme.accent,
+                opacity: busy || following === null ? 0.6 : 1,
+              },
+            ]}
+            disabled={busy || following === null}
+            onPress={toggleFollow}>
+            <ThemedText
+              type="smallBold"
+              style={{ color: following ? theme.text : theme.accentText }}>
+              {following === null ? '…' : following ? t('show.following') : t('show.follow')}
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            style={[styles.shareIconButton, { backgroundColor: theme.backgroundElement }]}
+            onPress={() => setShareVisible(true)}>
+            <Ionicons name="share-social-outline" size={20} color={theme.text} />
+          </Pressable>
+        </View>
 
-      <ThemedText type="smallBold" style={styles.sectionTitle}>
-        {t('show.seasonsTitle')}
-      </ThemedText>
-      {seasons.map((season) => {
-        const watchedCount = Math.min(
-          watchedBySeason.get(season.season_number) ?? 0,
-          season.episode_count
-        );
-        const complete = season.episode_count > 0 && watchedCount >= season.episode_count;
-        return (
-          <Link
-            key={season.id}
-            href={{
-              pathname: '/show/[id]/season/[seasonNumber]',
-              params: { id: String(show.id), seasonNumber: String(season.season_number) },
-            }}
-            asChild>
-            <Pressable
-              style={StyleSheet.flatten([styles.seasonRow, { backgroundColor: theme.backgroundElement }])}>
-              <View style={styles.seasonText}>
-                <ThemedText type="smallBold">{season.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {following || watchedBySeason.has(season.season_number)
-                    ? `${watchedCount}/`
-                    : ''}
-                  {season.episode_count} {t('show.episodesWord')}
-                  {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
-                </ThemedText>
-              </View>
-              {seasonRatings.has(season.season_number) && (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.seasonRating}>
-                  ⭐ {seasonRatings.get(season.season_number)!.toFixed(1)}
-                </ThemedText>
-              )}
+        {show.overview ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.overview}>
+            {show.overview}
+          </ThemedText>
+        ) : null}
+
+        <Recommendations media="tv" tmdbId={show.id} genres={show.genres} enabled={finished} />
+
+        <View style={styles.topCardsRow}>
+          <WatchProviders media="tv" tmdbId={show.id} style={styles.providers} />
+
+          {next?.air_date && (
+            <View style={[styles.nextEpisode, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                {t('show.nextEpisode')}
+              </ThemedText>
+              <ThemedText type="small">
+                S{String(next.season_number).padStart(2, '0')}E
+                {String(next.episode_number).padStart(2, '0')}
+                {next.name ? ` — ${next.name}` : ''}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {formatDate(`${next.air_date}T00:00:00`, {
+                  weekday: 'long',
+                  day: '2-digit',
+                  month: 'long',
+                })}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        <CastList media="tv" tmdbId={show.id} />
+
+        <ThemedText type="smallBold" style={styles.sectionTitle}>
+          {t('show.seasonsTitle')}
+        </ThemedText>
+        {seasons.map((season) => {
+          const watchedCount = Math.min(
+            watchedBySeason.get(season.season_number) ?? 0,
+            season.episode_count
+          );
+          const complete = season.episode_count > 0 && watchedCount >= season.episode_count;
+          return (
+            <Link
+              key={season.id}
+              href={{
+                pathname: '/show/[id]/season/[seasonNumber]',
+                params: { id: String(show.id), seasonNumber: String(season.season_number) },
+              }}
+              asChild>
               <Pressable
-                hitSlop={8}
-                style={styles.seasonCheck}
-                disabled={seasonBusy !== null}
-                onPress={() => onSeasonCheckPress(season, complete)}>
-                {seasonBusy === season.season_number ? (
-                  <ActivityIndicator size="small" />
-                ) : (
-                  <Ionicons
-                    name={complete ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={26}
-                    color={complete ? theme.accent : theme.textSecondary}
-                  />
+                style={StyleSheet.flatten([styles.seasonRow, { backgroundColor: theme.backgroundElement }])}>
+                <View style={styles.seasonText}>
+                  <ThemedText type="smallBold">{season.name}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {following || watchedBySeason.has(season.season_number)
+                      ? `${watchedCount}/`
+                      : ''}
+                    {season.episode_count} {t('show.episodesWord')}
+                    {season.air_date ? ` · ${season.air_date.slice(0, 4)}` : ''}
+                  </ThemedText>
+                </View>
+                {seasonRatings.has(season.season_number) && (
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.seasonRating}>
+                    ⭐ {seasonRatings.get(season.season_number)!.toFixed(1)}
+                  </ThemedText>
                 )}
+                <Pressable
+                  hitSlop={8}
+                  style={styles.seasonCheck}
+                  disabled={seasonBusy !== null}
+                  onPress={() => onSeasonCheckPress(season, complete)}>
+                  {seasonBusy === season.season_number ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <Ionicons
+                      name={complete ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={26}
+                      color={complete ? theme.accent : theme.textSecondary}
+                    />
+                  )}
+                </Pressable>
+                <ThemedText themeColor="textSecondary">›</ThemedText>
               </Pressable>
-              <ThemedText themeColor="textSecondary">›</ThemedText>
-            </Pressable>
-          </Link>
-        );
-      })}
-    </ScrollView>
+            </Link>
+          );
+        })}
+      </ScrollView>
+      <ShareWatchedSheet
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        imageUrl={backdrop ?? poster}
+        badgeLabel={t('shareWatchedSheet.followingBadge')}
+        title={show.name}
+        subtitle={totalAired > 0 ? `${totalWatched}/${totalAired} ${t('show.episodesWord')}` : undefined}
+      />
+    </>
   );
 }
 
@@ -479,11 +505,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 26,
   },
-  followButton: {
+  followRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
     marginHorizontal: Spacing.three,
+  },
+  followButton: {
+    flex: 1,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
+  },
+  shareIconButton: {
+    width: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topCardsRow: {
     flexDirection: 'row',
