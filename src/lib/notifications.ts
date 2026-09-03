@@ -12,7 +12,7 @@ import { Platform } from 'react-native';
 
 import { deletePushToken, getFollowedShows, getNotificationPreferences, savePushToken } from './db';
 import { i18n } from './i18n';
-import { getQuizState } from './quiz';
+import { getQuizState, QUIZ_RESET_HOUR } from './quiz';
 import { getShowDetails } from './tmdb';
 
 Notifications.setNotificationHandler({
@@ -46,8 +46,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
 /** Identificador fixo: reagendar cancela e recria só esta, sem tocar nas de episódio. */
 const QUIZ_NOTIFICATION_ID = 'daily-quiz';
 
-/** Horário local em que a notificação do quiz é entregue todo dia. */
-export const QUIZ_NOTIFICATION_HOUR = 20;
+/**
+ * Horário local em que a notificação do quiz é entregue todo dia. É a mesma
+ * hora em que o quiz vira (QUIZ_RESET_HOUR): a notificação chega exatamente
+ * quando há uma pergunta nova para responder.
+ */
+export const QUIZ_NOTIFICATION_HOUR = QUIZ_RESET_HOUR;
 export const QUIZ_NOTIFICATION_MINUTE = 0;
 
 /**

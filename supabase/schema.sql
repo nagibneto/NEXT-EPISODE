@@ -1006,8 +1006,9 @@ create policy "Usuário gerencia as próprias preferências de notificação"
 
 -- ---------- Quiz diário ----------
 -- Uma pergunta por dia sobre cinema e séries. O usuário responde uma vez ao
--- dia (chave primária user_id + quiz_date, no fuso do aparelho) e o streak de
--- acertos consecutivos é calculado no cliente a partir do histórico (ver
+-- dia (chave primária user_id + quiz_date, no fuso do aparelho; o "dia" do
+-- quiz vira às 20h locais, ver QUIZ_RESET_HOUR em src/lib/quiz.ts) e o streak
+-- de acertos consecutivos é calculado no cliente a partir do histórico (ver
 -- src/lib/quiz.ts). Sem policy de update/delete de propósito: a resposta do
 -- dia é definitiva, ninguém reescreve o próprio histórico para forjar streak.
 create table if not exists public.quiz_answers (

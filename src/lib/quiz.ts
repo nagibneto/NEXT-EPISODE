@@ -54,12 +54,32 @@ const SCHEDULE = quizSchedule as string[];
 // Dia 0 do quiz. SCHEDULE[N] é a pergunta do N-ésimo dia a partir daqui.
 const QUIZ_START_DATE = '2026-09-01';
 
-/** Data (YYYY-MM-DD) no fuso do aparelho. O quiz "vira" à meia-noite local. */
-export function todayQuizDate(base: Date = new Date()): string {
-  const year = base.getFullYear();
-  const month = String(base.getMonth() + 1).padStart(2, '0');
-  const day = String(base.getDate()).padStart(2, '0');
+/**
+ * Hora local em que o quiz "vira": a pergunta nova entra às 20h, junto com a
+ * notificação diária (QUIZ_NOTIFICATION_HOUR em src/lib/notifications.ts
+ * reexporta esta constante para as duas nunca saírem de sincronia). Antes das
+ * 20h ainda vale a pergunta do dia anterior — assim, quando a notificação
+ * chega, sempre há algo novo para responder.
+ */
+export const QUIZ_RESET_HOUR = 20;
+
+/** Formata uma Date como YYYY-MM-DD no fuso do aparelho. */
+function toISODate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Data (YYYY-MM-DD) do quiz vigente no fuso do aparelho. Como o quiz vira às
+ * QUIZ_RESET_HOUR, antes desse horário a data ainda é a do dia anterior. O
+ * quiz rotulado 02/09 fica no ar das 20h de 02/09 às 20h de 03/09.
+ */
+export function todayQuizDate(base: Date = new Date()): string {
+  const day = new Date(base);
+  if (base.getHours() < QUIZ_RESET_HOUR) day.setDate(day.getDate() - 1);
+  return toISODate(day);
 }
 
 /** Diferença em dias inteiros entre duas datas YYYY-MM-DD (fuso local). */
@@ -73,7 +93,7 @@ function daysBetween(fromISO: string, toISO: string): number {
 function shiftDate(dateISO: string, days: number): string {
   const date = new Date(`${dateISO}T00:00:00`);
   date.setDate(date.getDate() + days);
-  return todayQuizDate(date);
+  return toISODate(date);
 }
 
 // ---------- Escolha e localização da pergunta ----------
