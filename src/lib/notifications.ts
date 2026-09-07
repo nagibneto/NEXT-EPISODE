@@ -91,7 +91,10 @@ export async function scheduleDailyQuizNotification(userId: string) {
       body: i18n.t(
         hasAnsweredBefore ? 'pushNotifications.quizBodyContinue' : 'pushNotifications.quizBodyStart'
       ),
-      data: { type: 'quiz' },
+      // URL permite que o Expo Router abra a tela certa até quando o app é
+      // iniciado pelo toque na notificação. `type` mantém compatibilidade com
+      // notificações agendadas por versões anteriores do app.
+      data: { type: 'quiz', url: '/quiz' },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,

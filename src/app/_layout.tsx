@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { StackHeader } from '@/components/app-header';
-import { AuthProvider } from '@/hooks/use-auth';
+import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { LanguagePreferenceProvider } from '@/hooks/use-language-preference';
 import { useNotificationNavigation } from '@/hooks/use-notification-navigation';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
@@ -16,7 +16,8 @@ import '@/lib/i18n';
 function RootNavigator() {
   const { scheme } = useThemePreference();
   const { t } = useTranslation();
-  useNotificationNavigation();
+  const { loading, session } = useAuth();
+  useNotificationNavigation(!loading && session !== null);
 
   return (
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
