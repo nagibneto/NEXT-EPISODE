@@ -83,6 +83,10 @@ export function Recommendations({ media, tmdbId, genres, enabled, style }: Recom
                   ? { pathname: '/movie/[id]', params: { id: String(item.id) } }
                   : { pathname: '/show/[id]', params: { id: String(item.id) } }
               }
+              // Troca a tela em vez de empilhar: pulando de indicação em
+              // indicação a pilha crescia sem fim e o Voltar percorria um a um
+              // todos os títulos visitados, sem nunca chegar à tela de origem.
+              replace
               asChild>
               <Pressable style={styles.card}>
                 {poster ? (
