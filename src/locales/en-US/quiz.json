@@ -2,7 +2,11 @@
   "navTitle": "Daily quiz",
   "card": {
     "title": "Daily quiz",
-    "subtitle": "Days answered right in a row"
+    "subtitle": "Correct answers in a row",
+    "streakDays_one": "{{count}} day streak",
+    "streakDays_other": "{{count}} day streak",
+    "doneToday": "Done today",
+    "playNow": "Play"
   },
   "modal": {
     "title": "Today's quiz is here!",

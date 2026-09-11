@@ -158,7 +158,7 @@ export default function StatsScreen() {
         <View style={styles.durationRow}>
           {duration.months > 0 && (
             <View style={styles.durationBlock}>
-              <ThemedText type="subtitle" style={{ color: theme.gold }}>
+              <ThemedText type="subtitle" style={{ color: theme.goldText }}>
                 {duration.months}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
@@ -167,7 +167,7 @@ export default function StatsScreen() {
             </View>
           )}
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            <ThemedText type="subtitle" style={{ color: theme.goldText }}>
               {duration.days}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -175,7 +175,7 @@ export default function StatsScreen() {
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            <ThemedText type="subtitle" style={{ color: theme.goldText }}>
               {duration.hours}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -183,7 +183,7 @@ export default function StatsScreen() {
             </ThemedText>
           </View>
           <View style={styles.durationBlock}>
-            <ThemedText type="subtitle" style={{ color: theme.gold }}>
+            <ThemedText type="subtitle" style={{ color: theme.goldText }}>
               {duration.minutes}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -200,7 +200,7 @@ export default function StatsScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.5}
-            style={{ color: theme.gold }}>
+            style={{ color: theme.goldText }}>
             {shortDuration(stats.tvMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -213,7 +213,7 @@ export default function StatsScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.5}
-            style={{ color: theme.gold }}>
+            style={{ color: theme.goldText }}>
             {shortDuration(stats.movieMinutes)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -229,7 +229,7 @@ export default function StatsScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.5}
-            style={{ color: theme.gold }}>
+            style={{ color: theme.goldText }}>
             {stats.totalEpisodes.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -242,7 +242,7 @@ export default function StatsScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.5}
-            style={{ color: theme.gold }}>
+            style={{ color: theme.goldText }}>
             {stats.totalShows.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -255,7 +255,7 @@ export default function StatsScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.5}
-            style={{ color: theme.gold }}>
+            style={{ color: theme.goldText }}>
             {stats.totalMovies.toLocaleString(i18n.language)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -326,7 +326,7 @@ export default function StatsScreen() {
                         )}
                       </View>
                       {show.remainingMinutes > 0 && (
-                        <ThemedText type="small" style={[styles.remaining, { color: theme.gold }]}>
+                        <ThemedText type="small" style={[styles.remaining, { color: theme.goldText }]}>
                           {t('stats.remainingTime', {
                             duration: shortDuration(show.remainingMinutes),
                           })}

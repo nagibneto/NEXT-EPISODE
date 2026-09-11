@@ -4,8 +4,10 @@
     "confirm": "Watched it"
   },
   "seasonEpisodeCompact": "S{{season}} | E{{episode}}",
-  "remainingEpisodes_one": "+{{count}} episode",
-  "remainingEpisodes_other": "+{{count}} episodes",
+  "showCount_one": "{{count}} show",
+  "showCount_other": "{{count}} shows",
+  "movieCount_one": "{{count}} movie",
+  "movieCount_other": "{{count}} movies",
   "upToDate": "You're all caught up 🎉",
   "calculating": "…",
   "modeTv": "Shows",
@@ -29,5 +31,7 @@
   "noShowsYetBody": "Use the Search tab to find and follow your favorite shows.",
   "searchShowsButton": "Search shows",
   "loadError": "Error loading your list.",
-  "markWatchedError": "Couldn't mark it as watched."
+  "markWatchedError": "Couldn't mark it as watched.",
+  "availableEpisodes_one": "{{count}} available",
+  "availableEpisodes_other": "{{count}} available"
 }

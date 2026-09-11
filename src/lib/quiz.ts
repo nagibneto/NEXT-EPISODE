@@ -169,6 +169,18 @@ export interface QuizAnswer {
   answered_at: string;
 }
 
+/** Um dia da faixa "segunda a domingo" mostrada no card do quiz. */
+export interface QuizWeekDay {
+  /** Data do quiz (YYYY-MM-DD). */
+  date: string;
+  /** 0 = segunda … 6 = domingo. */
+  weekday: number;
+  answered: boolean;
+  correct: boolean;
+  /** Dia da semana que ainda não chegou. */
+  future: boolean;
+}
+
 export interface QuizState {
   /** Pergunta de hoje já localizada, ou null se a fila acabou. */
   question: QuizQuestion | null;
@@ -182,6 +194,8 @@ export interface QuizState {
   totalCorrect: number;
   /** Soma de pontos de todos os acertos (ver computeScore). */
   totalScore: number;
+  /** Semana atual (segunda a domingo) com acerto/erro de cada dia. */
+  week: QuizWeekDay[];
 }
 
 /** Pontos de uma pergunta acertada: 2 para difícil, 1 para fácil/média. */
@@ -246,6 +260,32 @@ export function computeStreaks(
   return { current, best };
 }
 
+/**
+ * Semana corrente do quiz (segunda a domingo) com o resultado de cada dia —
+ * alimenta a faixa de bolinhas do card no perfil. Dias ainda não respondidos e
+ * os que nem chegaram vêm com `answered: false` (`future` separa os dois).
+ */
+export function computeWeek(
+  answers: Pick<QuizAnswer, 'quiz_date' | 'is_correct'>[],
+  todayISO: string
+): QuizWeekDay[] {
+  const byDate = new Map(answers.map((answer) => [answer.quiz_date, answer]));
+  // getDay() devolve 0 para domingo; aqui a semana começa na segunda.
+  const offset = (new Date(`${todayISO}T00:00:00`).getDay() + 6) % 7;
+  const monday = shiftDate(todayISO, -offset);
+  return Array.from({ length: 7 }, (_, weekday) => {
+    const date = shiftDate(monday, weekday);
+    const answer = byDate.get(date);
+    return {
+      date,
+      weekday,
+      answered: answer !== undefined,
+      correct: answer?.is_correct ?? false,
+      future: date > todayISO,
+    };
+  });
+}
+
 export async function getQuizState(userId: string): Promise<QuizState> {
   const quizDate = todayQuizDate();
   const raw = rawQuestionForDate(quizDate);
@@ -262,6 +302,7 @@ export async function getQuizState(userId: string): Promise<QuizState> {
     totalAnswered: answers.length,
     totalCorrect: answers.filter((answer) => answer.is_correct).length,
     totalScore: computeScore(answers),
+    week: computeWeek(answers, quizDate),
   };
 }
 

@@ -15,5 +15,10 @@
   "signOut": "Sair da conta",
   "deleteAccount": "Excluir conta",
   "deletingAccount": "Excluindo…",
-  "credit": "Dados de séries fornecidos por TMDB (themoviedb.org)."
+  "credit": "Dados de séries fornecidos por TMDB (themoviedb.org).",
+  "editProfile": "Editar perfil",
+  "sectionCollection": "Sua coleção",
+  "sectionPreferences": "Preferências",
+  "sectionConnections": "Conexões",
+  "sectionAccount": "Conta"
 }

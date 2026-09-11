@@ -18,6 +18,9 @@ export const Colors = {
     accent: '#2E7CF0',
     accentText: '#ffffff',
     gold: '#F5C518',
+    // O amarelo do logo some sobre fundo claro; para TEXTO/borda use goldText,
+    // que escurece no tema claro e mantém o dourado no escuro.
+    goldText: '#8A5A00',
     danger: '#D93025',
   },
   dark: {
@@ -30,6 +33,7 @@ export const Colors = {
     accent: '#5C9EFF',
     accentText: '#081326',
     gold: '#F5C518',
+    goldText: '#F5C518',
     danger: '#F28B82',
   },
 } as const;
@@ -69,6 +73,18 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+/**
+ * Escala de arredondamento. Controles usam sm–lg (retângulos suaves, não
+ * "pílula"); `pill` fica só para elementos que realmente pedem cápsula.
+ */
+export const Radius = {
+  sm: 8,
+  md: 10,
+  lg: 12,
+  xl: 14,
+  pill: 999,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;

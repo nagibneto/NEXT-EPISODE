@@ -24,7 +24,7 @@ import ReanimatedSwipeable, {
 import { DiscoverFilterSheet } from '@/components/discover-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -63,8 +63,9 @@ interface HomeCache {
 }
 
 const homeCacheKey = (userId: string) => `home-cache-v1:${userId}`;
-type ShowStatusFilter = 'notstarted' | 'ongoing' | 'ended' | null;
-type MovieStatusFilter = 'watched' | 'towatch' | null;
+// Abas de status: uma sempre ativa, sem estado "mostrar tudo".
+type ShowStatusFilter = 'notstarted' | 'ongoing' | 'ended';
+type MovieStatusFilter = 'watched' | 'towatch';
 type ViewMode = 'grid' | 'list';
 type SortMode = 'recent' | 'alpha';
 
@@ -98,6 +99,58 @@ function ToolButton({
       onPress={onPress}>
       <Ionicons name={icon} size={16} color={active ? theme.accent : theme.textSecondary} />
     </Pressable>
+  );
+}
+
+/**
+ * Abas de status no estilo da watchlist: rótulos em texto, com sublinhado
+ * azul na ativa (substitui as pílulas preenchidas). Uma aba sempre ativa.
+ */
+function StatusTabs<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const theme = useTheme();
+  // 2 abas (filmes): colunas iguais e centralizadas, com a barra ocupando quase
+  // toda a coluna. 3+ abas (séries): espalhadas na largura, barra só um pouco
+  // maior que o texto.
+  const columns = options.length <= 2;
+  return (
+    <View
+      style={[
+        styles.statusTabs,
+        !columns && styles.statusTabsSpread,
+        { borderBottomColor: theme.backgroundSelected },
+      ]}>
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            style={[styles.statusTab, columns && styles.statusTabColumn]}
+            hitSlop={8}
+            onPress={() => onChange(option.value)}>
+            <ThemedText
+              type={active ? 'smallBold' : 'small'}
+              style={{ color: active ? theme.accent : theme.textSecondary }}>
+              {option.label}
+            </ThemedText>
+            <View
+              style={[
+                styles.statusTabIndicator,
+                columns ? styles.statusTabIndicatorColumn : styles.statusTabIndicatorSpread,
+                { backgroundColor: active ? theme.accent : 'transparent' },
+              ]}
+            />
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -264,9 +317,14 @@ function WatchNextRow({
                   })}
                 </ThemedText>
                 {remainingAfter > 0 && (
-                  <ThemedText type="small" style={[styles.nextRemaining, { color: theme.gold }]}>
-                    {t('home.remainingEpisodes', { count: remainingAfter })}
-                  </ThemedText>
+                  // Selo com borda: só a cor não segura o contraste no tema claro.
+                  <View style={[styles.remainingBadge, { borderColor: theme.goldText }]}>
+                    <ThemedText
+                      type="small"
+                      style={[styles.remainingBadgeText, { color: theme.goldText }]}>
+                      {t('home.availableEpisodes', { count: remainingAfter })}
+                    </ThemedText>
+                  </View>
                 )}
               </View>
               {next.name ? (
@@ -330,7 +388,7 @@ export default function MyShowsScreen() {
   // Padrões: filtro "Em andamento" ativo e visualização em lista — quem abre a
   // watchlist normalmente quer ver o que tem para assistir a seguir.
   const [statusFilter, setStatusFilter] = useState<ShowStatusFilter>('ongoing');
-  const [movieFilter, setMovieFilter] = useState<MovieStatusFilter>(null);
+  const [movieFilter, setMovieFilter] = useState<MovieStatusFilter>('watched');
   // Visualização separada por aba: séries em lista (assistir a seguir) e
   // filmes em blocos (grade de pôsteres) por padrão.
   const [tvViewMode, setTvViewMode] = useState<ViewMode>('list');
@@ -700,21 +758,20 @@ export default function MyShowsScreen() {
     if (genreFilter !== null) {
       list = list.filter((show) => (showGenresById[show.tmdb_id] ?? []).includes(genreFilter));
     }
-    if (statusFilter) {
-      // "Finalizadas" = você já assistiu tudo que foi ao ar; "Não iniciado" =
-      // nenhum episódio assistido ainda; "Em andamento" = já começou mas
-      // ainda tem episódio exibido por assistir. Séries com progresso ainda
-      // não calculado entram em "Em andamento" para a lista não abrir vazia.
-      list = list.filter((show) => {
-        const progress = progressFor(show.tmdb_id);
-        const watched = watchedById[show.tmdb_id] ?? 0;
-        if (statusFilter === 'ended') return progress !== undefined && progress >= 1;
-        if (statusFilter === 'notstarted') {
-          return progress !== undefined && progress < 1 && watched === 0;
-        }
-        return progress === undefined || (progress < 1 && watched > 0);
-      });
-    }
+    // Aba de status (sempre uma ativa): "Finalizadas" = você já assistiu tudo
+    // que foi ao ar; "Não iniciadas" = nenhum episódio assistido ainda; "Em
+    // andamento" = já começou mas ainda tem episódio exibido por assistir.
+    // Séries com progresso ainda não calculado entram em "Em andamento" para a
+    // lista não abrir vazia.
+    list = list.filter((show) => {
+      const progress = progressFor(show.tmdb_id);
+      const watched = watchedById[show.tmdb_id] ?? 0;
+      if (statusFilter === 'ended') return progress !== undefined && progress >= 1;
+      if (statusFilter === 'notstarted') {
+        return progress !== undefined && progress < 1 && watched === 0;
+      }
+      return progress === undefined || (progress < 1 && watched > 0);
+    });
     if (sortMode === 'alpha') {
       list = [...list].sort((a, b) =>
         a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
@@ -735,7 +792,7 @@ export default function MyShowsScreen() {
     activityDateFor,
   ]);
 
-  // Assistidos + Para assistir juntos (ou só um deles, conforme o filtro).
+  // Assistidos ou Para assistir, conforme a aba ativa.
   const filteredMovies = useMemo(() => {
     const watched = (movies ?? []).map((movie) => ({
       tmdb_id: movie.tmdb_id,
@@ -751,17 +808,7 @@ export default function MyShowsScreen() {
       poster_path: movie.poster_path,
       date: movie.added_at,
     }));
-    let list;
-    if (movieFilter === 'watched') {
-      list = watched;
-    } else if (movieFilter === 'towatch') {
-      list = toWatch;
-    } else {
-      // Marcar como assistido remove da watchlist, mas dados antigos podem
-      // ter o filme nos dois lugares — o assistido vence.
-      const watchedIds = new Set(watched.map((movie) => movie.tmdb_id));
-      list = [...watched, ...toWatch.filter((movie) => !watchedIds.has(movie.tmdb_id))];
-    }
+    let list = movieFilter === 'watched' ? watched : toWatch;
     if (trimmedQuery) {
       list = list.filter((movie) => normalize(movie.title).includes(trimmedQuery));
     }
@@ -801,16 +848,10 @@ export default function MyShowsScreen() {
   const hasAnyItems = showingMovies
     ? (movies ?? []).length + (movieWatchlist ?? []).length > 0
     : (shows ?? []).length > 0;
-  // Com filtro ativo mostramos "nada encontrado", mas se a pessoa não tem
-  // título nenhum o convite para buscar é mais útil (o filtro vem ligado por
-  // padrão e não pode esconder o estado de watchlist vazia).
-  const filtering =
-    (!!trimmedQuery ||
-      genreFilter !== null ||
-      (showingMovies ? movieFilter !== null : statusFilter !== null)) &&
-    (showingMovies
-      ? (movies ?? []).length + (movieWatchlist ?? []).length > 0
-      : (shows ?? []).length > 0);
+  // Lista vazia com títulos na conta = a aba/busca/categoria escondeu tudo, aí
+  // mostramos "nada encontrado". Sem título nenhum, o convite para buscar é
+  // mais útil e não pode ser escondido pela aba de status (sempre ativa).
+  const filtering = hasAnyItems;
 
   return (
     // Pressable de fundo: tocar em qualquer área "morta" da tela fecha o
@@ -882,73 +923,33 @@ export default function MyShowsScreen() {
           )}
         </View>
       </View>
-      <View style={[styles.statusSegmented, { backgroundColor: theme.backgroundElement }]}>
-        {showingMovies
-          ? (
-              [
-                { value: 'watched', label: t('home.movieFilterWatched'), icon: 'checkmark-circle' },
-                { value: 'towatch', label: t('home.movieFilterToWatch'), icon: 'bookmark' },
-              ] as const
-            ).map((option) => (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.statusSegment,
-                  movieFilter === option.value && { backgroundColor: theme.accent },
-                ]}
-                onPress={() =>
-                  setMovieFilter(movieFilter === option.value ? null : option.value)
-                }>
-                <Ionicons
-                  name={option.icon}
-                  size={13}
-                  color={movieFilter === option.value ? theme.accentText : theme.textSecondary}
-                />
-                <ThemedText
-                  type="small"
-                  numberOfLines={1}
-                  style={[
-                    styles.statusSegmentText,
-                    { color: movieFilter === option.value ? theme.accentText : theme.textSecondary },
-                  ]}>
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            ))
-          : (
-              [
-                { value: 'ongoing', label: t('home.showFilterOngoing'), icon: 'play-circle' },
-                { value: 'notstarted', label: t('home.showFilterNotStarted'), icon: 'ellipse-outline' },
-                { value: 'ended', label: t('home.showFilterEnded'), icon: 'checkmark-circle' },
-              ] as const
-            ).map((option) => (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.statusSegment,
-                  statusFilter === option.value && { backgroundColor: theme.accent },
-                ]}
-                onPress={() =>
-                  setStatusFilter(statusFilter === option.value ? null : option.value)
-                }>
-                <Ionicons
-                  name={option.icon}
-                  size={13}
-                  color={statusFilter === option.value ? theme.accentText : theme.textSecondary}
-                />
-                <ThemedText
-                  type="small"
-                  numberOfLines={1}
-                  style={[
-                    styles.statusSegmentText,
-                    { color: statusFilter === option.value ? theme.accentText : theme.textSecondary },
-                  ]}>
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            ))}
-      </View>
+      {showingMovies ? (
+        <StatusTabs
+          options={[
+            { value: 'watched', label: t('home.movieFilterWatched') },
+            { value: 'towatch', label: t('home.movieFilterToWatch') },
+          ] as const}
+          value={movieFilter}
+          onChange={setMovieFilter}
+        />
+      ) : (
+        <StatusTabs
+          options={[
+            { value: 'ongoing', label: t('home.showFilterOngoing') },
+            { value: 'notstarted', label: t('home.showFilterNotStarted') },
+            { value: 'ended', label: t('home.showFilterEnded') },
+          ] as const}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+      )}
       <View style={styles.toolsRow}>
+        <ThemedText type="small" themeColor="textSecondary">
+          {t(showingMovies ? 'home.movieCount' : 'home.showCount', {
+            count: showingMovies ? filteredMovies.length : filteredShows.length,
+          })}
+        </ThemedText>
+        <View style={styles.toolsSpacer} />
         {/* "Ordenar por" desativado por enquanto — suspeita é que ninguém vai
             usar; a ordenação padrão (mais recentes) continua valendo.
         <Pressable
@@ -987,11 +988,6 @@ export default function MyShowsScreen() {
             },
           ]}
           onPress={() => setGenreSheetOpen(true)}>
-          <Ionicons
-            name="filter"
-            size={13}
-            color={genreFilter !== null ? theme.accent : theme.textSecondary}
-          />
           <ThemedText
             type="small"
             style={[
@@ -1000,8 +996,12 @@ export default function MyShowsScreen() {
             ]}>
             {t('home.categories')}
           </ThemedText>
+          <Ionicons
+            name="chevron-down"
+            size={13}
+            color={genreFilter !== null ? theme.accent : theme.textSecondary}
+          />
         </Pressable>
-        <View style={styles.toolsSpacer} />
         <ToolButton
           icon="grid"
           active={viewMode === 'grid'}
@@ -1218,7 +1218,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
-    borderRadius: 999,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.three,
   },
   inputWrapDisabled: {
@@ -1231,44 +1231,58 @@ const styles = StyleSheet.create({
   },
   modeToggle: {
     flexDirection: 'row',
-    borderRadius: 999,
+    borderRadius: Radius.lg,
     padding: 2,
   },
   modeButtonWide: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 999,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.two + Spacing.half,
     paddingVertical: 7,
   },
-  statusSegmented: {
+  statusTabs: {
     flexDirection: 'row',
-    borderRadius: 10,
-    padding: 2,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  statusSegment: {
-    flex: 1,
-    flexDirection: 'row',
+  // 3+ abas: espalhadas de ponta a ponta.
+  statusTabsSpread: {
+    justifyContent: 'space-between',
+  },
+  statusTab: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: 8,
-    paddingHorizontal: Spacing.one,
-    paddingVertical: 8,
+    gap: 8,
+    paddingTop: Spacing.one,
   },
-  statusSegmentText: {
-    fontSize: 12,
-    lineHeight: 16,
+  // 2 abas: cada uma ocupa metade da largura, com o rótulo centralizado.
+  statusTabColumn: {
+    flex: 1,
+  },
+  statusTabIndicator: {
+    height: 2,
+    borderRadius: 1,
+    // Cobre a linha divisória da barra de abas quando a aba está ativa.
+    marginBottom: -StyleSheet.hairlineWidth,
+  },
+  // Barra só um pouco mais larga que o texto.
+  statusTabIndicatorSpread: {
+    alignSelf: 'stretch',
+    marginHorizontal: -Spacing.one,
+  },
+  // Barra larga, recuada das bordas da coluna.
+  statusTabIndicatorColumn: {
+    alignSelf: 'stretch',
+    marginHorizontal: Spacing.four,
   },
   toolsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.one,
+    gap: Spacing.two,
     marginHorizontal: Spacing.three,
-    marginBottom: Spacing.one,
+    marginBottom: Spacing.two,
   },
   toolsSpacer: {
     flex: 1,
@@ -1284,8 +1298,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    borderRadius: 999,
-    borderWidth: 1.5,
+    borderRadius: Radius.md,
+    borderWidth: 1,
     paddingHorizontal: Spacing.two,
     paddingVertical: 6,
   },
@@ -1354,11 +1368,18 @@ const styles = StyleSheet.create({
   },
   nextEpisodeRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.one,
+    alignItems: 'center',
+    gap: Spacing.two,
   },
-  nextRemaining: {
+  remainingBadge: {
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  remainingBadgeText: {
     fontSize: 12,
+    lineHeight: 16,
   },
   nextProgressRow: {
     flexDirection: 'row',
@@ -1410,7 +1431,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    borderRadius: 999,
+    borderRadius: Radius.xl,
     paddingHorizontal: Spacing.five,
     paddingVertical: 14,
     marginTop: Spacing.three,

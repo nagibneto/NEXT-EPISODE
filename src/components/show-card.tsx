@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -20,6 +20,17 @@ interface ShowCardProps {
   media?: 'tv' | 'movie';
   /** Andamento na série (0–1, episódios assistidos ÷ exibidos); omitido = sem barra. */
   progress?: number;
+  /** Toque no botão do canto do pôster (seguir série / pôr filme em "para assistir"). Omitido = sem botão. */
+  onQuickAdd?: () => void;
+  /**
+   * Estado do botão do canto:
+   * - `none`: fora da lista, mostra "+".
+   * - `listed`: série seguida (✓) ou filme em "para assistir" (marcador).
+   * - `done`: filme já assistido — ✓ e sem ação.
+   */
+  quickAddState?: 'none' | 'listed' | 'done';
+  /** Ação do botão em andamento: mostra spinner e ignora toques. */
+  quickAddBusy?: boolean;
 }
 
 export function ShowCard({
@@ -30,6 +41,9 @@ export function ShowCard({
   rating,
   media = 'tv',
   progress,
+  onQuickAdd,
+  quickAddState = 'none',
+  quickAddBusy = false,
 }: ShowCardProps) {
   const theme = useTheme();
   const { i18n } = useTranslation();
@@ -99,6 +113,37 @@ export function ShowCard({
             ) : null}
           </View>
         ) : null}
+        {onQuickAdd ? (
+          <Pressable
+            style={[
+              styles.quickAdd,
+              {
+                backgroundColor:
+                  quickAddState === 'none' ? 'rgba(0,0,0,0.6)' : theme.accent,
+              },
+            ]}
+            hitSlop={8}
+            disabled={quickAddBusy || quickAddState === 'done'}
+            onPress={onQuickAdd}>
+            {quickAddBusy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons
+                name={
+                  quickAddState === 'done'
+                    ? 'checkmark'
+                    : quickAddState === 'listed'
+                      ? media === 'movie'
+                        ? 'bookmark'
+                        : 'checkmark'
+                      : 'add'
+                }
+                size={20}
+                color="#fff"
+              />
+            )}
+          </Pressable>
+        ) : null}
       </Pressable>
     </Link>
   );
@@ -151,5 +196,16 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  quickAdd: {
+    position: 'absolute',
+    // Compensa o padding do card para o botão colar no canto do pôster.
+    top: Spacing.two + Spacing.one + 2,
+    right: Spacing.two + Spacing.one + 2,
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

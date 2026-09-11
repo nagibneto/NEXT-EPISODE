@@ -135,7 +135,7 @@ export default function QuizScreen() {
             </View>
             <View style={[styles.statDivider, { backgroundColor: theme.background }]} />
             <View style={styles.statItem}>
-              <ThemedText style={[styles.statValue, { color: theme.gold }]}>
+              <ThemedText style={[styles.statValue, { color: theme.goldText }]}>
                 {state.currentStreak}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.statLabel}>

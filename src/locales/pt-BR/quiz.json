@@ -2,7 +2,11 @@
   "navTitle": "Quiz do dia",
   "card": {
     "title": "Quiz do dia",
-    "subtitle": "Dias seguidos de acerto"
+    "subtitle": "Acertos consecutivos",
+    "streakDays_one": "{{count}} dia seguido",
+    "streakDays_other": "{{count}} dias seguidos",
+    "doneToday": "Concluído hoje",
+    "playNow": "Responder"
   },
   "modal": {
     "title": "O quiz de hoje chegou!",

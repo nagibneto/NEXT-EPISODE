@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,6 +13,8 @@ export interface ActionSheetOption {
   destructive?: boolean;
   /** Destaca a opção como a ação sugerida (cor de destaque, texto em negrito). */
   accent?: boolean;
+  /** Marca a opção como a escolha atual (check à direita) — para menus de seleção. */
+  selected?: boolean;
   onPress: () => void;
 }
 
@@ -25,16 +27,55 @@ export function ActionSheet({
   visible,
   title,
   options,
+  scrollable = false,
+  closeOnSelect = true,
   onClose,
 }: {
   visible: boolean;
   title?: string;
   options: ActionSheetOption[];
+  /** Listas longas (ex.: escolher streaming): rola dentro de uma altura fixa. */
+  scrollable?: boolean;
+  /**
+   * `false` mantém a folha aberta ao tocar numa opção — para seleção múltipla
+   * (marca/desmarca vários e fecha no "Fechar").
+   */
+  closeOnSelect?: boolean;
   onClose: () => void;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+
+  const optionRows = options.map((option) => (
+    <Pressable
+      key={option.label}
+      style={({ pressed }) => [
+        styles.option,
+        pressed && { backgroundColor: theme.backgroundSelected },
+      ]}
+      onPress={() => {
+        if (closeOnSelect) onClose();
+        option.onPress();
+      }}>
+      {option.icon ? (
+        <Ionicons
+          name={option.icon}
+          size={20}
+          color={option.destructive ? theme.danger : option.accent ? theme.accent : theme.text}
+        />
+      ) : null}
+      <ThemedText
+        type={option.accent || option.selected ? 'smallBold' : 'default'}
+        themeColor={option.destructive ? 'danger' : option.accent ? 'accent' : 'text'}
+        style={styles.optionLabel}>
+        {option.label}
+      </ThemedText>
+      {option.selected ? (
+        <Ionicons name="checkmark" size={20} color={theme.accent} />
+      ) : null}
+    </Pressable>
+  ));
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -54,38 +95,25 @@ export function ActionSheet({
               {title}
             </ThemedText>
           ) : null}
-          {options.map((option) => (
-            <Pressable
-              key={option.label}
-              style={({ pressed }) => [
-                styles.option,
-                pressed && { backgroundColor: theme.backgroundSelected },
-              ]}
-              onPress={() => {
-                onClose();
-                option.onPress();
-              }}>
-              {option.icon ? (
-                <Ionicons
-                  name={option.icon}
-                  size={20}
-                  color={option.destructive ? theme.danger : option.accent ? theme.accent : theme.text}
-                />
-              ) : null}
-              <ThemedText
-                type={option.accent ? 'smallBold' : 'default'}
-                themeColor={option.destructive ? 'danger' : option.accent ? 'accent' : 'text'}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          ))}
+          {scrollable ? (
+            <ScrollView
+              style={styles.scroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              {optionRows}
+            </ScrollView>
+          ) : (
+            optionRows
+          )}
           <Pressable
             style={({ pressed }) => [
               styles.cancel,
               { backgroundColor: pressed ? theme.backgroundSelected : theme.background },
             ]}
             onPress={onClose}>
-            <ThemedText type="smallBold">{t('common.cancel')}</ThemedText>
+            <ThemedText type="smallBold">
+              {closeOnSelect ? t('common.cancel') : t('common.close')}
+            </ThemedText>
           </Pressable>
         </View>
       </View>
@@ -120,6 +148,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.one,
   },
+  scroll: {
+    maxHeight: 360,
+  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -127,6 +158,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: Spacing.two,
+  },
+  optionLabel: {
+    flex: 1,
   },
   cancel: {
     alignItems: 'center',

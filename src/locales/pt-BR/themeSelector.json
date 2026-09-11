@@ -1,4 +1,6 @@
 {
   "lightTheme": "Tema claro",
-  "darkTheme": "Tema escuro"
+  "darkTheme": "Tema escuro",
+  "light": "Claro",
+  "dark": "Escuro"
 }

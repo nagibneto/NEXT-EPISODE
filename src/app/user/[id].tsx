@@ -340,7 +340,7 @@ function Block({ value, label }: { value: number; label: string }) {
   const theme = useTheme();
   return (
     <View style={styles.durationBlock}>
-      <ThemedText type="subtitle" style={{ color: theme.gold }}>
+      <ThemedText type="subtitle" style={{ color: theme.goldText }}>
         {value}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
@@ -359,7 +359,7 @@ function StatCard({ value, label }: { value: number; label: string }) {
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.5}
-        style={{ color: theme.gold }}>
+        style={{ color: theme.goldText }}>
         {value.toLocaleString(i18n.language)}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">

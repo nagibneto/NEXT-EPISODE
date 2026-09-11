@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -14,7 +14,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -67,6 +67,38 @@ function periodSince(period: Period): Date | null {
   if (period === 'all') return null;
   const days = period === 'week' ? 7 : 30;
   return new Date(Date.now() - days * 86_400_000);
+}
+
+/**
+ * Atividades do mesmo tipo, do mesmo usuário e no mesmo dia viram um card só
+ * ("Bia · assistiu a 3 filmes"), com uma linha por título dentro.
+ */
+interface FeedGroup {
+  key: string;
+  user: Profile;
+  type: FeedItem['type'];
+  /** Data da atividade mais recente do grupo (a lista já vem em ordem decrescente). */
+  date: string;
+  items: FeedItem[];
+}
+
+function groupFeedItems(items: FeedItem[]): FeedGroup[] {
+  const groups: FeedGroup[] = [];
+  const byKey = new Map<string, FeedGroup>();
+  for (const item of items) {
+    const key = `${item.type}:${item.user.id}:${item.date.slice(0, 10)}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.items.push(item);
+      continue;
+    }
+    // A ordem de criação segue a da lista (decrescente por data), então o
+    // primeiro item de cada grupo já é o mais recente dele.
+    const group: FeedGroup = { key, user: item.user, type: item.type, date: item.date, items: [item] };
+    byKey.set(key, group);
+    groups.push(group);
+  }
+  return groups;
 }
 
 export default function FeedScreen() {
@@ -187,6 +219,8 @@ export default function FeedScreen() {
     }, [view, load, loadRanking])
   );
 
+  const groups = useMemo(() => groupFeedItems(items ?? []), [items]);
+
   async function handleRefresh() {
     setRefreshing(true);
     if (view === 'feed') await load();
@@ -211,12 +245,32 @@ export default function FeedScreen() {
     }
   }
 
-  function renderFeedItem({ item }: { item: FeedItem }) {
+  /** Resumo do card: "assistiu a 3 filmes", "comentou 2 episódios"… */
+  function groupSummary(group: FeedGroup): string {
+    const count = group.items.length;
+    if (group.type === 'watched_movie') return t('feed.groupMovies', { count });
+    if (group.type === 'comment') return t('feed.groupComments', { count });
+    // Séries: o número relevante é o de episódios, não o de séries diferentes.
+    const episodes = group.items.reduce(
+      (total, item) => total + (item.type === 'watched' ? item.episodes.length : 0),
+      0
+    );
+    return count === 1
+      ? t('feed.groupEpisodes', { count: episodes })
+      : t('feed.groupEpisodesShows', { count: episodes, shows: count });
+  }
+
+  /** Uma linha dentro do card: pôster, título, detalhe e o coração de curtir. */
+  function renderGroupRow(item: FeedItem, index: number) {
     const isMovie = item.type === 'watched_movie';
     const show = isMovie ? null : shows.get(item.tmdb_show_id);
     const poster = isMovie
       ? posterUrl(item.poster_path, 'w185')
       : posterUrl(show?.poster_path ?? null, 'w185');
+    const title = isMovie
+      ? localizedTitle(item.title, item.title_en, i18n.language)
+      : (show?.name ?? '…');
+
     function handlePress() {
       if (item.type === 'watched_movie') {
         router.push(`/movie/${item.tmdb_id}`);
@@ -226,91 +280,97 @@ export default function FeedScreen() {
       router.push(`/episode/${item.tmdb_show_id}/${episode.season_number}/${episode.episode_number}`);
     }
 
+    let detail: string;
+    if (item.type === 'watched_movie') {
+      detail = t('feed.rowMovie');
+    } else if (item.type === 'watched') {
+      detail =
+        item.episodes.length === 1
+          ? episodeCode(item.episodes[0].season_number, item.episodes[0].episode_number)
+          : t('feed.rowEpisodes', { count: item.episodes.length });
+    } else {
+      detail = episodeCode(item.season_number, item.episode_number);
+    }
+
     return (
       <Pressable
-        style={[styles.item, { backgroundColor: theme.backgroundElement }]}
+        key={`${item.type}:${isMovie ? item.tmdb_id : item.tmdb_show_id}:${index}`}
+        style={[
+          styles.groupRow,
+          index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.backgroundSelected },
+        ]}
         onPress={handlePress}>
         {poster ? (
           <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" />
         ) : (
           <View style={[styles.poster, { backgroundColor: theme.backgroundSelected }]} />
         )}
-        <View style={styles.itemBody}>
-          <View style={styles.itemHeader}>
-            <Pressable
-              hitSlop={6}
-              style={styles.itemUser}
-              onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user.id } })}>
-              <UserAvatar
-                avatarId={item.user.avatar_id}
-                name={profileDisplayName(item.user)}
-                size={24}
-              />
-              <ThemedText type="smallBold">{profileDisplayName(item.user)}</ThemedText>
-            </Pressable>
-            <View style={styles.itemMeta}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {relativeDate(item.date)}
-              </ThemedText>
-              {(item.type === 'watched' || item.type === 'watched_movie') && (
-                <Pressable hitSlop={8} style={styles.likeButton} onPress={() => handleToggleLike(item)}>
-                  <Ionicons
-                    name={item.liked_by_me ? 'heart' : 'heart-outline'}
-                    size={16}
-                    color={item.liked_by_me ? theme.danger : theme.textSecondary}
-                  />
-                  {item.like_count > 0 && (
-                    <ThemedText type="small" themeColor={item.liked_by_me ? 'danger' : 'textSecondary'}>
-                      {item.like_count}
-                    </ThemedText>
-                  )}
-                </Pressable>
-              )}
-            </View>
-          </View>
-          {item.type === 'watched' ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {item.episodes.length === 1
-                ? t('feed.watchedEpisode', {
-                    code: episodeCode(
-                      item.episodes[0].season_number,
-                      item.episodes[0].episode_number
-                    ),
-                  })
-                : t('feed.watchedEpisodesCount', { count: item.episodes.length })}
-              <ThemedText type="smallBold">{show?.name ?? '…'}</ThemedText>
+        <View style={styles.groupRowBody}>
+          <ThemedText type="smallBold" numberOfLines={2}>
+            {title}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {detail}
+          </ThemedText>
+          {item.type === 'comment' && item.content ? (
+            <ThemedText type="small" numberOfLines={3}>
+              “{item.content}”
             </ThemedText>
-          ) : item.type === 'watched_movie' ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {t('feed.watchedMovie')}
-              <ThemedText type="smallBold">
-                {localizedTitle(item.title, item.title_en, i18n.language)}
-              </ThemedText>
-            </ThemedText>
-          ) : (
-            <>
-              <ThemedText type="small" themeColor="textSecondary">
-                {t('feed.commentedEpisode', {
-                  code: episodeCode(item.season_number, item.episode_number),
-                })}
-                <ThemedText type="smallBold">{show?.name ?? '…'}</ThemedText>
-              </ThemedText>
-              {item.content ? (
-                <ThemedText type="small" numberOfLines={3}>
-                  “{item.content}”
-                </ThemedText>
-              ) : null}
-              {item.image_url && (
-                <Image
-                  source={{ uri: item.image_url }}
-                  style={styles.commentImage}
-                  contentFit="cover"
-                />
-              )}
-            </>
-          )}
+          ) : null}
+          {item.type === 'comment' && item.image_url ? (
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.commentImage}
+              contentFit="cover"
+            />
+          ) : null}
         </View>
+        {(item.type === 'watched' || item.type === 'watched_movie') && (
+          <Pressable hitSlop={8} style={styles.likeButton} onPress={() => handleToggleLike(item)}>
+            <Ionicons
+              name={item.liked_by_me ? 'heart' : 'heart-outline'}
+              size={18}
+              color={item.liked_by_me ? theme.danger : theme.textSecondary}
+            />
+            {item.like_count > 0 && (
+              <ThemedText type="small" themeColor={item.liked_by_me ? 'danger' : 'textSecondary'}>
+                {item.like_count}
+              </ThemedText>
+            )}
+          </Pressable>
+        )}
       </Pressable>
+    );
+  }
+
+  function renderFeedGroup({ item: group }: { item: FeedGroup }) {
+    return (
+      <View style={[styles.item, { backgroundColor: theme.backgroundElement }]}>
+        <View style={styles.groupHeader}>
+          <Pressable
+            hitSlop={6}
+            style={styles.itemUser}
+            onPress={() => router.push({ pathname: '/user/[id]', params: { id: group.user.id } })}>
+            <UserAvatar
+              avatarId={group.user.avatar_id}
+              name={profileDisplayName(group.user)}
+              size={32}
+            />
+            <View style={styles.groupHeaderText}>
+              <ThemedText type="smallBold" numberOfLines={1}>
+                {profileDisplayName(group.user)}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {groupSummary(group)}
+              </ThemedText>
+            </View>
+          </Pressable>
+          <ThemedText type="small" themeColor="textSecondary">
+            {relativeDate(group.date)}
+          </ThemedText>
+        </View>
+        {group.items.map(renderGroupRow)}
+      </View>
     );
   }
 
@@ -326,7 +386,7 @@ export default function FeedScreen() {
         ]}>
         <ThemedText
           type="smallBold"
-          style={[styles.rankPosition, { color: index === 0 ? theme.gold : theme.textSecondary }]}>
+          style={[styles.rankPosition, { color: index === 0 ? theme.goldText : theme.textSecondary }]}>
           {index + 1}
           {t('feed.rankSuffix')}
         </ThemedText>
@@ -349,7 +409,7 @@ export default function FeedScreen() {
               : ''}
           </ThemedText>
         </View>
-        <ThemedText type="smallBold" style={{ color: theme.gold }}>
+        <ThemedText type="smallBold" style={{ color: theme.goldText }}>
           {shortDuration(item.minutes)}
         </ThemedText>
       </Pressable>
@@ -427,16 +487,13 @@ export default function FeedScreen() {
           </View>
         ) : (
           <FlatList
-            data={items}
+            data={groups}
             // Título de filme e datas usam localizedTitle()/formatDate(), que
             // dependem do idioma ativo, não do array "items" em si — sem isso
             // a lista não re-renderiza sozinha ao trocar de idioma.
             extraData={i18n.language}
-            keyExtractor={(item, index) => {
-              const mediaId = item.type === 'watched_movie' ? item.tmdb_id : item.tmdb_show_id;
-              return `${item.type}:${item.user.id}:${mediaId}:${item.date}:${index}`;
-            }}
-            contentContainerStyle={[styles.list, !items.length && styles.listEmpty]}
+            keyExtractor={(group) => group.key}
+            contentContainerStyle={[styles.list, !groups.length && styles.listEmpty]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
             ListEmptyComponent={
               <View style={styles.center}>
@@ -459,7 +516,7 @@ export default function FeedScreen() {
                 </Pressable>
               </View>
             }
-            renderItem={renderFeedItem}
+            renderItem={renderFeedGroup}
           />
         )
       ) : rankingError ? (
@@ -534,53 +591,58 @@ const styles = StyleSheet.create({
   listEmpty: {
     flexGrow: 1,
   },
+  // Card de um grupo: cabeçalho (quem + resumo + quando) e uma linha por título.
   item: {
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  groupHeader: {
     flexDirection: 'row',
-    borderRadius: 12,
-    padding: Spacing.three,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  groupHeaderText: {
+    flexShrink: 1,
+    gap: 1,
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  groupRowBody: {
+    flex: 1,
+    gap: Spacing.half,
   },
   poster: {
     width: 48,
     height: 72,
-    borderRadius: 8,
-  },
-  itemBody: {
-    flex: 1,
-    gap: Spacing.one,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    // Alinha pela base: se o coração deixa a coluna da direita mais alta que
-    // o nome, o espaço extra fica em cima (imperceptível) em vez de empurrar
-    // o "assistiu X" pra baixo.
-    alignItems: 'flex-end',
+    borderRadius: Radius.sm,
   },
   itemUser: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.one,
+    gap: Spacing.two,
     flexShrink: 1,
-  },
-  itemMeta: {
-    alignItems: 'flex-end',
-    gap: Spacing.one,
   },
   commentImage: {
     width: '100%',
     aspectRatio: 4 / 3,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     marginTop: Spacing.one,
   },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.half,
-    // Altura fixa igual ao lineHeight do texto "small" (20): sem isso, a
-    // linha cresce de 16 (só o ícone) pra 20 (ícone + número) ao curtir, e
-    // empurra o resto do card pra baixo.
-    height: 20,
+    // Largura fixa: sem isso a linha "pula" pro lado quando o contador
+    // aparece/some ao curtir.
+    minWidth: 34,
+    justifyContent: 'flex-end',
   },
   friendsButton: {
     flexDirection: 'row',

@@ -1,32 +1,45 @@
 import Entypo from '@expo/vector-icons/Entypo';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 
+import { ActionSheet, type ActionSheetOption } from '@/components/action-sheet';
 import { DiscoverFilterSheet, type YearRange } from '@/components/discover-filter-sheet';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  addMovieToWatchlist,
+  followShow,
+  getFollowedShows,
+  getWatchedMovies,
+  getWatchlistMovies,
+  removeMovieFromWatchlist,
+  unfollowShow,
+} from '@/lib/db';
+import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   discoverMovies,
   discoverShows,
   getGenres,
+  getMovieNames,
   getPopularMovies,
   getPopularShows,
+  getShowNames,
   getStreamingProviders,
-  providerLogoUrl,
   searchMovies,
   searchPeople,
   searchShows,
@@ -132,32 +145,59 @@ async function searchByCast(query: string, media: SearchMode, seenIds: Set<numbe
   }
 }
 
-const MIN_RATING_OPTIONS = [5, 6, 7, 8, 9] as const;
+// Cada valor é o início de uma faixa de nota: 6 = "de 6 a 7" (9 = "de 9 a 10").
+// O usuário pode marcar várias; o filtro final vai do menor ao maior + 1.
+const RATING_BUCKETS = [5, 6, 7, 8, 9] as const;
 
-/** Chip de filtro no formato pílula, usado para gêneros e nota mínima. */
-function FilterChip({
+/** Pílula da barra de filtros (Filtros / Nota / Streaming), estilo da imagem. */
+function FilterPill({
+  icon,
+  iconColor,
   label,
-  selected,
-  compact = false,
+  active,
+  chevron = false,
+  grow = false,
+  wide = false,
   onPress,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
   label: string;
-  selected: boolean;
-  compact?: boolean;
+  active: boolean;
+  chevron?: boolean;
+  /** Divide o espaço livre da linha (Filtros e Streaming); "Nota" fica mínima. */
+  grow?: boolean;
+  /** Fatia ainda maior do espaço livre (Streaming). */
+  wide?: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
   return (
     <Pressable
       style={[
-        styles.chip,
-        compact && styles.chipCompact,
-        { backgroundColor: selected ? theme.accent : theme.backgroundElement },
+        styles.pill,
+        grow && styles.pillGrow,
+        wide && styles.pillWide,
+        {
+          backgroundColor: theme.backgroundElement,
+          borderColor: active ? theme.accent : theme.backgroundSelected,
+        },
       ]}
       onPress={onPress}>
-      <ThemedText type="small" style={{ color: selected ? theme.accentText : theme.text }}>
+      <Ionicons name={icon} size={14} color={iconColor ?? (active ? theme.accent : theme.textSecondary)} />
+      <ThemedText
+        type="small"
+        numberOfLines={1}
+        style={[styles.pillLabel, { color: active ? theme.accent : theme.text }]}>
         {label}
       </ThemedText>
+      {chevron ? (
+        <Ionicons
+          name="chevron-down"
+          size={13}
+          color={active ? theme.accent : theme.textSecondary}
+        />
+      ) : null}
     </Pressable>
   );
 }
@@ -165,6 +205,7 @@ function FilterChip({
 export default function SearchScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [mode, setMode] = useState<SearchMode>('tv');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -176,21 +217,110 @@ export default function SearchScreen() {
   const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [genreId, setGenreId] = useState<number | null>(null);
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
-  const [minRating, setMinRating] = useState<number | null>(null);
+  const [ratingBuckets, setRatingBuckets] = useState<number[]>([]);
+  const [ratingSheetOpen, setRatingSheetOpen] = useState(false);
   const [providers, setProviders] = useState<TmdbWatchProvider[]>([]);
-  const [providerId, setProviderId] = useState<number | null>(null);
+  const [providerIds, setProviderIds] = useState<number[]>([]);
+  const [streamingSheetOpen, setStreamingSheetOpen] = useState(false);
   const [yearRange, setYearRange] = useState<YearRange | null>(null);
+  // Séries seguidas, filmes em "para assistir" e filmes já assistidos —
+  // alimentam o botão do canto de cada card. Recarrega ao focar a aba.
+  const [followedIds, setFollowedIds] = useState<Set<number>>(new Set());
+  const [watchlistIds, setWatchlistIds] = useState<Set<number>>(new Set());
+  const [watchedMovieIds, setWatchedMovieIds] = useState<Set<number>>(new Set());
+  const [quickBusyIds, setQuickBusyIds] = useState<Set<number>>(new Set());
+  // Sobe a cada mudança nos sets acima para a FlatList redesenhar os "+".
+  const [cardStateVersion, setCardStateVersion] = useState(0);
   // Invalida respostas de requisições antigas quando query/modo/filtros mudam,
   // para uma busca lenta não sobrescrever a lista da busca atual.
   const requestId = useRef(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      let cancelled = false;
+      Promise.all([
+        getFollowedShows(user.id),
+        getWatchlistMovies(user.id),
+        getWatchedMovies(user.id),
+      ])
+        .then(([shows, watchlist, watched]) => {
+          if (cancelled) return;
+          setFollowedIds(new Set(shows.map((show) => show.tmdb_id)));
+          setWatchlistIds(new Set(watchlist.map((movie) => movie.tmdb_id)));
+          setWatchedMovieIds(new Set(watched.map((movie) => movie.tmdb_id)));
+          setCardStateVersion((version) => version + 1);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [user])
+  );
+
+  /** Toque no "+" do card: segue a série / põe o filme em "Para assistir" (e desfaz no toque seguinte). */
+  async function toggleQuickAdd(item: SearchResult) {
+    if (!user || quickBusyIds.has(item.id)) return;
+    // Filme já assistido: o botão vira ✓ e não faz nada.
+    if (mode === 'movie' && watchedMovieIds.has(item.id)) return;
+    const isTv = mode === 'tv';
+    const setIds = isTv ? setFollowedIds : setWatchlistIds;
+    const alreadyIn = (isTv ? followedIds : watchlistIds).has(item.id);
+
+    const flip = (add: boolean) =>
+      setIds((prev) => {
+        const next = new Set(prev);
+        if (add) next.add(item.id);
+        else next.delete(item.id);
+        return next;
+      });
+
+    setQuickBusyIds((prev) => new Set(prev).add(item.id));
+    flip(!alreadyIn);
+    setCardStateVersion((version) => version + 1);
+    try {
+      if (isTv) {
+        if (alreadyIn) {
+          await unfollowShow(user.id, item.id);
+        } else {
+          const names = await getShowNames(item.id);
+          await followShow(user.id, {
+            tmdb_id: item.id,
+            ...names,
+            poster_path: item.poster_path,
+          });
+        }
+        syncEpisodeNotifications(user.id).catch(() => {});
+      } else if (alreadyIn) {
+        await removeMovieFromWatchlist(user.id, item.id);
+      } else {
+        const names = await getMovieNames(item.id);
+        await addMovieToWatchlist(user.id, {
+          tmdb_id: item.id,
+          ...names,
+          poster_path: item.poster_path,
+        });
+      }
+    } catch {
+      flip(alreadyIn); // desfaz o otimismo
+      Alert.alert(t('search.followError'));
+    } finally {
+      setQuickBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+      setCardStateVersion((version) => version + 1);
+    }
+  }
 
   // Limpa lista e filtros ao alternar Séries/Filmes — evita mostrar (e navegar
   // para) resultados do modo anterior, e os ids de gênero diferem entre os dois.
   useEffect(() => {
     setResults(null);
     setGenreId(null);
-    setMinRating(null);
-    setProviderId(null);
+    setRatingBuckets([]);
+    setProviderIds([]);
     setYearRange(null);
     getGenres(mode)
       .then(setGenres)
@@ -204,16 +334,29 @@ export default function SearchScreen() {
     async (pageNumber: number) => {
       const trimmed = query.trim();
       const hasFilters =
-        genreId !== null || minRating !== null || providerId !== null || yearRange !== null;
+        genreId !== null ||
+        ratingBuckets.length > 0 ||
+        providerIds.length > 0 ||
+        yearRange !== null;
       const yearFilters = {
         yearFrom: yearRange?.from ?? null,
         yearTo: yearRange?.to ?? null,
+      };
+      const ratingFilters = {
+        ratingFrom: ratingBuckets.length ? Math.min(...ratingBuckets) : null,
+        ratingTo: ratingBuckets.length ? Math.max(...ratingBuckets) + 1 : null,
       };
       if (mode === 'tv') {
         const data = trimmed
           ? await searchShows(trimmed, pageNumber)
           : hasFilters
-            ? await discoverShows({ genreId, minRating, providerId, ...yearFilters, page: pageNumber })
+            ? await discoverShows({
+                genreId,
+                ...ratingFilters,
+                providerIds,
+                ...yearFilters,
+                page: pageNumber,
+              })
             : await getPopularShows(pageNumber);
         const items = data.results.map(fromShow);
         if (trimmed && pageNumber === 1) {
@@ -226,7 +369,13 @@ export default function SearchScreen() {
       const data = trimmed
         ? await searchMovies(trimmed, pageNumber)
         : hasFilters
-          ? await discoverMovies({ genreId, minRating, providerId, ...yearFilters, page: pageNumber })
+          ? await discoverMovies({
+              genreId,
+              ...ratingFilters,
+              providerIds,
+              ...yearFilters,
+              page: pageNumber,
+            })
           : await getPopularMovies(pageNumber);
       const items = data.results.map(fromMovie);
       if (trimmed && pageNumber === 1) {
@@ -236,7 +385,7 @@ export default function SearchScreen() {
       }
       return { items, totalPages: data.total_pages };
     },
-    [query, mode, genreId, minRating, providerId, yearRange]
+    [query, mode, genreId, ratingBuckets, providerIds, yearRange]
   );
 
   useEffect(() => {
@@ -289,18 +438,58 @@ export default function SearchScreen() {
   }
 
   const hasFilters =
-    genreId !== null || minRating !== null || providerId !== null || yearRange !== null;
-  const yearLabel = yearRange
-    ? yearRange.from === yearRange.to
-      ? String(yearRange.from)
-      : `${yearRange.from}–${yearRange.to}`
-    : null;
-  const genreName = genres.find((genre) => genre.id === genreId)?.name ?? null;
+    genreId !== null ||
+    ratingBuckets.length > 0 ||
+    providerIds.length > 0 ||
+    yearRange !== null;
   const filterActive = genreId !== null || yearRange !== null;
-  // O botão resume o que está filtrando: sem filtro fica "Categorias", com
-  // filtro mostra gênero e/ou ano escolhidos.
-  const filterLabel =
-    [genreName, yearLabel].filter(Boolean).join(' · ') || t('search.categories');
+  // Rótulos curtos para caber nas 3 pílulas. Nota: "Nota" ou "Nota 6+" (menor
+  // faixa marcada). Streaming: nome do serviço, ou "Streaming (N)".
+  const ratingLabel =
+    ratingBuckets.length === 0
+      ? t('search.rating')
+      : `${t('search.rating')} ${Math.min(...ratingBuckets)}+`;
+  const firstProviderName =
+    providers.find((provider) => provider.provider_id === providerIds[0])?.provider_name ?? null;
+  const streamingLabel =
+    providerIds.length === 0
+      ? t('search.streaming')
+      : providerIds.length === 1 && firstProviderName
+        ? firstProviderName
+        : `${t('search.streaming')} (${providerIds.length})`;
+
+  const ratingOptions: ActionSheetOption[] = [
+    {
+      label: t('search.ratingAny'),
+      selected: ratingBuckets.length === 0,
+      onPress: () => setRatingBuckets([]),
+    },
+    ...RATING_BUCKETS.map((value) => ({
+      label: `${value}+`,
+      selected: ratingBuckets.includes(value),
+      onPress: () =>
+        setRatingBuckets((prev) =>
+          prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+        ),
+    })),
+  ];
+  const streamingOptions: ActionSheetOption[] = [
+    {
+      label: t('search.streamingAny'),
+      selected: providerIds.length === 0,
+      onPress: () => setProviderIds([]),
+    },
+    ...providers.map((provider) => ({
+      label: provider.provider_name,
+      selected: providerIds.includes(provider.provider_id),
+      onPress: () =>
+        setProviderIds((prev) =>
+          prev.includes(provider.provider_id)
+            ? prev.filter((id) => id !== provider.provider_id)
+            : [...prev, provider.provider_id]
+        ),
+    })),
+  ];
 
   return (
     // Pressable de fundo: tocar em qualquer área "morta" da tela fecha o
@@ -309,26 +498,10 @@ export default function SearchScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
       accessible={false}
       onPress={Keyboard.dismiss}>
-      <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name="search" size={16} color={theme.textSecondary} />
-        <TextInput
-          style={[styles.input, { color: theme.text }]}
-          placeholder={mode === 'tv' ? t('search.tvPlaceholder') : t('search.moviePlaceholder')}
-          placeholderTextColor={theme.textSecondary}
-          value={query}
-          onChangeText={setQuery}
-          autoCorrect={false}
-        />
-        {query.length > 0 && (
-          <Pressable hitSlop={8} onPress={() => setQuery('')}>
-            <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
-          </Pressable>
-        )}
-      </View>
-      <View style={styles.filterRow}>
+      <View style={styles.searchRow}>
         <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
           <Pressable
-            style={[styles.modeButtonWide, mode === 'tv' && { backgroundColor: theme.gold }]}
+            style={[styles.modeButton, mode === 'tv' && { backgroundColor: theme.gold }]}
             onPress={() => setMode('tv')}>
             <Ionicons
               name="tv"
@@ -343,7 +516,7 @@ export default function SearchScreen() {
             </ThemedText>
           </Pressable>
           <Pressable
-            style={[styles.modeButtonWide, mode === 'movie' && { backgroundColor: theme.gold }]}
+            style={[styles.modeButton, mode === 'movie' && { backgroundColor: theme.gold }]}
             onPress={() => setMode('movie')}>
             <Entypo
               name="clapperboard"
@@ -357,93 +530,73 @@ export default function SearchScreen() {
             </ThemedText>
           </Pressable>
         </View>
-        {!query.trim() && (
-          <View style={styles.ratingGroup}>
-            <Ionicons name="star" size={14} color={theme.gold} />
-            {/* View de largura fixa limita o visível a ~3 chips; o ScrollView
-                dentro dela rola o restante. */}
-            <View style={styles.ratingScroll}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.ratingRow}
-                keyboardShouldPersistTaps="handled">
-                {MIN_RATING_OPTIONS.map((value) => (
-                  <FilterChip
-                    key={value}
-                    label={`${value}+`}
-                    compact
-                    selected={minRating === value}
-                    onPress={() => setMinRating(minRating === value ? null : value)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        )}
+        <View style={[styles.inputWrap, { backgroundColor: theme.backgroundElement }]}>
+          <Ionicons name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder={mode === 'tv' ? t('search.tvPlaceholder') : t('search.moviePlaceholder')}
+            placeholderTextColor={theme.textSecondary}
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+          />
+          {query.length > 0 && (
+            <Pressable hitSlop={8} onPress={() => setQuery('')}>
+              <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
+            </Pressable>
+          )}
+        </View>
       </View>
       {!query.trim() && (
         <>
-          {/* O botão abre o sheet de filtros (categoria e ano) e resume o que
-              está ativo; ao lado, a faixa de streamings rola na horizontal. */}
-          <View style={styles.discoverRow}>
-            <Pressable
-              style={[
-                styles.categoriesButton,
-                {
-                  backgroundColor: theme.backgroundElement,
-                  borderColor: filterActive ? theme.accent : theme.backgroundSelected,
-                },
-              ]}
-              onPress={() => setGenreSheetOpen(true)}>
-              <Ionicons
-                name="filter"
-                size={13}
-                color={filterActive ? theme.accent : theme.textSecondary}
-              />
-              <ThemedText
-                type="small"
-                numberOfLines={1}
-                style={{ color: filterActive ? theme.accent : theme.text }}>
-                {filterLabel}
-              </ThemedText>
-            </Pressable>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.providerScroll}
-              contentContainerStyle={styles.providerRow}
-              keyboardShouldPersistTaps="handled">
-              {providers.map((provider) => {
-                const selected = providerId === provider.provider_id;
-                const logo = providerLogoUrl(provider.logo_path);
-                return (
-                  <Pressable
-                    key={provider.provider_id}
-                    style={[
-                      styles.providerChip,
-                      { backgroundColor: selected ? theme.accent : theme.backgroundElement },
-                    ]}
-                    onPress={() => setProviderId(selected ? null : provider.provider_id)}>
-                    {logo && (
-                      <Image source={{ uri: logo }} style={styles.providerLogo} contentFit="cover" />
-                    )}
-                    <ThemedText
-                      type="small"
-                      style={{ color: selected ? theme.accentText : theme.text }}>
-                      {provider.provider_name}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+          {/* Filtros / Nota / Streaming — cada pílula abre um seletor. */}
+          <View style={styles.pillRow}>
+            <FilterPill
+              icon="options-outline"
+              label={t('search.filters')}
+              active={filterActive}
+              grow
+              onPress={() => setGenreSheetOpen(true)}
+            />
+            <FilterPill
+              icon="star"
+              iconColor={theme.gold}
+              label={ratingLabel}
+              active={ratingBuckets.length > 0}
+              chevron
+              onPress={() => setRatingSheetOpen(true)}
+            />
+            <FilterPill
+              icon="play-circle"
+              label={streamingLabel}
+              active={providerIds.length > 0}
+              chevron
+              grow
+              wide
+              onPress={() => setStreamingSheetOpen(true)}
+            />
           </View>
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>
             {hasFilters ? t('search.filterResults') : t('search.popularNow')}
-            {providerId !== null ? t('search.justWatchData') : ''}
+            {providerIds.length > 0 ? t('search.justWatchData') : ''}
           </ThemedText>
         </>
       )}
+      <ActionSheet
+        visible={ratingSheetOpen}
+        title={t('search.ratingTitle')}
+        options={ratingOptions}
+        closeOnSelect={false}
+        onClose={() => setRatingSheetOpen(false)}
+      />
+      <ActionSheet
+        visible={streamingSheetOpen}
+        title={t('search.streamingTitle')}
+        options={streamingOptions}
+        scrollable
+        closeOnSelect={false}
+        onClose={() => setStreamingSheetOpen(false)}
+      />
       <DiscoverFilterSheet
         visible={genreSheetOpen}
         genres={genres}
@@ -469,6 +622,7 @@ export default function SearchScreen() {
           keyboardDismissMode="on-drag"
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
+          extraData={`${mode}-${cardStateVersion}`}
           ListFooterComponent={
             loadingMore ? <ActivityIndicator style={styles.footerLoading} /> : null
           }
@@ -485,6 +639,15 @@ export default function SearchScreen() {
               subtitle={item.viaActor ? t('search.castPrefix', { name: item.viaActor }) : item.year}
               rating={item.rating}
               media={mode}
+              onQuickAdd={user ? () => toggleQuickAdd(item) : undefined}
+              quickAddState={
+                mode === 'movie' && watchedMovieIds.has(item.id)
+                  ? 'done'
+                  : (mode === 'tv' ? followedIds : watchlistIds).has(item.id)
+                    ? 'listed'
+                    : 'none'
+              }
+              quickAddBusy={quickBusyIds.has(item.id)}
             />
           )}
         />
@@ -497,113 +660,73 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  filterRow: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.two,
     marginHorizontal: Spacing.three,
+    marginTop: Spacing.three,
     marginBottom: Spacing.two,
   },
   modeToggle: {
     flexDirection: 'row',
-    borderRadius: 999,
+    borderRadius: Radius.lg,
     padding: 2,
   },
-  modeButtonWide: {
+  modeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 999,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.two + Spacing.half,
     paddingVertical: 7,
   },
   inputWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
-    borderRadius: 999,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.three,
-    marginHorizontal: Spacing.three,
-    marginTop: Spacing.three,
-    marginBottom: Spacing.two,
   },
   input: {
     flex: 1,
     paddingVertical: 10,
     fontSize: 14,
   },
-  ratingGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  ratingScroll: {
-    // Largura de ~3 chips de nota; o resto aparece arrastando para o lado.
-    width: 118,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  ratingRow: {
-    gap: Spacing.one,
-    alignItems: 'center',
-    paddingRight: Spacing.one,
-  },
   sectionTitle: {
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
   },
-  discoverRow: {
+  pillRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.two,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two,
   },
-  categoriesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one + 2,
-    // Com gênero e ano escolhidos o rótulo cresce; o teto evita que ele
-    // empurre a faixa de streamings para fora da tela.
-    maxWidth: '55%',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.two + Spacing.half,
-    paddingVertical: 6,
-  },
-  providerScroll: {
-    // flex 1 ocupa o resto da linha ao lado do botão Categorias. Cuidado:
-    // flexGrow explícito vence o do shorthand flex e zeraria a largura.
-    flex: 1,
+  pill: {
     minWidth: 0,
-  },
-  providerRow: {
-    gap: Spacing.two,
-    alignItems: 'center',
-    paddingRight: Spacing.one,
-  },
-  providerChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.one,
-    borderRadius: 999,
-    paddingLeft: 4,
-    paddingRight: Spacing.two + Spacing.half,
-    paddingVertical: 4,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    // Base no tamanho do texto; o espaço que sobra é dividido pelas pílulas
+    // "grow" (ver pillGrow/pillWide) — "Nota" fica no tamanho mínimo.
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 8,
   },
-  providerLogo: {
-    width: 22,
-    height: 22,
-    borderRadius: 999,
+  pillGrow: {
+    flexGrow: 1,
+    flexShrink: 1,
   },
-  chip: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 6,
+  pillWide: {
+    // Streaming ganha uma fatia maior do espaço livre que "Filtros".
+    flexGrow: 1.7,
   },
-  chipCompact: {
-    paddingHorizontal: Spacing.two + Spacing.half,
+  pillLabel: {
+    flexShrink: 1,
   },
   list: {
     padding: Spacing.two,

@@ -15,5 +15,10 @@
   "signOut": "Sign out",
   "deleteAccount": "Delete account",
   "deletingAccount": "Deleting…",
-  "credit": "Show data provided by TMDB (themoviedb.org)."
+  "credit": "Show data provided by TMDB (themoviedb.org).",
+  "editProfile": "Edit profile",
+  "sectionCollection": "Your collection",
+  "sectionPreferences": "Preferences",
+  "sectionConnections": "Connections",
+  "sectionAccount": "Account"
 }

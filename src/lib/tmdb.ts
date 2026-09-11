@@ -166,10 +166,15 @@ export function getGenres(media: 'tv' | 'movie') {
 
 export interface DiscoverFilters {
   genreId?: number | null;
-  /** Nota mínima na escala 0–10 do TMDB. */
-  minRating?: number | null;
-  /** Streaming (id de watch provider do TMDB) onde o título está disponível no Brasil. */
-  providerId?: number | null;
+  /** Nota mínima (inclusiva) na escala 0–10 do TMDB. */
+  ratingFrom?: number | null;
+  /** Nota máxima (inclusiva) na escala 0–10 do TMDB. */
+  ratingTo?: number | null;
+  /**
+   * Streamings (ids de watch provider do TMDB) onde o título está disponível na
+   * região. Vários ids = disponível em qualquer um deles (OR).
+   */
+  providerIds?: number[];
   /** Ano inicial de lançamento/estreia (inclusivo). */
   yearFrom?: number | null;
   /** Ano final de lançamento/estreia (inclusivo). Igual a `yearFrom` filtra um ano só. */
@@ -184,15 +189,19 @@ function discoverParams(filters: DiscoverFilters, media: 'tv' | 'movie') {
     page: String(filters.page ?? 1),
   };
   if (filters.genreId) params.with_genres = String(filters.genreId);
-  if (filters.minRating) {
-    params['vote_average.gte'] = String(filters.minRating);
+  if (filters.ratingFrom != null) {
+    params['vote_average.gte'] = String(filters.ratingFrom);
     // Sem um mínimo de votos, títulos obscuros com 1 voto nota 10 dominam a
-    // lista. Acima de 9 quase nada tem 200+ votos (a comunidade raramente dá
+    // lista. A partir de 9 quase nada tem 200+ votos (a comunidade raramente dá
     // média tão alta), então o corte relaxa para não devolver lista vazia.
-    params['vote_count.gte'] = filters.minRating >= 9 ? '50' : '200';
+    params['vote_count.gte'] = filters.ratingFrom >= 9 ? '50' : '200';
   }
-  if (filters.providerId) {
-    params.with_watch_providers = String(filters.providerId);
+  if (filters.ratingTo != null && filters.ratingTo < 10) {
+    params['vote_average.lte'] = String(filters.ratingTo);
+  }
+  if (filters.providerIds?.length) {
+    // "|" = disponível em qualquer um dos serviços (OR); "," seria "em todos".
+    params.with_watch_providers = filters.providerIds.join('|');
     // O filtro de provider só funciona amarrado a uma região.
     params.watch_region = currentRegion();
   }
