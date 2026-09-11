@@ -116,34 +116,28 @@ function StatusTabs<T extends string>({
   onChange: (value: T) => void;
 }) {
   const theme = useTheme();
-  // 2 abas (filmes): colunas iguais e centralizadas, com a barra ocupando quase
-  // toda a coluna. 3+ abas (séries): espalhadas na largura, barra só um pouco
-  // maior que o texto.
-  const columns = options.length <= 2;
+  // Colunas de largura igual, rótulo centralizado e a barra ocupando a coluna
+  // inteira — vale para 2 abas (filmes) e 3 (séries), e para qualquer idioma:
+  // não depende do tamanho do texto, que varia muito entre pt-BR e en-US.
   return (
-    <View
-      style={[
-        styles.statusTabs,
-        !columns && styles.statusTabsSpread,
-        { borderBottomColor: theme.backgroundSelected },
-      ]}>
+    <View style={[styles.statusTabs, { borderBottomColor: theme.backgroundSelected }]}>
       {options.map((option) => {
         const active = value === option.value;
         return (
           <Pressable
             key={option.value}
-            style={[styles.statusTab, columns && styles.statusTabColumn]}
+            style={styles.statusTab}
             hitSlop={8}
             onPress={() => onChange(option.value)}>
             <ThemedText
               type={active ? 'smallBold' : 'small'}
+              numberOfLines={1}
               style={{ color: active ? theme.accent : theme.textSecondary }}>
               {option.label}
             </ThemedText>
             <View
               style={[
                 styles.statusTabIndicator,
-                columns ? styles.statusTabIndicatorColumn : styles.statusTabIndicatorSpread,
                 { backgroundColor: active ? theme.accent : 'transparent' },
               ]}
             />
@@ -1248,34 +1242,22 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.two,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  // 3+ abas: espalhadas de ponta a ponta.
-  statusTabsSpread: {
-    justifyContent: 'space-between',
-  },
   statusTab: {
+    // Colunas de largura igual, independentemente do tamanho do rótulo.
+    flex: 1,
     alignItems: 'center',
     gap: 8,
     paddingTop: Spacing.one,
-  },
-  // 2 abas: cada uma ocupa metade da largura, com o rótulo centralizado.
-  statusTabColumn: {
-    flex: 1,
+    paddingHorizontal: Spacing.one,
   },
   statusTabIndicator: {
     height: 2,
     borderRadius: 1,
+    // Ocupa a coluna inteira; o padding do Pressable vira o respiro entre as
+    // barras vizinhas.
+    alignSelf: 'stretch',
     // Cobre a linha divisória da barra de abas quando a aba está ativa.
     marginBottom: -StyleSheet.hairlineWidth,
-  },
-  // Barra só um pouco mais larga que o texto.
-  statusTabIndicatorSpread: {
-    alignSelf: 'stretch',
-    marginHorizontal: -Spacing.one,
-  },
-  // Barra larga, recuada das bordas da coluna.
-  statusTabIndicatorColumn: {
-    alignSelf: 'stretch',
-    marginHorizontal: Spacing.four,
   },
   toolsRow: {
     flexDirection: 'row',
