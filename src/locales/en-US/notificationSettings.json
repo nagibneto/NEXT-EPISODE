@@ -22,6 +22,14 @@
     "daily_quiz": {
       "label": "Daily quiz",
       "description": "8 PM reminder to answer today's question."
+    },
+    "reengagement": {
+      "label": "Weekly reminder",
+      "description": "When you go a week without tracking anything in the app."
+    },
+    "announcements": {
+      "label": "App news",
+      "description": "Occasional announcements about Next Episode. Rare, no spam."
     }
   }
 }

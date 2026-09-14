@@ -20,6 +20,8 @@ const OPTION_KEYS: (keyof NotificationPreferences)[] = [
   'friend_accepted',
   'feed_likes',
   'daily_quiz',
+  'reengagement',
+  'announcements',
 ];
 
 export default function NotificationSettingsScreen() {

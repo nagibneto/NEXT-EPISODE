@@ -22,6 +22,14 @@
     "daily_quiz": {
       "label": "Quiz do dia",
       "description": "Lembrete às 20h para responder a pergunta do dia."
+    },
+    "reengagement": {
+      "label": "Lembrete semanal",
+      "description": "Quando você passa uma semana sem marcar nada no app."
+    },
+    "announcements": {
+      "label": "Novidades do app",
+      "description": "Avisos pontuais sobre o Next Episode. Raro, sem spam."
     }
   }
 }

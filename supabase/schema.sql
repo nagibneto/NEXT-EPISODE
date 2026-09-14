@@ -1046,6 +1046,100 @@ create policy "Amigos veem respostas do quiz"
 create index if not exists quiz_answers_user_date_idx
   on public.quiz_answers (user_id, quiz_date desc);
 
+-- ---------- Campanhas de notificação (reengajamento e avisos) ----------
+-- Registro do que já foi enviado/exibido para cada usuário em cada campanha.
+-- Serve para dois casos:
+--   * aviso único ("siga a gente no Instagram"): existe a linha = não mostra
+--     nunca mais. Para rodar de novo mais tarde, é só usar uma campaign_key
+--     nova (ver ANNOUNCEMENT em src/lib/announcements.ts e CAMPAIGNS em
+--     supabase/functions/notify-announcement).
+--   * lembrete recorrente (quem sumiu há 7 dias): a linha é reaproveitada e
+--     pushed_at vira o controle de "não insistir antes de N dias".
+--
+-- pushed_at = quando o push saiu (gravado pela Edge Function, service role).
+-- seen_at   = quando o banner apareceu dentro do app (gravado pelo cliente).
+create table if not exists public.campaign_deliveries (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  campaign_key text not null check (char_length(campaign_key) between 1 and 80),
+  pushed_at timestamptz,
+  seen_at timestamptz,
+  primary key (user_id, campaign_key)
+);
+
+alter table public.campaign_deliveries enable row level security;
+
+-- O cliente só enxerga e marca as próprias entregas. Ele consegue gravar
+-- pushed_at também, mas o efeito seria só deixar de receber o próprio push —
+-- nada que já não dê para fazer desligando a preferência.
+drop policy if exists "Usuário gerencia as próprias entregas de campanha" on public.campaign_deliveries;
+create policy "Usuário gerencia as próprias entregas de campanha"
+  on public.campaign_deliveries for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists campaign_deliveries_key_idx
+  on public.campaign_deliveries (campaign_key, pushed_at);
+
+-- Preferências das duas campanhas (mesmo padrão das demais: ausência de
+-- linha = tudo ligado).
+alter table public.notification_preferences
+  add column if not exists reengagement boolean not null default true;
+alter table public.notification_preferences
+  add column if not exists announcements boolean not null default true;
+
+-- Usuários que não registraram nada no app nos últimos p_days dias.
+-- É a mesma união de tabelas da consulta de atividade
+-- (supabase/queries/atividade-7-dias.sql), mas invertida: aqui interessa quem
+-- NÃO aparece. Quem criou a conta dentro da janela fica de fora — não faz
+-- sentido cobrar quem acabou de instalar.
+--
+-- Atenção: as tabelas guardam só o estado atual, sem histórico. Quem marcou e
+-- desmarcou um episódio conta como inativo; quem remarcou um episódio antigo
+-- conta como ativo (o upsert atualiza watched_at).
+create or replace function public.inactive_users(p_days integer default 7)
+returns table (user_id uuid, language text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.language
+  from public.profiles p
+  where p.created_at < now() - make_interval(days => p_days)
+    and not exists (
+      select 1
+      from (
+        select we.user_id,     we.watched_at   as em from public.watched_episodes we
+        union all
+        select wm.user_id,     wm.watched_at         from public.watched_movies wm
+        union all
+        select fs.user_id,     fs.followed_at        from public.followed_shows fs
+        union all
+        select wl.user_id,     wl.added_at           from public.watchlist_movies wl
+        union all
+        select fv.user_id,     fv.favorited_at       from public.favorites fv
+        union all
+        select er.user_id,     er.rated_at           from public.episode_ratings er
+        union all
+        select ec.user_id,     ec.created_at         from public.episode_comments ec
+        union all
+        select cl.user_id,     cl.created_at         from public.comment_likes cl
+        union all
+        select fl.liker_id,    fl.created_at         from public.feed_likes fl
+        union all
+        select qa.user_id,     qa.answered_at        from public.quiz_answers qa
+        union all
+        select uf.follower_id, uf.created_at         from public.user_follows uf
+      ) a
+      where a.user_id = p.id
+        and a.em >= now() - make_interval(days => p_days)
+    );
+$$;
+
+-- Security definer para enxergar a atividade de todo mundo por baixo do RLS.
+-- Só a Edge Function (service role) chama; ninguém mais precisa dela, e
+-- liberada para authenticated viraria um jeito de saber quem anda sumido.
+revoke all on function public.inactive_users(integer) from public, anon, authenticated;
+
 -- ---------- Permissões das funções de trigger ----------
 -- Precisa ficar no fim do arquivo: "create or replace function" concede
 -- EXECUTE a PUBLIC de novo a cada execução, então revogar antes não adianta.
@@ -1097,3 +1191,30 @@ end $$;
 --   );
 --
 -- Requer as extensões pg_cron e pg_net habilitadas no projeto.
+
+-- A Edge Function supabase/functions/notify-inactive roda 1x por semana e
+-- cutuca quem não registra nada há 7 dias (respeita a preferência
+-- "reengagement" e não repete antes de 14 dias, ver a própria função):
+--
+--   select cron.schedule(
+--     'notify-inactive-weekly',
+--     '0 23 * * 5', -- sexta 23:00 UTC = 20h em Brasília (UTC-3)
+--     $cron$
+--     select net.http_post(
+--       url := 'https://SEU-PROJETO.supabase.co/functions/v1/notify-inactive',
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'Authorization', 'Bearer SEU_CAMPAIGN_PUSH_TOKEN'
+--       ),
+--       body := '{}'::jsonb
+--     );
+--     $cron$
+--   );
+--
+-- CAMPAIGN_PUSH_TOKEN é o segredo que autoriza o disparo, criado com
+-- "supabase secrets set CAMPAIGN_PUSH_TOKEN=...". Não use a service role key
+-- aqui: dentro do runtime das Edge Functions o SUPABASE_SERVICE_ROLE_KEY é uma
+-- chave do formato novo (sb_secret_...), diferente do JWT que o painel mostra.
+--
+-- Já supabase/functions/notify-announcement é o aviso único (Instagram). Não
+-- tem cron: é disparada à mão uma vez, ver o cabeçalho da função.

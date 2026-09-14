@@ -1313,6 +1313,10 @@ export interface NotificationPreferences {
   feed_likes: boolean;
   /** Diferente das demais (push remoto): controla a notificação local diária do quiz. */
   daily_quiz: boolean;
+  /** Lembrete para quem some por uma semana (supabase/functions/notify-inactive). */
+  reengagement: boolean;
+  /** Avisos pontuais do app (supabase/functions/notify-announcement). */
+  announcements: boolean;
 }
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -1321,13 +1325,17 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   friend_accepted: true,
   feed_likes: true,
   daily_quiz: true,
+  reengagement: true,
+  announcements: true,
 };
 
 /** Ausência de linha = tudo ativado (mesmo padrão do trigger em supabase/schema.sql). */
 export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
   const { data, error } = await supabase
     .from('notification_preferences')
-    .select('new_episodes, friend_requests, friend_accepted, feed_likes, daily_quiz')
+    .select(
+      'new_episodes, friend_requests, friend_accepted, feed_likes, daily_quiz, reengagement, announcements'
+    )
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -1341,5 +1349,37 @@ export async function updateNotificationPreferences(
   const { error } = await supabase
     .from('notification_preferences')
     .upsert({ user_id: userId, ...patch }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+// ---------- Campanhas (banner de aviso) ----------
+
+/**
+ * Já mostramos este aviso para o usuário? Basta a linha existir: ela é criada
+ * tanto pelo push (Edge Function, pushed_at) quanto pelo banner (seen_at).
+ */
+export async function hasSeenCampaign(userId: string, campaignKey: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('campaign_deliveries')
+    .select('seen_at')
+    .eq('user_id', userId)
+    .eq('campaign_key', campaignKey)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.seen_at != null;
+}
+
+/**
+ * Marca que o banner apareceu. Chamado na hora em que ele é exibido (e não no
+ * clique): o combinado é aparecer uma vez só, tenha a pessoa tocado no botão
+ * ou fechado. Só mexe em seen_at — pushed_at é assunto da Edge Function.
+ */
+export async function markCampaignSeen(userId: string, campaignKey: string) {
+  const { error } = await supabase
+    .from('campaign_deliveries')
+    .upsert(
+      { user_id: userId, campaign_key: campaignKey, seen_at: new Date().toISOString() },
+      { onConflict: 'user_id,campaign_key' }
+    );
   if (error) throw error;
 }

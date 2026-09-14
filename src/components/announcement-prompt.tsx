@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
@@ -7,44 +6,48 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import { scheduleDailyQuizNotification } from '@/lib/notifications';
-import { getQuizState } from '@/lib/quiz';
+import { CURRENT_ANNOUNCEMENT, INSTAGRAM_HANDLE } from '@/lib/announcements';
+import { hasSeenCampaign, markCampaignSeen } from '@/lib/db';
 import { acquireStartupPrompt, releaseStartupPrompt } from '@/lib/startup-prompts';
 
-// Uma vez por sessão do app: reabrir depois de fechar mostra de novo (enquanto
-// não respondeu), mas trocar de aba/voltar de background não fica repetindo.
-let promptShownThisSession = false;
+// Uma tentativa por sessão: se a marcação no banco falhar (sem rede), o aviso
+// volta na próxima abertura em vez de insistir na mesma.
+let checkedThisSession = false;
 
 /**
- * Modal "o quiz de hoje chegou", mostrado ao abrir o app enquanto o usuário
- * ainda não respondeu a pergunta do dia. Fica montado no layout das abas e
- * também (re)agenda a notificação diária do quiz a cada abertura.
+ * Banner de aviso único, no mesmo formato do modal do quiz: aparece uma vez ao
+ * abrir o app e nunca mais, seja qual for o botão escolhido. O conteúdo é a
+ * campanha atual (ver src/lib/announcements.ts) e o "nunca mais" mora em
+ * campaign_deliveries, então vale para todos os aparelhos da mesma conta.
  */
-export function QuizDayPrompt() {
+export function AnnouncementPrompt() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const router = useRouter();
   const { user } = useAuth();
   const [visible, setVisible] = useState(false);
-  // Já tinha escalada antes de hoje? Muda o texto entre "inicie" e "mantenha".
-  const [hasStreak, setHasStreak] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+    if (checkedThisSession) return;
     let cancelled = false;
-
-    scheduleDailyQuizNotification(user.id).catch(() => {});
-
-    if (promptShownThisSession) return;
 
     (async () => {
       try {
-        const state = await getQuizState(user.id);
-        if (cancelled || state.today || !state.question || promptShownThisSession) return;
-        promptShownThisSession = true;
-        setHasStreak(state.currentStreak > 0);
-        // Espera a vez: o banner de campanha pode estar na tela (ver
-        // src/lib/startup-prompts.ts).
+        if (await hasSeenCampaign(user.id, CURRENT_ANNOUNCEMENT.key)) {
+          checkedThisSession = true;
+          return;
+        }
+        if (cancelled) return;
+
+        // Marca antes de mostrar, de propósito: assim "apareceu uma vez" fica
+        // registrado mesmo que o app seja fechado com o banner na tela. Se a
+        // gravação falhar (sem rede), nada aparece e tentamos na próxima
+        // abertura — melhor atrasar o aviso do que arriscar repeti-lo.
+        await markCampaignSeen(user.id, CURRENT_ANNOUNCEMENT.key);
+        checkedThisSession = true;
+        if (cancelled) return;
+
+        // Espera a vez: o modal do quiz pode estar na tela.
         await acquireStartupPrompt();
         if (cancelled) {
           releaseStartupPrompt();
@@ -52,7 +55,7 @@ export function QuizDayPrompt() {
         }
         setVisible(true);
       } catch {
-        // Sem rede / falha na consulta: sem modal, o card do perfil ainda leva ao quiz.
+        // Sem rede / falha na consulta: tenta de novo na próxima abertura.
       }
     })();
 
@@ -66,9 +69,9 @@ export function QuizDayPrompt() {
     releaseStartupPrompt();
   }
 
-  function answerNow() {
+  function openAction() {
     close();
-    router.push('/quiz');
+    CURRENT_ANNOUNCEMENT.action().catch(() => {});
   }
 
   return (
@@ -76,25 +79,24 @@ export function QuizDayPrompt() {
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
         <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText style={styles.emoji}>🎬</ThemedText>
+          <ThemedText style={styles.emoji}>{CURRENT_ANNOUNCEMENT.emoji}</ThemedText>
           <ThemedText type="subtitle" style={styles.title}>
-            {t('quiz.modal.title')}
+            {t(`${CURRENT_ANNOUNCEMENT.i18nKey}.title`)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-            {t('quiz.modal.subtitlePrefix')}{' '}
-            {hasStreak ? t('quiz.modal.subtitleContinue') : t('quiz.modal.subtitleStart')}
+            {t(`${CURRENT_ANNOUNCEMENT.i18nKey}.subtitle`, { handle: INSTAGRAM_HANDLE })}
           </ThemedText>
 
           <Pressable
-            style={[styles.answerButton, { backgroundColor: theme.accent }]}
-            onPress={answerNow}>
+            style={[styles.actionButton, { backgroundColor: theme.accent }]}
+            onPress={openAction}>
             <ThemedText type="smallBold" style={{ color: theme.accentText }}>
-              {t('quiz.modal.answer')}
+              {t(`${CURRENT_ANNOUNCEMENT.i18nKey}.action`)}
             </ThemedText>
           </Pressable>
           <Pressable style={styles.laterButton} onPress={close}>
             <ThemedText type="smallBold" themeColor="textSecondary">
-              {t('quiz.modal.later')}
+              {t(`${CURRENT_ANNOUNCEMENT.i18nKey}.later`)}
             </ThemedText>
           </Pressable>
         </View>
@@ -130,7 +132,7 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: 'center',
   },
-  answerButton: {
+  actionButton: {
     alignSelf: 'stretch',
     alignItems: 'center',
     borderRadius: 12,

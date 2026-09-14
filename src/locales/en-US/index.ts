@@ -4,6 +4,7 @@
  * várias telas em paralelo — ao adicionar um novo arquivo de tradução,
  * importe e inclua aqui.
  */
+import announcement from './announcement.json';
 import blockedUsers from './blockedUsers.json';
 import castList from './castList.json';
 import chooseUsername from './chooseUsername.json';
@@ -44,6 +45,7 @@ import userProfile from './userProfile.json';
 import watchProviders from './watchProviders.json';
 
 export default {
+  announcement,
   blockedUsers,
   castList,
   chooseUsername,

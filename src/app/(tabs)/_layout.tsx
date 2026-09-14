@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { AnnouncementPrompt } from '@/components/announcement-prompt';
 import { AppHeaderTitle, HeaderActions } from '@/components/app-header';
 import { QuizDayPrompt } from '@/components/quiz-day-prompt';
 import { Spacing } from '@/constants/theme';
@@ -47,6 +48,7 @@ export default function TabsLayout() {
   return (
     <>
       <QuizDayPrompt />
+      <AnnouncementPrompt />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: theme.accent,
