@@ -7,8 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { AnnouncementPrompt } from '@/components/announcement-prompt';
 import { AppHeaderTitle, HeaderActions } from '@/components/app-header';
 import { QuizDayPrompt } from '@/components/quiz-day-prompt';
+import { ReviewPrompt } from '@/components/review-prompt';
+import { UpdatePrompt } from '@/components/update-prompt';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useWidgetData } from '@/hooks/use-widget-data';
 import { useAuth } from '@/hooks/use-auth';
 import { getOwnProfile } from '@/lib/db';
 
@@ -16,6 +19,9 @@ export default function TabsLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { session, loading } = useAuth();
+  // Publica os dados dos widgets (tela inicial / bloqueio) enquanto o app
+  // estiver logado. Ver src/lib/widget-data.ts.
+  useWidgetData();
   const [needsUsername, setNeedsUsername] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -49,6 +55,11 @@ export default function TabsLayout() {
     <>
       <QuizDayPrompt />
       <AnnouncementPrompt />
+      {/* Os dois entram na mesma fila de avisos de abertura, mas estão
+          desligados por flag (UPDATE_PROMPT_ENABLED / REVIEW_PROMPT_ENABLED).
+          Ver ATUALIZACAO-E-AVALIACAO.md. */}
+      <UpdatePrompt />
+      <ReviewPrompt />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: theme.accent,

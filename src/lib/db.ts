@@ -2,6 +2,7 @@
  * Consultas ao banco (Supabase). Tabelas definidas em supabase/schema.sql.
  */
 
+import { registerReviewMoment } from './app-review';
 import { supabase } from './supabase';
 
 /**
@@ -290,6 +291,10 @@ export async function markEpisodeWatched(
     if (error) throw error;
   }
   emitEpisodeWatchedChange(tmdbShowId, seasonNumber, [episodeNumber], watched);
+  // Marcar episódio é o momento bom que conta para o pedido de avaliação
+  // (ver src/lib/app-review.ts). Desmarcar não conta — e fica de fora também
+  // por causa da importação em massa, que passa por markSeasonWatched.
+  if (watched) registerReviewMoment();
 }
 
 /**

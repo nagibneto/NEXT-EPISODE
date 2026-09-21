@@ -1218,3 +1218,51 @@ end $$;
 --
 -- Já supabase/functions/notify-announcement é o aviso único (Instagram). Não
 -- tem cron: é disparada à mão uma vez, ver o cabeçalho da função.
+
+-- ---------------------------------------------------------------------------
+-- Versões publicadas (modal "atualize o app")
+-- ---------------------------------------------------------------------------
+-- O app instalado só conhece o próprio changelog — quem está na 1.0.6 não tem
+-- como saber o que mudou na 1.0.7. Por isso a lista de versões mora aqui: o
+-- cliente compara a versão instalada (app.json -> expo.version) com o que
+-- estiver nesta tabela e monta o "o que há de novo desde a sua versão".
+--
+-- Fluxo ao lançar: subiu a build pra loja e ela foi aprovada -> insere a linha.
+-- Inserir ANTES da aprovação faria o modal mandar todo mundo para uma loja que
+-- ainda mostra a versão velha.
+create table if not exists public.app_releases (
+  -- "1.0.7" — só números e pontos, para a comparação do cliente funcionar.
+  version text primary key check (version ~ '^[0-9]+(\.[0-9]+)*$'),
+  released_at timestamptz not null default now(),
+  -- null = saiu nas duas lojas. 'ios'/'android' quando uma review atrasou e a
+  -- versão ficou disponível só de um lado.
+  platform text check (platform in ('ios', 'android')),
+  -- true = modal sem "agora não" (quebra de compatibilidade). Use com muita
+  -- parcimônia: trava o app de quem não puder atualizar na hora.
+  mandatory boolean not null default false,
+  -- { "pt-BR": ["Quiz do dia", "..."], "en-US": [...] } — uma frase curta por
+  -- melhoria, na ordem em que devem aparecer. Idioma sem entrada cai no pt-BR.
+  highlights jsonb not null default '{}'::jsonb
+);
+
+alter table public.app_releases enable row level security;
+
+-- Leitura para qualquer sessão; escrita só pelo painel (service role ignora
+-- RLS). Não há policy de insert/update de propósito.
+drop policy if exists "Versões são públicas" on public.app_releases;
+create policy "Versões são públicas"
+  on public.app_releases for select to authenticated, anon
+  using (true);
+
+create index if not exists app_releases_released_at_idx
+  on public.app_releases (released_at desc);
+
+-- Exemplo de lançamento (rodar no SQL Editor depois da aprovação na loja):
+--
+--   insert into public.app_releases (version, highlights) values (
+--     '1.0.7',
+--     '{
+--       "pt-BR": ["Widgets na tela de início", "Busca mais rápida"],
+--       "en-US": ["Home screen widgets", "Faster search"]
+--     }'::jsonb
+--   );

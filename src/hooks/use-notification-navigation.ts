@@ -3,9 +3,16 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { router, type Href } from 'expo-router';
 
+import { skipQuizDayPrompt } from '@/components/quiz-day-prompt';
+
 /** Decide a tela de destino a partir do "data" anexado à notificação (local ou push). */
 function navigateForNotificationData(data: Record<string, unknown> | undefined): boolean {
   if (!data) return false;
+
+  // Abrir pela notificação do quiz já leva para a tela do quiz — o modal "o
+  // quiz de hoje chegou" só apareceria por cima dela, pedindo o que o usuário
+  // acabou de fazer. Ele continua aparecendo em quem abre o app direto.
+  if (data.type === 'quiz' || data.url === '/quiz') skipQuizDayPrompt();
 
   // URLs são o formato de deep link recomendado pelo expo-notifications.
   // O `type` abaixo continua sendo o fallback para notificações já agendadas

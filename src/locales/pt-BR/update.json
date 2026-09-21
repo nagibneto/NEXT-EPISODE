@@ -1,0 +1,9 @@
+{
+  "title": "Tem versão nova!",
+  "subtitle": "A {{version}} já está na loja com estas melhorias:",
+  "versionLabel": "Versão {{version}}",
+  "mandatoryTitle": "Atualização necessária",
+  "mandatorySubtitle": "Esta versão do app não funciona mais. Atualize para continuar usando o Next Episode.",
+  "action": "Atualizar agora",
+  "later": "Agora não"
+}

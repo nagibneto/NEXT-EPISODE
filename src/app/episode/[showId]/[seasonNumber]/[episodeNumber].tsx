@@ -31,6 +31,7 @@ import {
   markSkippedEpisodesWatched,
   type SkippedEpisode,
 } from '@/lib/watch-next';
+import { onWidgetWatchedSynced, scheduleWidgetRefresh } from '@/lib/widget-data';
 import {
   getEpisodeDetails,
   getShowDetailsCached,
@@ -102,6 +103,24 @@ export default function EpisodeScreen() {
     }
   }, [showId, seasonNumber, episodeNumber, user]);
 
+  // Marcado pelo botão do widget: a gravação no Supabase acontece ao abrir o
+  // app e pode terminar depois desta tela já ter lido o estado — abrir o
+  // episódio direto pelo widget é justamente o caso em que as duas coisas
+  // correm juntas. Sem isto a tela mostraria "não assistido" até sair e voltar.
+  useEffect(
+    () =>
+      onWidgetWatchedSynced((events) => {
+        const marked = events.some(
+          (event) =>
+            event.showId === showId &&
+            event.seasonNumber === seasonNumber &&
+            event.episodeNumber === episodeNumber
+        );
+        if (marked) setWatched(true);
+      }),
+    [showId, seasonNumber, episodeNumber]
+  );
+
   async function handleRate(rating: number) {
     if (!user) return;
     setMyRating(rating);
@@ -141,6 +160,7 @@ export default function EpisodeScreen() {
     setWatched(nextWatched);
     try {
       await markEpisodeWatched(userId, showId, seasonNumber, episodeNumber, nextWatched);
+      scheduleWidgetRefresh(userId);
       if (nextWatched) {
         ensureFollowing();
         const isLastOfSeason = !!currentSeason && episodeNumber === currentSeason.episode_count;

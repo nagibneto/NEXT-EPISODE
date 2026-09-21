@@ -48,6 +48,7 @@ import {
   type TmdbGenre,
 } from '@/lib/tmdb';
 import { getNextUnwatchedEpisode, type NextEpisode } from '@/lib/watch-next';
+import { onWidgetWatchedSynced, scheduleWidgetRefresh } from '@/lib/widget-data';
 import { registerPushToken, syncEpisodeNotifications } from '@/lib/notifications';
 
 type LibraryMode = 'tv' | 'movie';
@@ -478,6 +479,12 @@ export default function MyShowsScreen() {
     }, [load])
   );
 
+  // Marcou no widget da tela inicial? A sincronização acontece ao abrir o app,
+  // e daí esta lista precisa recarregar sozinha — o load() compara a contagem
+  // nova com a antiga e já invalida o "assistir a seguir" das séries que
+  // mudaram (ver o setWatchedById dentro dele).
+  useEffect(() => onWidgetWatchedSynced(() => void load()), [load]);
+
   // Categorias mudam de id entre séries e filmes na TMDB — recarrega a lista
   // de gêneros e limpa o filtro selecionado ao trocar de aba.
   useEffect(() => {
@@ -696,6 +703,7 @@ export default function MyShowsScreen() {
     if (!next) return;
     try {
       await markEpisodeWatched(user.id, showId, next.seasonNumber, next.episodeNumber, true);
+      scheduleWidgetRefresh(user.id);
       setWatchedById((prev) => ({ ...prev, [showId]: (prev[showId] ?? 0) + 1 }));
       setLastWatchedAtById((prev) => ({ ...prev, [showId]: new Date().toISOString() }));
       // Remove a entrada: o efeito acima detecta e busca o próximo episódio.

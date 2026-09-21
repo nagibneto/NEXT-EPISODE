@@ -49,6 +49,9 @@ example
 /ios
 /android
 
+# cores/ícones que o prebuild gera dentro dos targets Apple (ver WIDGETS.md)
+targets/*/Assets.xcassets/
+
 # Dados locais de exemplo/GDPR (contêm dados pessoais)
 exemplo/
 gdpr-data.zip

@@ -343,7 +343,8 @@ export interface QuizLeaderboardEntry {
 }
 
 /**
- * Escalada atual do usuário e dos amigos aceitos, do maior para o menor.
+ * Placar do usuário e dos amigos aceitos, ordenado pela maior pontuação total
+ * (empate: streak atual, depois recorde de streak, depois nome).
  * Uma consulta só em quiz_answers (RLS libera as linhas dos amigos, ver
  * "Amigos veem respostas do quiz" em supabase/schema.sql) — leve o bastante
  * para rodar toda vez que a tela do quiz abre. Lista vazia = sem amigos.
@@ -385,6 +386,7 @@ export async function getQuizLeaderboard(userId: string): Promise<QuizLeaderboar
     })
     .sort(
       (a, b) =>
+        b.totalScore - a.totalScore ||
         b.currentStreak - a.currentStreak ||
         b.bestStreak - a.bestStreak ||
         profileDisplayName(a.user).localeCompare(profileDisplayName(b.user))

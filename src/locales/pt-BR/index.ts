@@ -29,6 +29,7 @@ import quiz from './quiz.json';
 import recommendations from './recommendations.json';
 import relativeDate from './relativeDate.json';
 import resetPassword from './resetPassword.json';
+import review from './review.json';
 import search from './search.json';
 import season from './season.json';
 import shareWatchedSheet from './shareWatchedSheet.json';
@@ -41,8 +42,10 @@ import themeSelector from './themeSelector.json';
 import tmdb from './tmdb.json';
 import toWatch from './toWatch.json';
 import upcoming from './upcoming.json';
+import update from './update.json';
 import userProfile from './userProfile.json';
 import watchProviders from './watchProviders.json';
+import widget from './widget.json';
 
 export default {
   announcement,
@@ -70,6 +73,7 @@ export default {
   recommendations,
   relativeDate,
   resetPassword,
+  review,
   search,
   season,
   shareWatchedSheet,
@@ -82,6 +86,8 @@ export default {
   tmdb,
   toWatch,
   upcoming,
+  update,
   userProfile,
   watchProviders,
+  widget,
 };

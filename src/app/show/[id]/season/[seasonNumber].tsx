@@ -36,6 +36,7 @@ import {
   markSkippedEpisodesWatched,
   type SkippedEpisode,
 } from '@/lib/watch-next';
+import { scheduleWidgetRefresh } from '@/lib/widget-data';
 
 export default function SeasonScreen() {
   const theme = useTheme();
@@ -149,6 +150,7 @@ export default function SeasonScreen() {
       });
       try {
         await markEpisodeWatched(user.id, showId, seasonNumber, episodeNumber, nextWatched);
+        scheduleWidgetRefresh(user.id);
         if (nextWatched) {
           ensureFollowing();
           const isLastOfSeason = !!season && episodeNumber === season.episodes.length;

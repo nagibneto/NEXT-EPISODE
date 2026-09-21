@@ -2,13 +2,19 @@
   "expo": {
     "name": "Next Episode",
     "slug": "next-episode",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nextepisode",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.nagibneto.nextepisode",
+      "appleTeamId": "C2KT64ST28",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.nagibneto.nextepisode"
+        ]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "pt-BR",
@@ -72,7 +78,33 @@
           ]
         }
       ],
-      "expo-build-properties"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "NextEpisode",
+              "label": "Next Episode",
+              "description": "O que falta assistir, as próximas estreias e o quiz do dia.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

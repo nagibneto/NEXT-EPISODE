@@ -8,18 +8,11 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { shortWeekdayLabel } from '@/lib/locale';
 import { getQuizState, type QuizState, type QuizWeekDay } from '@/lib/quiz';
 
 /** Diâmetro das bolinhas da semana; a linha que as conecta usa a metade disso. */
 const DOT_SIZE = 26;
-
-/** "seg." → "Seg" no idioma ativo, sem precisar de chave de tradução por dia. */
-function weekdayLabel(date: string, language: string): string {
-  const label = new Date(`${date}T00:00:00`)
-    .toLocaleDateString(language, { weekday: 'short' })
-    .replace('.', '');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 /**
  * Card do Quiz do dia no perfil: chama, mostra a escalada (dias seguidos de
@@ -120,7 +113,7 @@ export function QuizCard() {
                 )}
               </View>
               <ThemedText type="small" themeColor="textSecondary" style={styles.weekLabel}>
-                {weekdayLabel(day.date, i18n.language)}
+                {shortWeekdayLabel(day.date, i18n.language)}
               </ThemedText>
             </View>
           ))}

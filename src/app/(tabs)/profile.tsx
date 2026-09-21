@@ -38,9 +38,10 @@ import {
   updateDisplayName,
   type Profile,
 } from '@/lib/db';
-import { inviteStoreUrl, shareInvite } from '@/lib/invite';
+import { inviteStoreUrl, openStoreReview, shareInvite } from '@/lib/store-links';
 import { unregisterPushToken } from '@/lib/notifications';
 import { defaultCountryForLanguage, normalizePhoneNumber } from '@/lib/phone';
+import { clearWidgetData } from '@/lib/widget-data';
 
 /** Mostra só os 4 últimos dígitos, o resto vira "•" (mesma quantidade de caracteres). */
 function maskPhoneNumber(e164: string): string {
@@ -242,8 +243,17 @@ export default function ProfileScreen() {
     shareInvite(t('profile.inviteMessage', { url: inviteStoreUrl() }), t('profile.inviteSubject'));
   }
 
+  function handleRateApp() {
+    // Loja fora do ar / sem navegador: o toque não faz nada em vez de derrubar
+    // o app com uma promise rejeitada.
+    openStoreReview().catch(() => {});
+  }
+
   async function handleSignOut() {
     if (user) await unregisterPushToken(user.id);
+    // O widget fica na tela inicial depois do logout: sem isso ele continuaria
+    // mostrando as séries de quem saiu.
+    await clearWidgetData();
     await signOut();
   }
 
@@ -258,6 +268,7 @@ export default function ProfileScreen() {
           setError(null);
           try {
             if (user) await unregisterPushToken(user.id);
+            await clearWidgetData();
             await deleteAccount();
             await signOut();
           } catch (err) {
@@ -498,6 +509,7 @@ export default function ProfileScreen() {
               label={t('profile.inviteFriends')}
               onPress={handleInvite}
             />
+            <SettingsRow icon="star" label={t('profile.rateApp')} onPress={handleRateApp} />
           </View>
         </View>
 

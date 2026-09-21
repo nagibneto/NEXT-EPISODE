@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
@@ -15,6 +15,28 @@ import { acquireStartupPrompt, releaseStartupPrompt } from '@/lib/startup-prompt
 // não respondeu), mas trocar de aba/voltar de background não fica repetindo.
 let promptShownThisSession = false;
 
+/** Fecha o modal que já estiver na tela (registrado pelo componente montado). */
+let dismissMountedPrompt: (() => void) | null = null;
+
+// O toque na notificação pode chegar enquanto o modal ainda espera a vez na
+// fila de avisos — aí não há nada para fechar, só para não abrir depois.
+let skippedThisSession = false;
+
+/**
+ * Cancela o modal desta sessão: quem abriu o app tocando na notificação do
+ * quiz já cai direto na tela do quiz, e o aviso "o quiz de hoje chegou" só
+ * atrapalharia. Chamado por useNotificationNavigation.
+ *
+ * Cobre os dois tempos: o toque na abertura fria (o modal ainda nem decidiu
+ * aparecer, a consulta do estado do quiz está em andamento) e o toque com o
+ * app em segundo plano, quando o modal já pode estar visível.
+ */
+export function skipQuizDayPrompt() {
+  promptShownThisSession = true;
+  skippedThisSession = true;
+  dismissMountedPrompt?.();
+}
+
 /**
  * Modal "o quiz de hoje chegou", mostrado ao abrir o app enquanto o usuário
  * ainda não respondeu a pergunta do dia. Fica montado no layout das abas e
@@ -28,6 +50,21 @@ export function QuizDayPrompt() {
   const [visible, setVisible] = useState(false);
   // Já tinha escalada antes de hoje? Muda o texto entre "inicie" e "mantenha".
   const [hasStreak, setHasStreak] = useState(false);
+  // Espelha `visible` para o skipQuizDayPrompt, que roda fora do React e
+  // precisa saber se há mesmo um modal na tela antes de liberar a fila.
+  const visibleRef = useRef(false);
+
+  useEffect(() => {
+    dismissMountedPrompt = () => {
+      if (!visibleRef.current) return;
+      visibleRef.current = false;
+      setVisible(false);
+      releaseStartupPrompt();
+    };
+    return () => {
+      dismissMountedPrompt = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -46,10 +83,11 @@ export function QuizDayPrompt() {
         // Espera a vez: o banner de campanha pode estar na tela (ver
         // src/lib/startup-prompts.ts).
         await acquireStartupPrompt();
-        if (cancelled) {
+        if (cancelled || skippedThisSession) {
           releaseStartupPrompt();
           return;
         }
+        visibleRef.current = true;
         setVisible(true);
       } catch {
         // Sem rede / falha na consulta: sem modal, o card do perfil ainda leva ao quiz.
@@ -62,6 +100,7 @@ export function QuizDayPrompt() {
   }, [user]);
 
   function close() {
+    visibleRef.current = false;
     setVisible(false);
     releaseStartupPrompt();
   }

@@ -1,0 +1,9 @@
+{
+  "title": "A new version is out!",
+  "subtitle": "Version {{version}} is on the store with these improvements:",
+  "versionLabel": "Version {{version}}",
+  "mandatoryTitle": "Update required",
+  "mandatorySubtitle": "This version of the app no longer works. Update to keep using Next Episode.",
+  "action": "Update now",
+  "later": "Not now"
+}
