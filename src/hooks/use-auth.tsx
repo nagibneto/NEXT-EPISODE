@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { Platform } from 'react-native';
 
 import { updateDisplayName } from '@/lib/db';
+import { logMetaLogin, logMetaSignUp } from '@/lib/meta-events';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -83,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    logMetaLogin('email');
   }
 
   async function signUp(email: string, password: string, username: string, displayName?: string) {
@@ -104,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user && data.user.identities?.length === 0) {
       throw new Error('Este e-mail já está cadastrado. Use "Faça login" para entrar.');
     }
+    logMetaSignUp('email');
   }
 
   async function signOut() {
@@ -150,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       nonce: rawNonce,
     });
     if (error) throw error;
+    logMetaLogin('apple');
 
     // fullName só vem preenchido na primeiríssima autorização deste usuário.
     const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
@@ -173,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type === 'success') {
       await applySessionFromUrl(result.url);
+      logMetaLogin(provider);
     }
   }
 

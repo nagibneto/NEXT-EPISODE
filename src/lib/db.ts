@@ -3,6 +3,7 @@
  */
 
 import { registerReviewMoment } from './app-review';
+import { logMetaEpisodeWatched, logMetaShowFollowed } from './meta-events';
 import { supabase } from './supabase';
 
 /**
@@ -190,6 +191,7 @@ export async function followShow(
     .from('followed_shows')
     .insert({ user_id: userId, ...show });
   if (error) throw error;
+  logMetaShowFollowed();
 }
 
 export async function unfollowShow(userId: string, tmdbId: number) {
@@ -294,7 +296,10 @@ export async function markEpisodeWatched(
   // Marcar episódio é o momento bom que conta para o pedido de avaliação
   // (ver src/lib/app-review.ts). Desmarcar não conta — e fica de fora também
   // por causa da importação em massa, que passa por markSeasonWatched.
-  if (watched) registerReviewMoment();
+  if (watched) {
+    registerReviewMoment();
+    logMetaEpisodeWatched();
+  }
 }
 
 /**

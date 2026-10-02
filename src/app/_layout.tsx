@@ -1,6 +1,7 @@
 import { Poppins_600SemiBold, useFonts } from '@expo-google-fonts/poppins';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -11,6 +12,7 @@ import { useNotificationNavigation } from '@/hooks/use-notification-navigation';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 // Garante que o i18next esteja inicializado antes de qualquer useTranslation().
 import '@/lib/i18n';
+import { initMetaEvents } from '@/lib/meta-events';
 
 /** Separado do RootLayout porque precisa ler o contexto de preferência de tema. */
 function RootNavigator() {
@@ -73,6 +75,10 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_600SemiBold });
+
+  useEffect(() => {
+    initMetaEvents();
+  }, []);
 
   if (!fontsLoaded) return null;
 

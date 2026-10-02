@@ -90,6 +90,7 @@ export function StackHeader({ navigation, options, route, back }: NativeStackHea
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const router = useRouter();
   const title = options.title ?? route.name;
 
   return (
@@ -103,7 +104,15 @@ export function StackHeader({ navigation, options, route, back }: NativeStackHea
             </ThemedText>
           </Pressable>
         ) : (
-          <View style={styles.backButton} />
+          // Sem tela anterior na pilha: acontece ao abrir direto por um link
+          // externo (ex.: widget de tela inicial), quando esta tela é a
+          // raiz. Sem isso o usuário ficava sem nenhuma forma de voltar.
+          <Pressable
+            hitSlop={8}
+            onPress={() => router.replace('/(tabs)')}
+            style={styles.backButton}>
+            <Ionicons name="home-outline" size={22} color={theme.accent} />
+          </Pressable>
         )}
         <ThemedText type="smallBold" numberOfLines={1} style={styles.stackTitle}>
           {title}
