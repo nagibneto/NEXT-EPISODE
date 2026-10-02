@@ -1393,3 +1393,29 @@ export async function markCampaignSeen(userId: string, campaignKey: string) {
     );
   if (error) throw error;
 }
+
+// ---------- Streamings assinados ----------
+
+/**
+ * Streamings que o usuário assina (ids de watch provider do TMDB) — filtram a
+ * aba "Para você". Ausência de linha = nenhum escolhido ainda.
+ */
+export async function getStreamingServices(userId: string): Promise<number[]> {
+  const { data, error } = await supabase
+    .from('streaming_services')
+    .select('provider_ids')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.provider_ids ?? [];
+}
+
+export async function setStreamingServices(userId: string, providerIds: number[]) {
+  const { error } = await supabase
+    .from('streaming_services')
+    .upsert(
+      { user_id: userId, provider_ids: providerIds, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+  if (error) throw error;
+}

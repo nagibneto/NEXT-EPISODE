@@ -77,6 +77,39 @@ git tag v<versão>
 
 ---
 
+# Específico da 1.0.8
+
+## O que vai nesta versão
+
+- **Aba "Para você"** (`src/app/(tabs)/discover.tsx`, motor em `src/lib/discover.ts`):
+  indicações pelo gosto do usuário, filtro pelos streamings que ele assina e
+  prateleiras por categoria/gênero.
+- **Meus streamings** no Perfil (tabela `streaming_services`).
+- SDK do Meta (`react-native-fbsdk-next`) — é ele que exige build nativa.
+
+## Antes do build
+
+- A tabela `streaming_services` (fim de `supabase/schema.sql`) precisa existir
+  em produção — sem ela, salvar os streamings dá erro.
+
+## O SDK do Meta vai desligado
+
+`EXPO_PUBLIC_FACEBOOK_APP_ID` e `FACEBOOK_CLIENT_TOKEN` estão só no `.env`
+local, não no ambiente `production` do EAS. Sem eles o plugin fica fora do
+build e `src/lib/meta-events.ts` vira no-op: nada quebra, mas nenhum evento
+chega ao Meta. Para ligar numa próxima versão (precisa de build nova, o
+plugin mexe no nativo):
+
+```bash
+eas env:create --environment production --name EXPO_PUBLIC_FACEBOOK_APP_ID --value <id> --visibility plaintext
+eas env:create --environment production --name FACEBOOK_CLIENT_TOKEN --value <token> --visibility secret
+```
+
+E, junto, atualizar o **App Privacy** (App Store) e a **Segurança dos dados**
+(Google Play): com o SDK ligado, dados de uso do app passam a ir para a Meta.
+
+---
+
 # Específico da 1.0.7
 
 ## O que vai nesta versão

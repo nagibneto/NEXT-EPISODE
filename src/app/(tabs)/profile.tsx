@@ -19,6 +19,7 @@ import { BadgeDot } from '@/components/badge-dot';
 import { LanguageSelector } from '@/components/language-selector';
 import { PhoneInput } from '@/components/phone-input';
 import { QuizCard } from '@/components/quiz-card';
+import { StreamingPickerSheet } from '@/components/streaming-picker-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemeSelector } from '@/components/theme-selector';
 import { UserAvatar } from '@/components/user-avatar';
@@ -135,6 +136,7 @@ export default function ProfileScreen() {
   const [phoneDigits, setPhoneDigits] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [streamingPickerOpen, setStreamingPickerOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -483,6 +485,11 @@ export default function ProfileScreen() {
               onPress={() => router.push('/notification-settings')}
             />
             <SettingsRow
+              icon="play-circle-outline"
+              label={t('profile.streamingServices')}
+              onPress={() => setStreamingPickerOpen(true)}
+            />
+            <SettingsRow
               icon="moon-outline"
               label={t('profile.theme')}
               right={<ThemeSelector />}
@@ -537,6 +544,11 @@ export default function ProfileScreen() {
           {t('profile.credit')}
         </ThemedText>
       </ScrollView>
+
+      <StreamingPickerSheet
+        visible={streamingPickerOpen}
+        onClose={() => setStreamingPickerOpen(false)}
+      />
 
       <Modal
         visible={choosingAvatar}

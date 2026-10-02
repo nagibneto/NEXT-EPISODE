@@ -1,0 +1,34 @@
+{
+  "movies": "Filmes",
+  "shows": "Séries",
+  "forYouChip": "Para você",
+  "edit": "Editar streamings",
+  "onlyMine": "Meus streamings",
+  "setupTitle": "Quais streamings você assina?",
+  "setupText": "Marque seus serviços e veja só o que dá para assistir agora, sem alugar nem comprar.",
+  "setupButton": "Escolher meus streamings",
+  "because": "Se curtiu {{title}}",
+  "coldStartMovies": "Marque filmes como assistidos ou favoritos para as indicações ficarem com a sua cara.",
+  "coldStartShows": "Siga séries ou marque favoritas para as indicações ficarem com a sua cara.",
+  "justWatch": "Disponibilidade nos streamings · dados JustWatch",
+  "shelf": {
+    "forYou": "Feito pra você",
+    "forYouGenre": "{{genre}} pra você",
+    "because": "Porque você viu {{title}}",
+    "trending": "Em alta agora",
+    "trendingMine": "Em alta nos seus streamings",
+    "genre": "Porque você curte {{genre}}",
+    "onProvider": "Em alta: {{provider}}",
+    "topRated": "Os mais bem avaliados",
+    "newest": "Lançamentos",
+    "hiddenGems": "Pérolas escondidas"
+  },
+  "picker": {
+    "title": "Seus streamings",
+    "subtitle": "Marque os serviços que você assina. Dá para mudar quando quiser.",
+    "save": "Salvar",
+    "saveCount_one": "Salvar ({{count}} streaming)",
+    "saveCount_other": "Salvar ({{count}} streamings)",
+    "saveError": "Não foi possível salvar seus streamings."
+  }
+}

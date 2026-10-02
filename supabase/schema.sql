@@ -1266,3 +1266,21 @@ create index if not exists app_releases_released_at_idx
 --       "en-US": ["Home screen widgets", "Faster search"]
 --     }'::jsonb
 --   );
+
+-- ---------- Streamings assinados ----------
+-- Serviços que o usuário assina (ids de watch provider do TMDB, iguais em
+-- todas as regiões: Netflix = 8 no Brasil e nos EUA). Filtram a aba "Para
+-- você" para mostrar só o que dá para assistir sem alugar. Tabela própria em
+-- vez de coluna em profiles porque perfis são visíveis para todo mundo.
+create table if not exists public.streaming_services (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  provider_ids integer[] not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.streaming_services enable row level security;
+
+drop policy if exists "Usuário gerencia os próprios streamings" on public.streaming_services;
+create policy "Usuário gerencia os próprios streamings"
+  on public.streaming_services for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);

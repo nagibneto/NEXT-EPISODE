@@ -10,6 +10,7 @@ import castList from './castList.json';
 import chooseUsername from './chooseUsername.json';
 import comments from './comments.json';
 import common from './common.json';
+import discover from './discover.json';
 import episode from './episode.json';
 import favorites from './favorites.json';
 import feed from './feed.json';
@@ -54,6 +55,7 @@ export default {
   chooseUsername,
   comments,
   common,
+  discover,
   episode,
   favorites,
   feed,

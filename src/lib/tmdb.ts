@@ -119,6 +119,35 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
   return response.json() as Promise<T>;
 }
 
+// ---------- Cache de listas que mudam com o tempo ----------
+
+/**
+ * Validade das listas que o TMDB atualiza com o tempo (em alta, lançamentos,
+ * "quem viu também viu", onde assistir). O TMDB recalcula popularidade e
+ * disponibilidade mais ou menos uma vez por dia; 6h deixa a aba "Para você"
+ * fresca sem refazer dezenas de requisições a cada visita.
+ */
+export const LIST_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+const listCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+function cachedList<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const entry = listCache.get(key);
+  if (entry && Date.now() - entry.at < LIST_CACHE_TTL_MS) return entry.promise as Promise<T>;
+  const promise = load().catch((error) => {
+    // Não guarda falhas no cache para permitir nova tentativa.
+    if (listCache.get(key)?.promise === promise) listCache.delete(key);
+    throw error;
+  });
+  listCache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+/** Esquece as listas em cache — usado no "puxar para atualizar" da aba "Para você". */
+export function clearListCache() {
+  listCache.clear();
+}
+
 export function searchShows(query: string, page = 1, firstAirDateYear?: number) {
   return get<{ results: TmdbShowSummary[]; total_pages: number }>('/search/tv', {
     query,
@@ -435,6 +464,14 @@ export async function getWatchProviders(
   return { link: region?.link ?? null, flatrate };
 }
 
+// A aba "Para você" confere a disponibilidade de dezenas de títulos, e várias
+// prateleiras repetem os mesmos; o cache evita perguntar duas vezes.
+export function getWatchProvidersCached(media: 'tv' | 'movie', id: number) {
+  return cachedList(`providers-${media}-${id}-${currentRegion()}`, () =>
+    getWatchProviders(media, id)
+  );
+}
+
 // Como os gêneros, a lista de streamings da região quase não muda; cache pela
 // duração do app (uma entrada por combinação de mídia + região).
 const streamingProvidersCache = new Map<string, Promise<TmdbWatchProvider[]>>();
@@ -470,6 +507,28 @@ export function getStreamingProviders(media: 'tv' | 'movie') {
     streamingProvidersCache.set(key, cached);
   }
   return cached;
+}
+
+/**
+ * Lojas de aluguel/compra e agregadores gratuitos que o TMDB lista junto com
+ * os streamings. Não são algo que se "assina", então ficam fora da escolha.
+ */
+const NOT_A_SUBSCRIPTION =
+  /\bstore\b|google play|amazon video|microsoft|^youtube$|justwatch|rakuten|vudu|fandango/i;
+
+/**
+ * Streamings por assinatura da região, juntando as listas de filme e de série:
+ * o id é o mesmo nas duas, mas alguns serviços só aparecem em uma delas.
+ */
+export async function getAllStreamingProviders(): Promise<TmdbWatchProvider[]> {
+  const [movie, tv] = await Promise.all([
+    getStreamingProviders('movie').catch(() => [] as TmdbWatchProvider[]),
+    getStreamingProviders('tv').catch(() => [] as TmdbWatchProvider[]),
+  ]);
+  const seen = new Set(movie.map((provider) => provider.provider_id));
+  return [...movie, ...tv.filter((provider) => !seen.has(provider.provider_id))].filter(
+    (provider) => !NOT_A_SUBSCRIPTION.test(provider.provider_name)
+  );
 }
 
 export function getSeasonDetails(showId: number, seasonNumber: number) {
@@ -635,11 +694,15 @@ export function getCreditsCached(media: 'tv' | 'movie', tmdbId: number) {
  * vem de gênero/palavras-chave.
  */
 export function getRelatedShows(showId: number, kind: 'recommendations' | 'similar') {
-  return get<{ results: TmdbShowSummary[] }>(`/tv/${showId}/${kind}`);
+  return cachedList(`related-tv-${showId}-${kind}-${currentLanguage}`, () =>
+    get<{ results: TmdbShowSummary[] }>(`/tv/${showId}/${kind}`)
+  );
 }
 
 export function getRelatedMovies(movieId: number, kind: 'recommendations' | 'similar') {
-  return get<{ results: TmdbMovieSummary[] }>(`/movie/${movieId}/${kind}`);
+  return cachedList(`related-movie-${movieId}-${kind}-${currentLanguage}`, () =>
+    get<{ results: TmdbMovieSummary[] }>(`/movie/${movieId}/${kind}`)
+  );
 }
 
 /** Séries em que a pessoa atuou. `episode_count` separa papel fixo de ponta. */
@@ -689,6 +752,69 @@ export function discoverRecentMovies(genreIds: number[]) {
     'vote_count.gte': '100',
     ...(genreIds.length > 0 ? { with_genres: genreIds.join(',') } : {}),
   });
+}
+
+// ---------- Catálogo da aba "Para você" ----------
+
+export interface CatalogQuery {
+  /** Mais populares, mais bem avaliados ou lançamentos mais recentes. */
+  sortBy?: 'popularity' | 'rating' | 'newest';
+  /** Gêneros combinados com OR — qualquer um deles. */
+  genreIds?: number[];
+  /** Gêneros que tiram o título da lista. */
+  withoutGenreIds?: number[];
+  /**
+   * Só títulos incluídos na assinatura destes streamings (OR). Aluguel e
+   * compra ficam de fora: a ideia é "dá para ver agora sem pagar a mais".
+   */
+  providerIds?: number[];
+  minVotes?: number;
+  maxVotes?: number;
+  /** Nota mínima (inclusiva) na escala 0–10 do TMDB. */
+  minRating?: number;
+  /** Lançados a partir desta data (YYYY-MM-DD). */
+  releasedAfter?: string;
+  page?: number;
+}
+
+/**
+ * /discover com os parâmetros que as prateleiras da aba "Para você" usam.
+ * Separado do `discoverShows`/`discoverMovies` da busca, que tem outro
+ * contrato de filtros (faixa de nota, ano, um gênero só).
+ */
+export function discoverCatalog(
+  media: 'tv' | 'movie',
+  query: CatalogQuery
+): Promise<{ results: (TmdbShowSummary | TmdbMovieSummary)[]; total_pages: number }> {
+  const dateField = media === 'tv' ? 'first_air_date' : 'primary_release_date';
+  const sortBy = query.sortBy ?? 'popularity';
+  const params: Record<string, string> = {
+    sort_by:
+      sortBy === 'rating'
+        ? 'vote_average.desc'
+        : sortBy === 'newest'
+          ? `${dateField}.desc`
+          : 'popularity.desc',
+    include_adult: 'false',
+    page: String(query.page ?? 1),
+  };
+  if (query.genreIds?.length) params.with_genres = query.genreIds.join('|');
+  if (query.withoutGenreIds?.length) params.without_genres = query.withoutGenreIds.join(',');
+  if (query.providerIds?.length) {
+    params.with_watch_providers = query.providerIds.join('|');
+    params.with_watch_monetization_types = 'flatrate';
+    // O filtro de provider só funciona amarrado a uma região.
+    params.watch_region = currentRegion();
+  }
+  if (query.minVotes != null) params['vote_count.gte'] = String(query.minVotes);
+  if (query.maxVotes != null) params['vote_count.lte'] = String(query.maxVotes);
+  if (query.minRating != null) params['vote_average.gte'] = String(query.minRating);
+  if (query.releasedAfter) params[`${dateField}.gte`] = query.releasedAfter;
+  // Ordenado por data sem teto, o topo da lista é de títulos anunciados que
+  // ainda nem estrearam.
+  if (sortBy === 'newest') params[`${dateField}.lte`] = new Date().toISOString().slice(0, 10);
+  const key = `discover-${media}-${currentLanguage}-${new URLSearchParams(params)}`;
+  return cachedList(key, () => get(`/discover/${media}`, params));
 }
 
 // ---------- Busca por pessoas (permite achar títulos pelo nome do ator) ----------

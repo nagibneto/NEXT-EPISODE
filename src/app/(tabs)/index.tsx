@@ -23,6 +23,7 @@ import ReanimatedSwipeable, {
 
 import { DiscoverFilterSheet } from '@/components/discover-filter-sheet';
 import { ShowCard } from '@/components/show-card';
+import { StatusTabs } from '@/components/status-tabs';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -100,52 +101,6 @@ function ToolButton({
       onPress={onPress}>
       <Ionicons name={icon} size={16} color={active ? theme.accent : theme.textSecondary} />
     </Pressable>
-  );
-}
-
-/**
- * Abas de status no estilo da watchlist: rótulos em texto, com sublinhado
- * azul na ativa (substitui as pílulas preenchidas). Uma aba sempre ativa.
- */
-function StatusTabs<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  const theme = useTheme();
-  // Colunas de largura igual, rótulo centralizado e a barra ocupando a coluna
-  // inteira — vale para 2 abas (filmes) e 3 (séries), e para qualquer idioma:
-  // não depende do tamanho do texto, que varia muito entre pt-BR e en-US.
-  return (
-    <View style={[styles.statusTabs, { borderBottomColor: theme.backgroundSelected }]}>
-      {options.map((option) => {
-        const active = value === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            style={styles.statusTab}
-            hitSlop={8}
-            onPress={() => onChange(option.value)}>
-            <ThemedText
-              type={active ? 'smallBold' : 'small'}
-              numberOfLines={1}
-              style={{ color: active ? theme.accent : theme.textSecondary }}>
-              {option.label}
-            </ThemedText>
-            <View
-              style={[
-                styles.statusTabIndicator,
-                { backgroundColor: active ? theme.accent : 'transparent' },
-              ]}
-            />
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -1243,29 +1198,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.two + Spacing.half,
     paddingVertical: 7,
-  },
-  statusTabs: {
-    flexDirection: 'row',
-    marginHorizontal: Spacing.three,
-    marginBottom: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  statusTab: {
-    // Colunas de largura igual, independentemente do tamanho do rótulo.
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-    paddingTop: Spacing.one,
-    paddingHorizontal: Spacing.one,
-  },
-  statusTabIndicator: {
-    height: 2,
-    borderRadius: 1,
-    // Ocupa a coluna inteira; o padding do Pressable vira o respiro entre as
-    // barras vizinhas.
-    alignSelf: 'stretch',
-    // Cobre a linha divisória da barra de abas quando a aba está ativa.
-    marginBottom: -StyleSheet.hairlineWidth,
   },
   toolsRow: {
     flexDirection: 'row',

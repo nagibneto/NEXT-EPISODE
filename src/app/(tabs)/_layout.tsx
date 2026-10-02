@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { Redirect, Tabs } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -72,6 +73,25 @@ export default function TabsLayout() {
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
             tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: t('tabs.discover'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.discover')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => (
+              // Desenho próprio (scripts/draw-popcorn-icon.py): o "popcorn" dos
+              // pacotes de ícone é só o balde e não lê como pipoca. PNG
+              // monocromático, pintado com a cor da aba como os outros ícones.
+              <Image
+                source={require('../../../assets/images/tabIcons/popcorn.png')}
+                style={{ width: size, height: size }}
+                tintColor={color}
+              />
+            ),
           }}
         />
         <Tabs.Screen

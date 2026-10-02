@@ -1,0 +1,34 @@
+{
+  "movies": "Movies",
+  "shows": "Shows",
+  "forYouChip": "For you",
+  "edit": "Edit services",
+  "onlyMine": "My services",
+  "setupTitle": "Which streaming services do you pay for?",
+  "setupText": "Pick your services and see only what you can watch right now, without renting or buying.",
+  "setupButton": "Choose my services",
+  "because": "If you liked {{title}}",
+  "coldStartMovies": "Mark movies as watched or favorite to make these picks more personal.",
+  "coldStartShows": "Follow shows or mark favorites to make these picks more personal.",
+  "justWatch": "Streaming availability · JustWatch data",
+  "shelf": {
+    "forYou": "Picked for you",
+    "forYouGenre": "{{genre}} for you",
+    "because": "Because you watched {{title}}",
+    "trending": "Trending now",
+    "trendingMine": "Trending on your services",
+    "genre": "Because you like {{genre}}",
+    "onProvider": "Trending on {{provider}}",
+    "topRated": "Top rated",
+    "newest": "New releases",
+    "hiddenGems": "Hidden gems"
+  },
+  "picker": {
+    "title": "Your streaming services",
+    "subtitle": "Mark the services you subscribe to. You can change this anytime.",
+    "save": "Save",
+    "saveCount_one": "Save ({{count}} service)",
+    "saveCount_other": "Save ({{count}} services)",
+    "saveError": "Couldn't save your streaming services."
+  }
+}
