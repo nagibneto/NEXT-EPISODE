@@ -77,6 +77,46 @@ git tag v<versão>
 
 ---
 
+# Específico da 1.0.9
+
+## O que vai nesta versão
+
+- **SDK do Meta ligado** (App Events: abertura, cadastro, login, série seguida,
+  episódio assistido). `EXPO_PUBLIC_FACEBOOK_APP_ID` e `FACEBOOK_CLIENT_TOKEN`
+  agora estão no ambiente `production` do EAS.
+- Perguntas novas do quiz.
+
+## O que muda nas lojas por causa do Meta
+
+O SDK não lê o IDFA/ID de publicidade (`advertiserIDCollectionEnabled: false`)
+e no iOS o `advertiserTrackingEnabled` fica no padrão (desligado), então não
+precisa do prompt de App Tracking Transparency. Os eventos não levam e-mail nem
+nome de usuário (`src/lib/meta-events.ts`).
+
+**Política de privacidade** (`docs/privacy.html`): já fala da Meta. Publicar
+antes de enviar para review — as duas lojas apontam para ela.
+
+**Google Play → Conteúdo do app:**
+
+- **Segurança dos dados** → marcar que dados são **compartilhados** com
+  terceiros:
+  - *Atividade no app → Interações com o app* — finalidade: Análise,
+    Publicidade ou marketing. Coleta obrigatória (não dá para desligar no app).
+  - *IDs do dispositivo ou outros IDs* — mesmas finalidades (o SDK manda um ID
+    anônimo de instalação, mesmo sem o ID de publicidade).
+- **ID de publicidade** → o SDK do Facebook costuma declarar a permissão
+  `AD_ID` no manifesto. Se o Play Console acusar isso ao subir o AAB, responda
+  **Sim**, finalidade Análise e Publicidade ou marketing.
+
+**App Store Connect → App Privacy** (incluir, além do que já está declarado):
+
+- *Usage Data → Product Interaction* — finalidades: Analytics, Developer's
+  Advertising or Marketing. Não vinculado à identidade. **Não** usado para
+  rastreamento.
+- *Identifiers → Device ID* — mesmas respostas.
+
+---
+
 # Específico da 1.0.8
 
 ## O que vai nesta versão
@@ -91,22 +131,6 @@ git tag v<versão>
 
 - A tabela `streaming_services` (fim de `supabase/schema.sql`) precisa existir
   em produção — sem ela, salvar os streamings dá erro.
-
-## O SDK do Meta vai desligado
-
-`EXPO_PUBLIC_FACEBOOK_APP_ID` e `FACEBOOK_CLIENT_TOKEN` estão só no `.env`
-local, não no ambiente `production` do EAS. Sem eles o plugin fica fora do
-build e `src/lib/meta-events.ts` vira no-op: nada quebra, mas nenhum evento
-chega ao Meta. Para ligar numa próxima versão (precisa de build nova, o
-plugin mexe no nativo):
-
-```bash
-eas env:create --environment production --name EXPO_PUBLIC_FACEBOOK_APP_ID --value <id> --visibility plaintext
-eas env:create --environment production --name FACEBOOK_CLIENT_TOKEN --value <token> --visibility secret
-```
-
-E, junto, atualizar o **App Privacy** (App Store) e a **Segurança dos dados**
-(Google Play): com o SDK ligado, dados de uso do app passam a ir para a Meta.
 
 ---
 

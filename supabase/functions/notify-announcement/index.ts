@@ -45,6 +45,12 @@ interface Campaign {
   /** Precisa ser igual à chave do banner no app (src/lib/announcements.ts). */
   key: string;
   strings: Record<Language, { title: string; body: string }>;
+  /**
+   * Tela que o toque abre. Sem ela, o app abre normalmente e quem mostra o
+   * convite é o banner (AnnouncementPrompt). Atenção: uma rota que não existe
+   * na versão instalada cai na tela de "página não encontrada".
+   */
+  url?: string;
 }
 
 /**
@@ -63,6 +69,21 @@ const CAMPAIGNS: Campaign[] = [
       'en-US': {
         title: "We're on Instagram! 📸",
         body: 'Follow @app.nextepisode and be the first to hear what’s coming to the app.',
+      },
+    },
+  },
+  {
+    // Só push, sem banner: o toque leva direto para a aba (que existe desde a 1.0.8).
+    key: 'para-voce-2026-11',
+    url: '/discover',
+    strings: {
+      'pt-BR': {
+        title: 'Não sabe o que assistir hoje? 🍿',
+        body: 'A aba Para você mostra indicações pelo seu gosto, só do que está nos seus streamings.',
+      },
+      'en-US': {
+        title: 'Not sure what to watch tonight? 🍿',
+        body: 'The For you tab picks titles based on your taste, only from the streaming services you have.',
       },
     },
   },
@@ -186,7 +207,11 @@ Deno.serve(async (req) => {
         // Sem `url`: tocar na notificação abre o app normalmente e quem mostra
         // o convite é o banner (AnnouncementPrompt), o mesmo que apareceria de
         // qualquer jeito na próxima abertura.
-        data: { type: 'announcement', campaignKey: campaign.key },
+        data: {
+          type: 'announcement',
+          campaignKey: campaign.key,
+          ...(campaign.url ? { url: campaign.url } : {}),
+        },
       });
     }
   }
