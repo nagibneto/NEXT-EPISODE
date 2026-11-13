@@ -21,6 +21,7 @@
  *   {"dry_run": true}              — só conta quem receberia, não envia nada.
  *   {"test_user_id": "SEU_UUID"}   — envia só para você, mesmo estando ativo,
  *                                    e não grava o cooldown de 14 dias.
+ *   {"generic_title": true}        — título genérico para todos (combina com os outros).
  *
  * A função é pública (--no-verify-jwt, como as outras), então ela mesma exige
  * o CAMPAIGN_PUSH_TOKEN no Authorization — senão qualquer um que descobrisse a
@@ -107,6 +108,8 @@ Deno.serve(async (req) => {
    * ficando 7 dias sem tocar no app.
    */
   const testUserId: string | null = typeof body.test_user_id === 'string' ? body.test_user_id : null;
+  /** {"generic_title": true}: todo mundo recebe "Suas séries sentem sua falta", sem o nome da série. */
+  const genericTitle: boolean = body.generic_title === true;
 
   // 1. Quem está sumido há INACTIVE_DAYS dias (ou só o usuário de teste).
   const languageByUser = new Map<string, Language>();
@@ -212,7 +215,7 @@ Deno.serve(async (req) => {
   for (const userId of recipients) {
     const language = languageByUser.get(userId) ?? 'pt-BR';
     const strings = STRINGS[language];
-    const show = showByUser.get(userId);
+    const show = genericTitle ? undefined : showByUser.get(userId);
     const showName = show ? (language === 'en-US' ? (show.name_en ?? show.name) : show.name) : null;
     for (const token of tokensByUser.get(userId) ?? []) {
       messages.push({

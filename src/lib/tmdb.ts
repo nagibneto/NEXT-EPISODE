@@ -20,7 +20,7 @@ export function setTmdbLanguage(lang: AppLanguage) {
 }
 
 /** Região usada para catálogo de streaming — não existe seletor próprio, segue o idioma. */
-function currentRegion() {
+export function currentRegion() {
   return currentLanguage === 'en-US' ? 'US' : 'BR';
 }
 
@@ -356,6 +356,121 @@ export function getMovieDetailsCached(movieId: number, language: AppLanguage = c
     movieDetailsCache.set(key, cached);
   }
   return cached;
+}
+
+// ---------- Lançamentos de filmes ----------
+
+/** Data local de hoje em YYYY-MM-DD (o `toISOString` daria a data em UTC). */
+export function localToday(offsetDays = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** Quantos meses à frente a aba "Em breve" enxerga os lançamentos de cinema. */
+const UPCOMING_MOVIES_MONTHS = 4;
+/** Páginas de 20 filmes pedidas à TMDB — os mais populares do período. */
+const UPCOMING_MOVIES_PAGES = 3;
+
+/**
+ * Filmes que estreiam nos cinemas da região do usuário nos próximos meses,
+ * em ordem de data. O `release_date` de cada um é a estreia *na região*
+ * (tipo 3, cinema), não a data principal do filme — que costuma ser a dos EUA.
+ */
+export function getUpcomingMovies() {
+  const region = currentRegion();
+  const today = localToday();
+  return cachedList(`upcoming-movies-${region}-${currentLanguage}-${today}`, async () => {
+    const pages = await Promise.all(
+      Array.from({ length: UPCOMING_MOVIES_PAGES }, (_, index) =>
+        get<{ results: TmdbMovieSummary[] }>('/discover/movie', {
+          region,
+          with_release_type: '3',
+          'release_date.gte': today,
+          'release_date.lte': localToday(UPCOMING_MOVIES_MONTHS * 30),
+          sort_by: 'popularity.desc',
+          include_adult: 'false',
+          page: String(index + 1),
+        })
+      )
+    );
+    const seen = new Set<number>();
+    return pages
+      .flatMap((page) => page.results)
+      .filter((movie) => {
+        // Relançamento de filme antigo casa com o filtro de período, mas vem
+        // com a data da estreia original — fica de fora.
+        if (!movie.release_date || movie.release_date < today) return false;
+        if (!movie.poster_path || seen.has(movie.id)) return false;
+        seen.add(movie.id);
+        return true;
+      })
+      .sort((a, b) => (a.release_date! < b.release_date! ? -1 : 1));
+  });
+}
+
+/**
+ * Chave do YouTube do trailer do filme, ou `null` se a TMDB não tiver nenhum.
+ * Prefere trailer oficial no idioma do app; sem ele, cai para o em inglês.
+ */
+export function getMovieTrailerKey(movieId: number) {
+  return cachedList(`trailer-${movieId}-${currentLanguage}`, async () => {
+    const data = await get<{
+      results: {
+        key: string;
+        site: string;
+        type: string;
+        official: boolean;
+        iso_639_1: string;
+      }[];
+    }>(`/movie/${movieId}/videos`, {
+      include_video_language: `${currentLanguage.slice(0, 2)},en`,
+    });
+    const appLanguage = currentLanguage.slice(0, 2);
+    const score = (video: (typeof data.results)[number]) =>
+      (video.type === 'Trailer' ? 4 : 0) +
+      (video.iso_639_1 === appLanguage ? 2 : 0) +
+      (video.official ? 1 : 0);
+    const best = data.results
+      .filter((video) => video.site === 'YouTube' && ['Trailer', 'Teaser'].includes(video.type))
+      .sort((a, b) => score(b) - score(a))[0];
+    return best?.key ?? null;
+  });
+}
+
+/** O que mais se viu na TMDB nesta semana (séries ou filmes). */
+export function getTrending<M extends 'tv' | 'movie'>(media: M) {
+  type Item = M extends 'tv' ? TmdbShowSummary : TmdbMovieSummary;
+  return cachedList(`trending-${media}-${currentLanguage}`, () =>
+    get<{ results: Item[] }>(`/trending/${media}/week`).then((data) => data.results)
+  );
+}
+
+/**
+ * Data de estreia do filme na região do usuário (YYYY-MM-DD): a de cinema
+ * quando existe, senão o primeiro lançamento local (streaming, digital), senão
+ * a data principal do filme. `null` quando a TMDB ainda não tem data nenhuma.
+ */
+export async function getMovieRegionalReleaseDate(movieId: number): Promise<string | null> {
+  const data = await get<{
+    release_date: string | null;
+    release_dates?: {
+      results: { iso_3166_1: string; release_dates: { type: number; release_date: string }[] }[];
+    };
+  }>(`/movie/${movieId}`, { append_to_response: 'release_dates' });
+  const regional =
+    data.release_dates?.results.find((entry) => entry.iso_3166_1 === currentRegion())
+      ?.release_dates ?? [];
+  const earliest = (types: number[]) =>
+    regional
+      .filter((entry) => types.includes(entry.type))
+      .map((entry) => entry.release_date.slice(0, 10))
+      .sort()[0];
+  // 3 = cinema; 2 = cinema limitado; 4/5/6 = digital, físico e TV. A pré-estreia
+  // (1) não conta: é sessão de gala, não o dia em que o público pode ver.
+  return earliest([3]) ?? earliest([2, 4, 5, 6]) ?? (data.release_date || null);
 }
 
 /** Título do filme nos dois idiomas suportados — usado ao gravar assistido/favorito/watchlist. */

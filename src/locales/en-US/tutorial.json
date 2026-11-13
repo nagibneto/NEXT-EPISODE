@@ -1,0 +1,32 @@
+{
+  "skip": "Skip",
+  "next": "Next",
+  "start": "Get started",
+  "findFriends": "Find friends",
+  "slides": {
+    "welcome": {
+      "title": "Welcome to Next Episode",
+      "body": "Track your shows and movies, see what's coming next and compete in the quiz with friends. Takes 30 seconds."
+    },
+    "add": {
+      "title": "Build your list",
+      "body": "In the Search tab, tap + to follow a show or save a movie to To watch."
+    },
+    "track": {
+      "title": "Mark what you've watched",
+      "body": "Tap the episode's ✓, or swipe a Watchlist card to the left. The next episode takes its place."
+    },
+    "remind": {
+      "title": "Never miss a release",
+      "body": "In Upcoming, tap Notify me and we'll remind you on the day the movie comes out."
+    },
+    "quiz": {
+      "title": "Daily quiz",
+      "body": "A new question every day at 8 PM. Get them right in a row to keep your streak 🔥"
+    },
+    "friends": {
+      "title": "Watch together",
+      "body": "Add friends to see what they're watching in the Feed and climb the quiz leaderboard."
+    }
+  }
+}

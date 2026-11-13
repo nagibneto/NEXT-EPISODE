@@ -26,6 +26,7 @@ import {
   getRelatedMovies,
   getRelatedShows,
   getShowDetailsCached,
+  getTrending,
   getWatchProvidersCached,
   type CatalogQuery,
   type TmdbMovieSummary,
@@ -155,6 +156,19 @@ function isShowable(item: DiscoverItem, taste: Taste) {
   if (taste.excludeIds.has(item.id)) return false;
   if (taste.media === 'tv' && item.genreIds.some((id) => EXCLUDED_TV_GENRES.has(id))) return false;
   return true;
+}
+
+/**
+ * "Em alta" da aba Início: o que mais se viu na TMDB nesta semana. Não depende
+ * do gosto do usuário nem esconde o que ele já tem — é a vitrine do momento.
+ */
+export async function trendingShelf(media: DiscoverMedia): Promise<DiscoverItem[]> {
+  const items = normalize(media, await getTrending(media));
+  return items.filter(
+    (item) =>
+      item.posterPath &&
+      !(media === 'tv' && item.genreIds.some((id) => EXCLUDED_TV_GENRES.has(id)))
+  );
 }
 
 // ---------- Perfil de gosto ----------

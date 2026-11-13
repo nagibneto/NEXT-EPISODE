@@ -33,5 +33,20 @@
   "loadError": "Error loading your list.",
   "markWatchedError": "Couldn't mark it as watched.",
   "availableEpisodes_one": "{{count}} available",
-  "availableEpisodes_other": "{{count}} available"
+  "availableEpisodes_other": "{{count}} available",
+  "thisWeek": "Upcoming",
+  "thisWeekSeeAll": "See all",
+  "thisWeekMovie": "Movie release",
+  "greetingMorning": "Good morning",
+  "greetingAfternoon": "Good afternoon",
+  "greetingEvening": "Good evening",
+  "featured": "Featured",
+  "featuredPremiere": "Premieres {{date}}",
+  "featuredInTheaters": "In theaters",
+  "featuredTrailer": "Trailer",
+  "continueWatching": "Continue watching",
+  "seeAll": "See all",
+  "explore": "Explore",
+  "trendingShows": "Trending shows",
+  "trendingMovies": "Trending movies"
 }

@@ -5,5 +5,8 @@
   "quizChannelName": "Quiz do dia",
   "quizTitle": "O quiz de hoje já saiu! 🎬",
   "quizBodyStart": "Responda a pergunta de hoje e inicie sua escalada.",
-  "quizBodyContinue": "Responda a pergunta de hoje e mantenha sua escalada."
+  "quizBodyContinue": "Responda a pergunta de hoje e mantenha sua escalada.",
+  "movieChannelName": "Estreias de filmes",
+  "movieReleaseTitle": "{{title}} estreia hoje! 🎬",
+  "movieReleaseBody": "O filme da sua lista Para assistir chegou. Toque para ver os detalhes."
 }

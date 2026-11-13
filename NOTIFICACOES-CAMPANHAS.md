@@ -136,6 +136,23 @@ where campaign_key = 'instagram-2026-09'
 
 Na próxima abertura do app ele volta. Diferente do push, o banner não precisa de build nativo — funciona no `npx expo start` normal.
 
+## Tutorial de boas-vindas
+
+Não é push: é a sequência de telas que aparece ao abrir o app (`src/components/tutorial-prompt.tsx`). Usa a mesma tabela `campaign_deliveries`, com a chave `tutorial-v1`, e aparece uma vez por conta:
+
+- **sozinho**, para contas com até 7 dias de criação que ainda não têm linha da chave;
+- **por convite**, para qualquer conta que tenha a linha com `seen_at` nulo.
+
+Para mostrar a uma conta específica (ou de novo para quem já viu):
+
+```sql
+insert into public.campaign_deliveries (user_id, campaign_key)
+select id, 'tutorial-v1' from auth.users where lower(email) = lower('EMAIL_DA_CONTA')
+on conflict (user_id, campaign_key) do update set seen_at = null;
+```
+
+Na próxima abertura do app ele aparece e o `seen_at` é preenchido. Para reapresentar a todo mundo depois de uma mudança grande, troque `TUTORIAL_KEY` no código por uma chave nova.
+
 ## Conferindo o resultado
 
 ```sql

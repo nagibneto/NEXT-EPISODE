@@ -7,6 +7,17 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/**
+ * Papel de cada cor — vale para os dois temas:
+ * - `accent` (azul): navegação e progresso. Aba ativa, links, nome da série
+ *   que abre a série, barras de andamento, filtros ligados.
+ * - `gold` / `goldText` (amarelo): o que pede atenção. O seletor Séries/Filmes,
+ *   estrelas e notas, selos de contagem ("3 disponíveis"), favoritos.
+ * - `backgroundElement` / `backgroundSelected` (cinzas): superfícies — cards,
+ *   campos, e o item ativo dentro de um controle segmentado.
+ * - `background`: fundo da tela.
+ * Antes de pintar algo novo de azul ou amarelo, veja em qual papel ele cai.
+ */
 export const Colors = {
   light: {
     text: '#000000',

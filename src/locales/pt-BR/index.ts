@@ -42,6 +42,7 @@ import tabs from './tabs.json';
 import themeSelector from './themeSelector.json';
 import tmdb from './tmdb.json';
 import toWatch from './toWatch.json';
+import tutorial from './tutorial.json';
 import upcoming from './upcoming.json';
 import update from './update.json';
 import userProfile from './userProfile.json';
@@ -87,6 +88,7 @@ export default {
   themeSelector,
   tmdb,
   toWatch,
+  tutorial,
   upcoming,
   update,
   userProfile,

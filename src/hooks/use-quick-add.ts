@@ -101,6 +101,8 @@ export function useQuickAdd() {
           poster_path: item.posterPath,
         });
       }
+      // Filme que ainda vai estrear ganha (ou perde) o aviso do dia da estreia.
+      if (!isTv) syncEpisodeNotifications(user.id).catch(() => {});
     } catch {
       flip(alreadyIn); // desfaz o otimismo
       Alert.alert(t('search.followError'));

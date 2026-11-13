@@ -1380,6 +1380,25 @@ export async function hasSeenCampaign(userId: string, campaignKey: string): Prom
 }
 
 /**
+ * Estado da entrega de uma campanha para o usuário: `null` = nenhuma linha;
+ * `seen` diz se o aviso já apareceu. Uma linha com `seen = false` é um convite
+ * gravado à mão (SQL) para mostrar o aviso a uma conta específica.
+ */
+export async function getCampaignDelivery(
+  userId: string,
+  campaignKey: string
+): Promise<{ seen: boolean } | null> {
+  const { data, error } = await supabase
+    .from('campaign_deliveries')
+    .select('seen_at')
+    .eq('user_id', userId)
+    .eq('campaign_key', campaignKey)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { seen: data.seen_at != null } : null;
+}
+
+/**
  * Marca que o banner apareceu. Chamado na hora em que ele é exibido (e não no
  * clique): o combinado é aparecer uma vez só, tenha a pessoa tocado no botão
  * ou fechado. Só mexe em seen_at — pushed_at é assunto da Edge Function.

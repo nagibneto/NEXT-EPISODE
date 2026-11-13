@@ -30,6 +30,7 @@ import {
   removeFavorite,
   removeMovieFromWatchlist,
 } from '@/lib/db';
+import { syncEpisodeNotifications } from '@/lib/notifications';
 import {
   backdropUrl,
   getMovieDetails,
@@ -117,6 +118,8 @@ export default function MovieDetailsScreen() {
       } else {
         await removeMovieFromWatchlist(user.id, movie.id);
       }
+      // Filme que ainda vai estrear ganha (ou perde) o aviso do dia da estreia.
+      syncEpisodeNotifications(user.id).catch(() => {});
     } catch (err) {
       setInWatchlist(!next);
       setError(errorMessage(err, t('movie.updateError')));

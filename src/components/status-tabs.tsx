@@ -57,14 +57,14 @@ const styles = StyleSheet.create({
   statusTabs: {
     flexDirection: 'row',
     marginHorizontal: Spacing.three,
-    marginBottom: Spacing.two,
+    marginBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   statusTab: {
     // Colunas de largura igual, independentemente do tamanho do rótulo.
     flex: 1,
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingTop: Spacing.one,
     paddingHorizontal: Spacing.one,
   },

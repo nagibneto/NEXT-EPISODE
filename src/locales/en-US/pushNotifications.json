@@ -5,5 +5,8 @@
   "quizChannelName": "Daily quiz",
   "quizTitle": "Today's quiz is out! 🎬",
   "quizBodyStart": "Answer today's question and start your streak.",
-  "quizBodyContinue": "Answer today's question and keep your streak going."
+  "quizBodyContinue": "Answer today's question and keep your streak going.",
+  "movieChannelName": "Movie releases",
+  "movieReleaseTitle": "{{title}} is out today! 🎬",
+  "movieReleaseBody": "The movie from your To watch list has arrived. Tap to see the details."
 }

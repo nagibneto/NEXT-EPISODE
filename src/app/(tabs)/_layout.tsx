@@ -2,12 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Redirect, Tabs } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AnnouncementPrompt } from '@/components/announcement-prompt';
 import { AppHeaderTitle, HeaderActions } from '@/components/app-header';
 import { QuizDayPrompt } from '@/components/quiz-day-prompt';
+import { TutorialPrompt } from '@/components/tutorial-prompt';
 import { ReviewPrompt } from '@/components/review-prompt';
 import { UpdatePrompt } from '@/components/update-prompt';
 import { Spacing } from '@/constants/theme';
@@ -54,6 +55,9 @@ export default function TabsLayout() {
 
   return (
     <>
+      {/* Primeiro da lista de propósito: os efeitos rodam na ordem dos irmãos, e
+          o tutorial precisa pegar a vaga da fila de avisos antes dos outros. */}
+      <TutorialPrompt />
       <QuizDayPrompt />
       <AnnouncementPrompt />
       {/* Os dois entram na mesma fila de avisos de abertura, mas estão
@@ -64,15 +68,32 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: theme.accent,
+          // Seis destinos na barra: ícone um pouco menor e rótulo mais firme
+          // dão respiro entre as abas sem tirar nenhuma.
+          tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+          tabBarStyle: {
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: theme.backgroundSelected,
+          },
         }}>
         <Tabs.Screen
           name="index"
           options={{
-            title: t('tabs.watchlist'),
+            title: t('tabs.home'),
             headerTitle: () => <AppHeaderTitle />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size - 2} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="watchlist"
+          options={{
+            title: t('tabs.watchlist'),
+            headerTitle: () => <AppHeaderTitle title={t('tabs.watchlist')} />,
+            headerTitleAlign: 'left',
+            headerRight: () => <HeaderActions />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size - 2} color={color} />,
           }}
         />
         <Tabs.Screen
@@ -88,7 +109,7 @@ export default function TabsLayout() {
               // monocromático, pintado com a cor da aba como os outros ícones.
               <Image
                 source={require('../../../assets/images/tabIcons/popcorn.png')}
-                style={{ width: size, height: size }}
+                style={{ width: size - 2, height: size - 2 }}
                 tintColor={color}
               />
             ),
@@ -101,17 +122,7 @@ export default function TabsLayout() {
             headerTitle: () => <AppHeaderTitle title={t('tabs.search')} />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="upcoming"
-          options={{
-            title: t('tabs.upcoming'),
-            headerTitle: () => <AppHeaderTitle title={t('tabs.upcoming')} />,
-            headerTitleAlign: 'left',
-            headerRight: () => <HeaderActions />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size - 2} color={color} />,
           }}
         />
         <Tabs.Screen
@@ -121,7 +132,7 @@ export default function TabsLayout() {
             headerTitle: () => <AppHeaderTitle title={t('tabs.feed')} />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size - 2} color={color} />,
           }}
         />
         <Tabs.Screen
@@ -131,7 +142,7 @@ export default function TabsLayout() {
             headerTitle: () => <AppHeaderTitle title={t('tabs.profile')} />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions showAvatar={false} />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size - 2} color={color} />,
           }}
         />
       </Tabs>

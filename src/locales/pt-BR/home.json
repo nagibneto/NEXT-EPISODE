@@ -33,5 +33,20 @@
   "loadError": "Erro ao carregar sua lista.",
   "markWatchedError": "Não foi possível marcar como assistido.",
   "availableEpisodes_one": "{{count}} disponível",
-  "availableEpisodes_other": "{{count}} disponíveis"
+  "availableEpisodes_other": "{{count}} disponíveis",
+  "thisWeek": "Próximos",
+  "thisWeekSeeAll": "Ver tudo",
+  "thisWeekMovie": "Estreia do filme",
+  "greetingMorning": "Bom dia",
+  "greetingAfternoon": "Boa tarde",
+  "greetingEvening": "Boa noite",
+  "featured": "Em destaque",
+  "featuredPremiere": "Estreia {{date}}",
+  "featuredInTheaters": "Em cartaz",
+  "featuredTrailer": "Trailer",
+  "continueWatching": "Continue assistindo",
+  "seeAll": "Ver tudo",
+  "explore": "Explorar",
+  "trendingShows": "Séries em alta",
+  "trendingMovies": "Filmes em alta"
 }

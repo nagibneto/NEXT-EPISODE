@@ -1,0 +1,32 @@
+{
+  "skip": "Pular",
+  "next": "Próximo",
+  "start": "Começar",
+  "findFriends": "Encontrar amigos",
+  "slides": {
+    "welcome": {
+      "title": "Bem-vindo ao Next Episode",
+      "body": "Acompanhe suas séries e filmes, saiba o que vem por aí e dispute o quiz com os amigos. Leva 30 segundos."
+    },
+    "add": {
+      "title": "Monte a sua lista",
+      "body": "Na aba Buscar, toque no + para seguir uma série ou guardar um filme em Para assistir."
+    },
+    "track": {
+      "title": "Marque o que assistiu",
+      "body": "Toque no ✓ do episódio, ou arraste o card da Watchlist para a esquerda. O próximo episódio já entra no lugar."
+    },
+    "remind": {
+      "title": "Não perca uma estreia",
+      "body": "Em Próximos, toque em Me avise e a gente te lembra no dia em que o filme estrear."
+    },
+    "quiz": {
+      "title": "Quiz do dia",
+      "body": "Uma pergunta nova todo dia às 20h. Acerte em sequência para manter sua escalada 🔥"
+    },
+    "friends": {
+      "title": "Assista junto",
+      "body": "Adicione amigos para ver no Feed o que eles estão assistindo e disputar o ranking do quiz."
+    }
+  }
+}

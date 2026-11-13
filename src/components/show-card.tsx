@@ -89,7 +89,9 @@ export function ShowCard({
             />
           </View>
         )}
-        <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>
+        {/* Duas linhas: com uma só, títulos como "Batman: O Cavaleiro das
+            Trevas" viravam "Batman: O Ca…" na coluna de um terço da tela. */}
+        <ThemedText type="smallBold" numberOfLines={2} style={styles.name}>
           {name}
         </ThemedText>
         {subtitle || ratingLabel ? (
@@ -106,7 +108,7 @@ export function ShowCard({
             {ratingLabel ? (
               <View style={styles.rating}>
                 <Ionicons name="star" size={11} color={theme.gold} />
-                <ThemedText type="small" themeColor="textSecondary">
+                <ThemedText type="small" themeColor="textSecondary" style={styles.metaText}>
                   {ratingLabel}
                 </ThemedText>
               </View>
@@ -169,15 +171,21 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   name: {
-    marginTop: Spacing.one,
+    marginTop: Spacing.one + 2,
+    // Um ponto abaixo do "smallBold": cabem mais letras por linha sem perder peso.
+    fontSize: 13,
+    lineHeight: 17,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     // Respiro entre o ano e a nota: com menos que isso a estrela cola no ano.
     gap: Spacing.two,
+    marginTop: 1,
   },
   metaText: {
+    fontSize: 12,
+    lineHeight: 16,
     // Encolhe antes da nota: com nome de ator longo, o ano/elenco corta e a
     // nota continua visível.
     flexShrink: 1,

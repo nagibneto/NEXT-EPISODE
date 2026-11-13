@@ -59,6 +59,7 @@ function RootNavigator() {
         />
         <Stack.Screen name="blocked-users" options={{ title: t('common.nav.blockedUsers') }} />
         <Stack.Screen name="stats" options={{ title: t('common.nav.stats') }} />
+        <Stack.Screen name="upcoming" options={{ title: t('tabs.upcoming') }} />
         <Stack.Screen name="quiz" options={{ title: t('quiz.navTitle') }} />
         <Stack.Screen name="user/[id]" options={{ title: t('common.nav.profile') }} />
         <Stack.Screen name="favorites" options={{ title: t('common.nav.favorites') }} />

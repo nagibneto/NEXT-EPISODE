@@ -1,19 +1,35 @@
 /**
- * Notificações locais de lançamento de episódios.
+ * Notificações locais de lançamento de episódios e de filmes.
  *
  * Estratégia v1: sempre que o app abre (ou o usuário segue/deixa de seguir uma
  * série), buscamos na TMDB o próximo episódio de cada série seguida e agendamos
  * uma notificação local para as 9h do dia de lançamento. Não exige servidor.
+ * Os filmes da lista "Para assistir" que ainda vão estrear entram no mesmo
+ * agendamento — é o "Me avise" da aba Em breve.
  */
 
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { deletePushToken, getFollowedShows, getNotificationPreferences, savePushToken } from './db';
+import {
+  deletePushToken,
+  getFollowedShows,
+  getNotificationPreferences,
+  getWatchlistMovies,
+  savePushToken,
+} from './db';
 import { i18n } from './i18n';
+import { localizedTitle } from './locale';
+import { getMovieReleaseDates } from './movie-releases';
 import { getQuizState, QUIZ_RESET_HOUR } from './quiz';
 import { getShowDetails } from './tmdb';
+
+/**
+ * Teto de avisos de estreia de filme agendados de uma vez. O iOS guarda no
+ * máximo 64 notificações locais por app, e os episódios dividem essa cota.
+ */
+const MAX_MOVIE_RELEASE_NOTIFICATIONS = 20;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -32,6 +48,10 @@ export async function requestNotificationPermission(): Promise<boolean> {
     });
     await Notifications.setNotificationChannelAsync('quiz', {
       name: i18n.t('pushNotifications.quizChannelName'),
+      importance: Notifications.AndroidImportance.HIGH,
+    });
+    await Notifications.setNotificationChannelAsync('filmes', {
+      name: i18n.t('pushNotifications.movieChannelName'),
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
@@ -148,8 +168,48 @@ export async function unregisterPushToken(userId: string) {
 }
 
 /**
- * Reagenda todas as notificações de próximos episódios das séries seguidas.
- * Cancela as anteriores para não duplicar quando as datas mudam na TMDB.
+ * Agenda o aviso de estreia (9h do dia) de cada filme da lista "Para assistir"
+ * que ainda não estreou. Chamada só por syncEpisodeNotifications, que já
+ * cancelou as notificações anteriores.
+ */
+async function scheduleMovieReleaseNotifications(userId: string, now: Date) {
+  const movies = await getWatchlistMovies(userId);
+  if (movies.length === 0) return;
+  const dates = await getMovieReleaseDates(movies.map((movie) => movie.tmdb_id));
+
+  const upcoming = movies
+    .map((movie) => ({ movie, fireDate: new Date(`${dates[movie.tmdb_id] ?? ''}T09:00:00`) }))
+    // Sem data conhecida a `Date` é inválida e a comparação dá falso.
+    .filter(({ fireDate }) => fireDate > now)
+    .sort((a, b) => a.fireDate.getTime() - b.fireDate.getTime())
+    .slice(0, MAX_MOVIE_RELEASE_NOTIFICATIONS);
+
+  for (const { movie, fireDate } of upcoming) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: i18n.t('pushNotifications.movieReleaseTitle', {
+            title: localizedTitle(movie.title, movie.title_en, i18n.language),
+          }),
+          body: i18n.t('pushNotifications.movieReleaseBody'),
+          data: { url: `/movie/${movie.tmdb_id}` },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: fireDate,
+          channelId: Platform.OS === 'android' ? 'filmes' : undefined,
+        },
+      });
+    } catch {
+      // Falha em um filme não deve impedir os demais.
+    }
+  }
+}
+
+/**
+ * Reagenda todas as notificações de próximos episódios das séries seguidas e
+ * de estreia dos filmes da lista "Para assistir". Cancela as anteriores para
+ * não duplicar quando as datas mudam na TMDB.
  */
 export async function syncEpisodeNotifications(userId: string) {
   const granted = await requestNotificationPermission();
@@ -193,6 +253,8 @@ export async function syncEpisodeNotifications(userId: string) {
       // Falha em uma série não deve impedir as demais.
     }
   }
+
+  await scheduleMovieReleaseNotifications(userId, now).catch(() => {});
 
   // cancelAllScheduledNotificationsAsync acima apagou a do quiz também —
   // reagenda para ela não sumir quando o usuário segue/deixa de seguir séries.
