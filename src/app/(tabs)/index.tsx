@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Keyboard,
   Modal,
@@ -41,6 +42,8 @@ import {
 import { localizedTitle } from '@/lib/locale';
 import {
   airedEpisodeCount,
+  clearDetailsCache,
+  DETAILS_CACHE_TTL_MS,
   getGenres,
   getMovieDetailsCached,
   getShowDetailsCached,
@@ -148,15 +151,15 @@ function LibraryListRow({
 function WatchNextRow({
   show,
   next,
-  remainingAfter,
+  availableCount,
   progress,
   onMarkWatched,
 }: {
   show: FollowedShow;
   /** undefined = calculando; null = em dia. */
   next: NextEpisode | null | undefined;
-  /** Episódios exibidos que ainda faltam depois deste. */
-  remainingAfter: number;
+  /** Episódios já exibidos que o usuário ainda não viu, contando este. */
+  availableCount: number;
   /** Andamento na série (0–1, episódios assistidos ÷ exibidos); indefinido = sem barra. */
   progress: number | undefined;
   onMarkWatched: () => void;
@@ -266,13 +269,13 @@ function WatchNextRow({
                     episode: String(next.episodeNumber).padStart(2, '0'),
                   })}
                 </ThemedText>
-                {remainingAfter > 0 && (
+                {availableCount > 0 && (
                   // Selo com borda: só a cor não segura o contraste no tema claro.
                   <View style={[styles.remainingBadge, { borderColor: theme.goldText }]}>
                     <ThemedText
                       type="small"
                       style={[styles.remainingBadgeText, { color: theme.goldText }]}>
-                      {t('home.availableEpisodes', { count: remainingAfter })}
+                      {t('home.availableEpisodes', { count: availableCount })}
                     </ThemedText>
                   </View>
                 )}
@@ -384,6 +387,8 @@ export default function MyShowsScreen() {
   const airedPending = useRef(new Set<number>());
   const nextEpPending = useRef(new Set<number>());
   const movieGenresPending = useRef(new Set<number>());
+  // Quando os dados da TMDB desta tela foram descartados pela última vez.
+  const lastTmdbRevalidation = useRef(Date.now());
   // Conta logada no momento; lotes disparados antes de trocar de conta
   // comparam com isso para descartar resultados da conta anterior.
   const userIdRef = useRef(user?.id);
@@ -433,6 +438,32 @@ export default function MyShowsScreen() {
       load();
     }, [load])
   );
+
+  /**
+   * Descarta o que a sessão já buscou na TMDB. Os efeitos de "episódios
+   * exibidos" e "assistir a seguir" refazem as consultas no próximo load().
+   */
+  function revalidateTmdb() {
+    clearDetailsCache();
+    airedFresh.current.clear();
+    nextEpFresh.current.clear();
+    lastTmdbRevalidation.current = Date.now();
+  }
+
+  // O app costuma voltar do segundo plano sem ter sido fechado, às vezes dias
+  // depois. Sem isto a lista ficava com os episódios de quando foi aberta, e os
+  // que saíram nesse meio tempo não entravam na contagem de disponíveis.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (Date.now() - lastTmdbRevalidation.current < DETAILS_CACHE_TTL_MS) return;
+      revalidateTmdb();
+      void loadRef.current();
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Marcou no widget da tela inicial? A sincronização acontece ao abrir o app,
   // e daí esta lista precisa recarregar sozinha — o load() compara a contagem
@@ -645,8 +676,7 @@ export default function MyShowsScreen() {
   async function handleRefresh() {
     setRefreshing(true);
     // Puxar para atualizar força a revalidação completa na TMDB.
-    airedFresh.current.clear();
-    nextEpFresh.current.clear();
+    revalidateTmdb();
     await load();
     setRefreshing(false);
   }
@@ -1133,13 +1163,16 @@ export default function MyShowsScreen() {
                 />
               );
             }
+            const next = nextEpById[item.tmdb_id];
             const aired = airedById[item.tmdb_id] ?? 0;
             const watched = watchedById[item.tmdb_id] ?? 0;
             return (
               <WatchNextRow
                 show={item}
-                next={nextEpById[item.tmdb_id]}
-                remainingAfter={Math.max(aired - watched - 1, 0)}
+                next={next}
+                // A contagem exata vem junto do "assistir a seguir". A subtração
+                // só cobre entradas antigas do cache, até a revalidação chegar.
+                availableCount={next?.availableCount ?? Math.max(aired - watched, 1)}
                 progress={progressFor(item.tmdb_id)}
                 onMarkWatched={() => markNextWatched(item.tmdb_id)}
               />

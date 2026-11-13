@@ -104,9 +104,10 @@ antes de enviar para review — as duas lojas apontam para ela.
     Publicidade ou marketing. Coleta obrigatória (não dá para desligar no app).
   - *IDs do dispositivo ou outros IDs* — mesmas finalidades (o SDK manda um ID
     anônimo de instalação, mesmo sem o ID de publicidade).
-- **ID de publicidade** → o SDK do Facebook costuma declarar a permissão
-  `AD_ID` no manifesto. Se o Play Console acusar isso ao subir o AAB, responda
-  **Sim**, finalidade Análise e Publicidade ou marketing.
+- **ID de publicidade** → **Não**. O AAB da 1.0.9 não traz a permissão
+  `com.google.android.gms.permission.AD_ID` (e o SDK está com
+  `advertiserIDCollectionEnabled: false`); declarar "Sim" faz o Play Console
+  barrar a versão com erro.
 
 **App Store Connect → App Privacy** (incluir, além do que já está declarado):
 

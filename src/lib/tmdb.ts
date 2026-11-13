@@ -258,21 +258,33 @@ export function discoverMovies(filters: DiscoverFilters = {}) {
 }
 
 // Cache em memória para telas que consultam muitas séries de uma vez
-// (feed social e estatísticas). Dura enquanto o app estiver aberto.
-const showDetailsCache = new Map<string, Promise<TmdbShowDetails>>();
+// (feed social e estatísticas). Vence sozinho: o iOS mantém o app vivo em
+// segundo plano por dias, e sem prazo o último episódio exibido ficava parado
+// no que a TMDB respondeu quando o app foi aberto.
+export const DETAILS_CACHE_TTL_MS = 60 * 60 * 1000;
+
+const showDetailsCache = new Map<string, { at: number; promise: Promise<TmdbShowDetails> }>();
 
 export function getShowDetailsCached(showId: number, language: AppLanguage = currentLanguage) {
   const key = `${showId}-${language}`;
-  let cached = showDetailsCache.get(key);
-  if (!cached) {
-    cached = getShowDetails(showId, language).catch((error) => {
-      // Não guarda falhas no cache para permitir nova tentativa.
-      showDetailsCache.delete(key);
-      throw error;
-    });
-    showDetailsCache.set(key, cached);
-  }
-  return cached;
+  const entry = showDetailsCache.get(key);
+  if (entry && Date.now() - entry.at < DETAILS_CACHE_TTL_MS) return entry.promise;
+  const promise = getShowDetails(showId, language).catch((error) => {
+    // Não guarda falhas no cache para permitir nova tentativa.
+    if (showDetailsCache.get(key)?.promise === promise) showDetailsCache.delete(key);
+    throw error;
+  });
+  showDetailsCache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+/**
+ * Esvazia os caches de detalhes de série e de temporada, para a próxima
+ * consulta ir de novo à TMDB (puxar para atualizar, volta do segundo plano).
+ */
+export function clearDetailsCache() {
+  showDetailsCache.clear();
+  seasonDetailsCache.clear();
 }
 
 /** Nome da série nos dois idiomas suportados — usado ao gravar seguir/marcar assistido. */
@@ -537,20 +549,19 @@ export function getSeasonDetails(showId: number, seasonNumber: number) {
 
 // Mesmo esquema de cache das séries, para o "assistir a seguir" da watchlist,
 // que consulta uma temporada por série seguida.
-const seasonDetailsCache = new Map<string, Promise<TmdbSeasonDetails>>();
+const seasonDetailsCache = new Map<string, { at: number; promise: Promise<TmdbSeasonDetails> }>();
 
 export function getSeasonDetailsCached(showId: number, seasonNumber: number) {
   const key = `${showId}-${seasonNumber}-${currentLanguage}`;
-  let cached = seasonDetailsCache.get(key);
-  if (!cached) {
-    cached = getSeasonDetails(showId, seasonNumber).catch((error) => {
-      // Não guarda falhas no cache para permitir nova tentativa.
-      seasonDetailsCache.delete(key);
-      throw error;
-    });
-    seasonDetailsCache.set(key, cached);
-  }
-  return cached;
+  const entry = seasonDetailsCache.get(key);
+  if (entry && Date.now() - entry.at < DETAILS_CACHE_TTL_MS) return entry.promise;
+  const promise = getSeasonDetails(showId, seasonNumber).catch((error) => {
+    // Não guarda falhas no cache para permitir nova tentativa.
+    if (seasonDetailsCache.get(key)?.promise === promise) seasonDetailsCache.delete(key);
+    throw error;
+  });
+  seasonDetailsCache.set(key, { at: Date.now(), promise });
+  return promise;
 }
 
 /**

@@ -4,13 +4,18 @@
  */
 
 import { getWatchedEpisodes, markSeasonWatched } from './db';
-import { getSeasonDetailsCached, getShowDetailsCached } from './tmdb';
+import { airedEpisodesInSeason, getSeasonDetailsCached, getShowDetailsCached } from './tmdb';
 
 export interface NextEpisode {
   seasonNumber: number;
   episodeNumber: number;
   name: string | null;
   stillPath: string | null;
+  /**
+   * Quantos episódios já exibidos o usuário ainda não viu, contando este.
+   * Ausente em entradas gravadas no cache por versões anteriores do app.
+   */
+  availableCount?: number;
 }
 
 /**
@@ -43,25 +48,52 @@ export async function getNextUnwatchedEpisode(
     .filter((season) => season.season_number > 0)
     .sort((a, b) => a.season_number - b.season_number);
 
-  for (const season of seasons) {
+  const isAiredUnwatched = (episode: {
+    season_number: number;
+    episode_number: number;
+    air_date: string | null;
+  }) =>
+    episode.air_date !== null &&
+    episode.air_date <= today &&
+    !watchedSet.has(`${episode.season_number}-${episode.episode_number}`);
+
+  for (const [index, season] of seasons.entries()) {
     const watchedInSeason = watchedPerSeason.get(season.season_number) ?? 0;
     if (season.episode_count > 0 && watchedInSeason >= season.episode_count) continue;
     // Temporada que ainda nem estreou: nada exibido para assistir.
     if (season.air_date && season.air_date > today) return null;
 
     const seasonDetails = await getSeasonDetailsCached(showId, season.season_number);
-    const next = seasonDetails.episodes.find(
-      (episode) =>
-        episode.air_date !== null &&
-        episode.air_date <= today &&
-        !watchedSet.has(`${episode.season_number}-${episode.episode_number}`)
-    );
+    const next = seasonDetails.episodes.find(isAiredUnwatched);
     if (next) {
+      // Selo "N disponíveis": conta episódio por episódio em vez de subtrair
+      // totais (exibidos − assistidos). A subtração errava sempre que os dois
+      // lados não falavam da mesma coisa — especial (temporada 0) marcado como
+      // visto, ou o último episódio exibido da TMDB ainda desatualizado.
+      let availableCount = seasonDetails.episodes.filter(isAiredUnwatched).length;
+      const lastAired = details.last_episode_to_air;
+      for (const later of seasons.slice(index + 1)) {
+        if (later.air_date && later.air_date > today) break;
+        const watchedInLater = watchedPerSeason.get(later.season_number) ?? 0;
+        let availableInLater = Math.max(airedEpisodesInSeason(details, later) - watchedInLater, 0);
+        // Temporada já encerrada: a conta acima basta e poupa uma chamada à
+        // TMDB. Na que ainda está no ar, só a data de cada episódio é confiável.
+        if (lastAired && later.season_number >= lastAired.season_number) {
+          try {
+            const laterDetails = await getSeasonDetailsCached(showId, later.season_number);
+            availableInLater = laterDetails.episodes.filter(isAiredUnwatched).length;
+          } catch {
+            // Fica com a estimativa: errar o selo é melhor que perder o card.
+          }
+        }
+        availableCount += availableInLater;
+      }
       return {
         seasonNumber: next.season_number,
         episodeNumber: next.episode_number,
         name: next.name || null,
         stillPath: next.still_path,
+        availableCount,
       };
     }
     // Tudo que foi ao ar nesta temporada já foi visto; se o resto ainda não
