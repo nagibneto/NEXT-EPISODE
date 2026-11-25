@@ -188,13 +188,14 @@ create index if not exists episode_ratings_episode_idx
   on public.episode_ratings (tmdb_show_id, season_number, episode_number);
 
 -- Notas também servem para filmes: media_type = 'movie' com season/episode = 0.
--- (tmdb_show_id passa a guardar o id do filme nesse caso.)
+-- (tmdb_show_id passa a guardar o id do filme nesse caso.) Games idem:
+-- media_type = 'game' e tmdb_show_id guardando o id da IGDB.
 alter table public.episode_ratings
   add column if not exists media_type text not null default 'tv';
 alter table public.episode_ratings
   drop constraint if exists episode_ratings_media_type_check;
 alter table public.episode_ratings
-  add constraint episode_ratings_media_type_check check (media_type in ('tv', 'movie'));
+  add constraint episode_ratings_media_type_check check (media_type in ('tv', 'movie', 'game'));
 
 -- Inclui media_type na chave primária (ids de série e filme são espaços
 -- distintos no TMDB e poderiam colidir).
@@ -348,13 +349,14 @@ create trigger on_comment_spoiler_flag
 drop function if exists public.mark_comment_spoiler_after_flags();
 
 -- Comentários também servem para filmes: media_type = 'movie' com
--- season/episode = 0 e tmdb_show_id guardando o id do filme.
+-- season/episode = 0 e tmdb_show_id guardando o id do filme. Games idem:
+-- media_type = 'game' e tmdb_show_id guardando o id da IGDB.
 alter table public.episode_comments
   add column if not exists media_type text not null default 'tv';
 alter table public.episode_comments
   drop constraint if exists episode_comments_media_type_check;
 alter table public.episode_comments
-  add constraint episode_comments_media_type_check check (media_type in ('tv', 'movie'));
+  add constraint episode_comments_media_type_check check (media_type in ('tv', 'movie', 'game'));
 
 -- Imagem/GIF opcional anexada ao comentário (URL pública no bucket comment-media).
 alter table public.episode_comments
@@ -1284,3 +1286,112 @@ drop policy if exists "Usuário gerencia os próprios streamings" on public.stre
 create policy "Usuário gerencia os próprios streamings"
   on public.streaming_services for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- Games (coleção) ----------
+-- Jogos que o usuário guardou na aba Games, com o status de cada um. Os dados
+-- vêm da IGDB (via Edge Function igdb); nome e capa ficam gravados aqui para
+-- a lista abrir sem consultar a IGDB. Nota e comentários de games usam
+-- episode_ratings/episode_comments com media_type = 'game'.
+create table if not exists public.game_library (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  igdb_id integer not null,
+  name text not null,
+  -- image_id da capa na IGDB (a URL é montada no app, ver src/lib/igdb.ts).
+  cover_image_id text,
+  status text not null check (status in ('want', 'playing', 'completed', 'dropped', 'played')),
+  added_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, igdb_id)
+);
+
+create index if not exists game_library_user_updated_idx
+  on public.game_library (user_id, updated_at desc);
+
+alter table public.game_library enable row level security;
+
+drop policy if exists "Usuário gerencia a própria coleção de games" on public.game_library;
+create policy "Usuário gerencia a própria coleção de games"
+  on public.game_library for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Amigos (pedido aceito) podem ver a coleção, como os filmes assistidos.
+drop policy if exists "Amigos veem a coleção de games" on public.game_library;
+create policy "Amigos veem a coleção de games"
+  on public.game_library for select to authenticated
+  using (
+    exists (
+      select 1 from public.user_follows
+      where follower_id = auth.uid() and followed_id = user_id and status = 'accepted'
+    )
+  );
+
+-- ---------- Contas de games vinculadas ----------
+-- Steam agora; Xbox/PSN depois. Só o identificador PÚBLICO da conta (o
+-- usuário digita o perfil, sem login) + nome/avatar para exibir. Conquistas e
+-- horas são lidas na hora pela Edge Function steam.
+create table if not exists public.linked_game_accounts (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  platform text not null check (platform in ('steam', 'xbox', 'psn')),
+  account_id text not null,
+  display_name text,
+  avatar_url text,
+  linked_at timestamptz not null default now(),
+  primary key (user_id, platform)
+);
+
+alter table public.linked_game_accounts enable row level security;
+
+drop policy if exists "Usuário gerencia as próprias contas de games" on public.linked_game_accounts;
+create policy "Usuário gerencia as próprias contas de games"
+  on public.linked_game_accounts for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Amigos veem as contas de games" on public.linked_game_accounts;
+create policy "Amigos veem as contas de games"
+  on public.linked_game_accounts for select to authenticated
+  using (
+    exists (
+      select 1 from public.user_follows
+      where follower_id = auth.uid() and followed_id = user_id and status = 'accepted'
+    )
+  );
+
+-- ---------- Tokens de serviços externos ----------
+-- Conta robô da PSN (function psn). RLS sem policy: só a service role acessa.
+create table if not exists public.service_tokens (
+  service text primary key,
+  access_token text,
+  access_expires_at timestamptz,
+  refresh_token text,
+  refresh_expires_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.service_tokens enable row level security;
+
+-- "Joguei" (played): importação do histórico das contas vinculadas. O
+-- alter garante o status novo em bancos criados antes dele.
+alter table public.game_library
+  drop constraint if exists game_library_status_check;
+alter table public.game_library
+  add constraint game_library_status_check
+  check (status in ('want', 'playing', 'completed', 'dropped', 'played'));
+
+-- ---------- Interruptor das integrações de games ----------
+-- enabled = false some com a plataforma do app na hora (ver
+-- src/lib/game-platforms.ts e as functions psn/xbox).
+create table if not exists public.game_platforms (
+  platform text primary key check (platform in ('steam', 'psn', 'xbox')),
+  enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.game_platforms enable row level security;
+
+drop policy if exists "Plataformas de games são visíveis para usuários autenticados" on public.game_platforms;
+create policy "Plataformas de games são visíveis para usuários autenticados"
+  on public.game_platforms for select to authenticated using (true);
+
+insert into public.game_platforms (platform, enabled)
+values ('steam', true), ('psn', true), ('xbox', true)
+on conflict (platform) do nothing;

@@ -15,10 +15,12 @@ import {
 } from 'react-native';
 
 import { PosterShelf } from '@/components/poster-shelf';
+import { GameDiscoverView } from '@/components/game-discover-view';
 import { StatusTabs } from '@/components/status-tabs';
 import { StreamingPickerSheet } from '@/components/streaming-picker-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useAuth } from '@/hooks/use-auth';
 import { useQuickAdd } from '@/hooks/use-quick-add';
 import { useTheme } from '@/hooks/use-theme';
@@ -108,7 +110,13 @@ function Chip({
   );
 }
 
+/** Para você: indicações de games no modo Games; senão, de séries/filmes. */
 export default function DiscoverScreen() {
+  const { mode } = useAppMode();
+  return mode === 'games' ? <GameDiscoverView /> : <WatchDiscoverScreen />;
+}
+
+function WatchDiscoverScreen() {
   const theme = useTheme();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();

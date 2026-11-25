@@ -16,9 +16,11 @@ import {
 
 import { ActionSheet, type ActionSheetOption } from '@/components/action-sheet';
 import { DiscoverFilterSheet, type YearRange } from '@/components/discover-filter-sheet';
+import { GameSearchView } from '@/components/game-search-view';
 import { ShowCard } from '@/components/show-card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -202,7 +204,13 @@ function FilterPill({
   );
 }
 
+/** Buscar: games no modo Games; senão, séries e filmes. */
 export default function SearchScreen() {
+  const { mode } = useAppMode();
+  return mode === 'games' ? <GameSearchView /> : <WatchSearchScreen />;
+}
+
+function WatchSearchScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();

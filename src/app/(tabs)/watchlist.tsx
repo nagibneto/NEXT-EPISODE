@@ -23,11 +23,13 @@ import ReanimatedSwipeable, {
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { DiscoverFilterSheet } from '@/components/discover-filter-sheet';
+import { GameLibraryView } from '@/components/game-library-view';
 import { ShowCard } from '@/components/show-card';
 import { StatusTabs } from '@/components/status-tabs';
 import { ThisWeekStrip } from '@/components/this-week-strip';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -385,7 +387,26 @@ function WatchNextRow({
   );
 }
 
-export default function MyShowsScreen() {
+/**
+ * Watchlist no modo séries/filmes; Biblioteca de games no modo Games. A
+ * watchlist continua montada (só escondida) no modo Games: é no foco dela que
+ * o app registra o push e sincroniza os avisos de episódio, e assim ela não
+ * recarrega do zero ao voltar.
+ */
+export default function WatchlistTab() {
+  const { mode } = useAppMode();
+  const games = mode === 'games';
+  return (
+    <View style={styles.modeContainer}>
+      <View style={[styles.modeContainer, games && styles.hidden]}>
+        <MyShowsScreen />
+      </View>
+      {games && <GameLibraryView />}
+    </View>
+  );
+}
+
+function MyShowsScreen() {
   const theme = useTheme();
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -1321,6 +1342,12 @@ export default function MyShowsScreen() {
 }
 
 const styles = StyleSheet.create({
+  modeContainer: {
+    flex: 1,
+  },
+  hidden: {
+    display: 'none',
+  },
   container: {
     flex: 1,
   },

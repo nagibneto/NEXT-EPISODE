@@ -512,6 +512,11 @@ export default function ProfileScreen() {
               onPress={() => router.push('/import-tv-time')}
             />
             <SettingsRow
+              icon="game-controller-outline"
+              label={t('common.nav.gameAccounts')}
+              onPress={() => router.push('/game-accounts')}
+            />
+            <SettingsRow
               icon="person-add"
               label={t('profile.inviteFriends')}
               onPress={handleInvite}

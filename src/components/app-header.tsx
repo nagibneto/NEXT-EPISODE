@@ -10,6 +10,7 @@ import { BadgeDot } from '@/components/badge-dot';
 import { ThemedText } from '@/components/themed-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { Spacing } from '@/constants/theme';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useIncomingFriendRequestCount } from '@/hooks/use-incoming-friend-request-count';
 import { useUnseenFeedLikesCount } from '@/hooks/use-unseen-feed-likes-count';
 import { useTheme } from '@/hooks/use-theme';
@@ -44,7 +45,46 @@ export function HeaderLogo() {
 }
 
 /**
- * Sino de notificações + avatar do perfil, exibidos no header das abas.
+ * Seletor Séries e filmes / Games do header das abas. Amarelo no ativo, como o
+ * seletor Séries/Filmes da busca (ver papéis das cores em constants/theme.ts).
+ */
+export function ModeToggle() {
+  const theme = useTheme();
+  const { t } = useTranslation();
+  const { mode, setMode } = useAppMode();
+  const options = [
+    { value: 'watch', icon: 'tv', label: t('games.modeWatch') },
+    { value: 'games', icon: 'game-controller', label: t('games.modeGames') },
+  ] as const;
+  return (
+    <View style={[styles.modeToggle, { backgroundColor: theme.backgroundElement }]}>
+      {options.map((option) => {
+        const active = mode === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected: active }}
+            onPress={() => setMode(option.value)}
+            style={[styles.modeButton, active && { backgroundColor: theme.gold }]}>
+            <Ionicons
+              name={option.icon}
+              size={16}
+              // Ícone escuro fixo no ativo: o amarelo é igual nos dois temas.
+              color={active ? '#231A00' : theme.textSecondary}
+            />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Seletor de modo + sino de notificações + avatar do perfil, exibidos no
+ * header das abas.
  * Na própria aba Perfil o avatar some — mostrar o avatar de quem já está
  * na tela do perfil seria redundante.
  */
@@ -65,6 +105,7 @@ export function HeaderActions({ showAvatar = true }: { showAvatar?: boolean }) {
 
   return (
     <View style={styles.actionsRow}>
+      <ModeToggle />
       <Pressable hitSlop={8} style={styles.bellButton} onPress={() => router.push('/notifications')}>
         <Ionicons name="notifications-outline" size={22} color={theme.text} />
         <BadgeDot visible={friendRequestCount > 0 || unseenLikesCount > 0} />
@@ -144,6 +185,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     marginRight: Spacing.three,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 2,
+  },
+  modeButton: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   bellButton: {
     alignItems: 'center',

@@ -6,11 +6,13 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 
 import { HomeContinueWatching } from '@/components/home-continue-watching';
 import { HomeHero } from '@/components/home-hero';
+import { GameHomeView } from '@/components/game-home-view';
 import { PosterShelf } from '@/components/poster-shelf';
 import { QuizCard } from '@/components/quiz-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThisWeekStrip } from '@/components/this-week-strip';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useHomeData } from '@/hooks/use-home-data';
 import { useQuickAdd } from '@/hooks/use-quick-add';
 import { useTheme } from '@/hooks/use-theme';
@@ -49,12 +51,18 @@ function greetingKey() {
   return 'home.greetingEvening';
 }
 
+/** Início: no modo Games mostra a home de games; senão, a de séries/filmes. */
+export default function HomeScreen() {
+  const { mode } = useAppMode();
+  return mode === 'games' ? <GameHomeView /> : <WatchHomeScreen />;
+}
+
 /**
  * Aba Início: a vitrine do app. De cima para baixo — saudação, destaque dos
  * filmes mais aguardados, "Continue assistindo", "Próximos" (a tela completa
  * não tem aba; chega-se por aqui), quiz do dia, atalhos e o que está em alta.
  */
-export default function HomeScreen() {
+function WatchHomeScreen() {
   const theme = useTheme();
   const { t, i18n } = useTranslation();
   const router = useRouter();

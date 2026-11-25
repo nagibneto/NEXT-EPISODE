@@ -34,15 +34,15 @@ import {
   profileDisplayName,
   reportComment,
   unlikeComment,
+  type CommentMediaType,
   type EpisodeComment,
-  type MediaType,
 } from '@/lib/db';
 import { formatDate } from '@/lib/locale';
 import { uploadCommentImage } from '@/lib/storage';
 
 interface CommentsScreenProps {
-  /** 'tv' para episódios, 'movie' para filmes (season/episode = 0). */
-  mediaType: MediaType;
+  /** 'tv' para episódios, 'movie' para filmes e 'game' para games (season/episode = 0). */
+  mediaType: CommentMediaType;
   tmdbId: number;
   seasonNumber?: number;
   episodeNumber?: number;

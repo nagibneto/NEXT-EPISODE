@@ -25,7 +25,7 @@ module.exports = {
   expo: {
     name: 'Next Episode',
     slug: 'next-episode',
-    version: '1.1.0',
+    version: '1.2.0',
     orientation: 'portrait',
     icon: './assets/images/icon.png',
     scheme: 'nextepisode',

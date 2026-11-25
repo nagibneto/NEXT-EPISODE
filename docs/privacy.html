@@ -57,7 +57,7 @@
 <body>
 
 <h1>Política de Privacidade — Next Episode</h1>
-<p class="updated">Última atualização: 4 de novembro de 2026</p>
+<p class="updated">Última atualização: 24 de novembro de 2026</p>
 
 <p>
   Este documento explica quais dados o aplicativo <strong>Next Episode</strong>
@@ -68,7 +68,7 @@
 <h2>Quem somos</h2>
 <p>
   O Next Episode é um aplicativo desenvolvido de forma independente para
-  acompanhamento de séries de TV. Contato do responsável pelo app:
+  acompanhamento de séries, filmes e games. Contato do responsável pelo app:
   <a href="mailto:nagibneto_2@hotmail.com">nagibneto_2@hotmail.com</a>.
 </p>
 
@@ -76,7 +76,9 @@
 <ul>
   <li><strong>Dados de cadastro:</strong> e-mail, nome de usuário e apelido. A senha é gerenciada pelo Supabase Auth e nunca é armazenada em texto puro nem acessível por nós.</li>
   <li><strong>Atividade no app:</strong> séries que você segue, episódios marcados como assistidos, notas dadas a episódios.</li>
-  <li><strong>Conteúdo que você publica:</strong> comentários em episódios e imagens/GIFs anexados a eles.</li>
+  <li><strong>Games:</strong> os jogos da sua coleção e o status de cada um (quero jogar, jogando, zerei, joguei, abandonei), além das notas que você dá aos jogos.</li>
+  <li><strong>Contas de games vinculadas (opcional):</strong> se você vincular uma conta Steam, PlayStation Network ou Xbox, guardamos apenas o identificador público dessa conta (SteamID, ID online da PSN ou gamertag), com o nome e o avatar públicos. Nunca pedimos nem guardamos senhas dessas plataformas. As horas jogadas, conquistas e troféus são consultados na hora, a partir do que o seu perfil já mostra publicamente, e os jogos que você jogou podem ser adicionados à sua coleção. Você pode desvincular a conta a qualquer momento em <strong>Perfil → Contas de games</strong>.</li>
+  <li><strong>Conteúdo que você publica:</strong> comentários em episódios, filmes e jogos, e imagens/GIFs anexados a eles.</li>
   <li><strong>Relações sociais:</strong> pedidos de amizade enviados/aceitos e quem você segue no app.</li>
   <li><strong>Notificações:</strong> um token de dispositivo (via Expo/Firebase) para enviar avisos de novos episódios, caso você autorize notificações.</li>
   <li><strong>Eventos de uso:</strong> registros como abertura do app, cadastro, login, série seguida e episódio assistido, enviados à Meta para medir o resultado das nossas campanhas de divulgação (veja abaixo).</li>
@@ -91,6 +93,9 @@
 <ul>
   <li><strong>Supabase</strong> — hospeda o banco de dados, autenticação e armazenamento de imagens do app.</li>
   <li><strong>TMDB (The Movie Database)</strong> — fornece informações públicas sobre séries e episódios (sinopses, datas, pôsteres). Suas buscas por séries podem ser enviadas à TMDB, sem dados pessoais identificáveis.</li>
+  <li><strong>IGDB (Twitch)</strong> — fornece informações públicas sobre jogos (capas, datas, plataformas). Suas buscas por jogos podem ser enviadas à IGDB pelos nossos servidores, sem dados pessoais identificáveis.</li>
+  <li><strong>Valve (Steam), Sony (PlayStation Network) e Microsoft (Xbox)</strong> — só se você vincular uma conta dessas plataformas: enviamos a elas o identificador público que você informou, para buscar as informações públicas do seu perfil (jogos, horas jogadas, conquistas e troféus). Nenhum outro dado seu é enviado. Se o seu perfil estiver privado na plataforma, nada é exibido.</li>
+  <li><strong>Seus amigos no app</strong> — amigos com pedido de amizade aceito podem ver sua coleção de games e as contas de games vinculadas, assim como já veem o que você assiste.</li>
   <li><strong>Expo / Firebase Cloud Messaging</strong> — usados apenas para entregar notificações push, se você autorizar.</li>
   <li><strong>Meta (Facebook)</strong> — recebe os eventos de uso listados acima, pelo SDK da Meta, para medir quantas pessoas instalam e usam o app a partir dos nossos anúncios. Não enviamos e-mail, nome de usuário, nem o conteúdo que você publica. O tratamento desses dados pela Meta segue a <a href="https://www.facebook.com/privacy/policy/">Política de Privacidade da Meta</a>.</li>
 </ul>
@@ -107,7 +112,8 @@
   <strong>Pelo app:</strong> abra o Next Episode, vá em
   <strong>Perfil → Excluir conta</strong> e confirme. Isso apaga
   permanentemente seu perfil, séries seguidas, episódios assistidos, notas,
-  comentários, imagens enviadas, amizades e token de notificação.
+  comentários, imagens enviadas, coleção de games, contas de games
+  vinculadas, amizades e token de notificação.
 </p>
 <p>
   <strong>Sem acesso ao app:</strong> envie um e-mail para

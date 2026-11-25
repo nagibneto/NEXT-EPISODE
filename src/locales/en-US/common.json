@@ -32,6 +32,8 @@
     "toWatch": "To watch",
     "notifications": "Notifications",
     "notificationSettings": "Notification preferences",
-    "findFriendsContacts": "Find via contacts"
+    "findFriendsContacts": "Find via contacts",
+    "game": "Game",
+    "gameAccounts": "Game accounts"
   }
 }

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { StackHeader } from '@/components/app-header';
+import { AppModeProvider } from '@/hooks/use-app-mode';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { LanguagePreferenceProvider } from '@/hooks/use-language-preference';
 import { useNotificationNavigation } from '@/hooks/use-notification-navigation';
@@ -33,6 +34,8 @@ function RootNavigator() {
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         <Stack.Screen name="show/[id]/index" options={{ title: t('common.nav.show') }} />
         <Stack.Screen name="movie/[id]" options={{ title: t('common.nav.movie') }} />
+        <Stack.Screen name="game/[id]" options={{ title: t('common.nav.game') }} />
+        <Stack.Screen name="game-accounts" options={{ title: t('common.nav.gameAccounts') }} />
         <Stack.Screen
           name="show/[id]/season/[seasonNumber]"
           options={{ title: t('common.nav.season') }}
@@ -90,7 +93,9 @@ export default function RootLayout() {
       <AuthProvider>
         <ThemePreferenceProvider>
           <LanguagePreferenceProvider>
-            <RootNavigator />
+            <AppModeProvider>
+              <RootNavigator />
+            </AppModeProvider>
           </LanguagePreferenceProvider>
         </ThemePreferenceProvider>
       </AuthProvider>

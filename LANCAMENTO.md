@@ -77,6 +77,30 @@ git tag v<versão>
 
 ---
 
+# Específico da 1.2.0 (modo Games)
+
+Esta versão depende do Supabase. **Antes do build**, confira que tudo abaixo
+está em produção. Tudo só acrescenta coisas, então quem está na 1.1.0 não é
+afetado:
+
+1. **SQL** (SQL Editor, nesta ordem; todos podem ser rodados de novo):
+   `games-setup.sql`, `steam-setup.sql`, `psn-setup.sql`,
+   `games-history-setup.sql`, `game-platforms-setup.sql`
+   (em `supabase/queries/`).
+2. **Secrets**: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `STEAM_API_KEY`,
+   `PSN_NPSSO`, `XBOX_CLIENT_ID`, `XBOX_REFRESH_TOKEN`
+   (`npx supabase secrets list` mostra os nomes).
+3. **Functions**, todas na versão desta branch:
+   `npx supabase functions deploy igdb`, `steam`, `psn` e `xbox`.
+
+Fichas das lojas: textos em `store/notas-versao-1.2.0.md`, incluindo a nota
+para o revisor da Apple ("toque no controle no topo"). App Privacy e Data
+Safety ganham a coleção de games e as contas vinculadas (ver
+`docs/privacy.html`). Não cite PlayStation nem Xbox nas fichas (ver
+`GAMES.md`).
+
+Depois de aprovada nas duas lojas: `supabase/queries/anunciar-1.2.0.sql`.
+
 # Específico da 1.0.9
 
 ## O que vai nesta versão

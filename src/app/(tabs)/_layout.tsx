@@ -14,6 +14,7 @@ import { UpdatePrompt } from '@/components/update-prompt';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWidgetData } from '@/hooks/use-widget-data';
+import { useAppMode } from '@/hooks/use-app-mode';
 import { useAuth } from '@/hooks/use-auth';
 import { getOwnProfile } from '@/lib/db';
 
@@ -21,6 +22,12 @@ export default function TabsLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { session, loading } = useAuth();
+  // Modo Games (seletor no header): Início e Watchlist trocam de nome; o
+  // conteúdo de cada aba troca dentro da própria tela.
+  const { mode } = useAppMode();
+  const games = mode === 'games';
+  const homeTitle = games ? t('tabs.gamesHome') : undefined;
+  const listTitle = games ? t('tabs.library') : t('tabs.watchlist');
   // Publica os dados dos widgets (tela inicial / bloqueio) enquanto o app
   // estiver logado. Ver src/lib/widget-data.ts.
   useWidgetData();
@@ -80,7 +87,7 @@ export default function TabsLayout() {
           name="index"
           options={{
             title: t('tabs.home'),
-            headerTitle: () => <AppHeaderTitle />,
+            headerTitle: () => <AppHeaderTitle title={homeTitle} />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
             tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size - 2} color={color} />,
@@ -89,11 +96,13 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="watchlist"
           options={{
-            title: t('tabs.watchlist'),
-            headerTitle: () => <AppHeaderTitle title={t('tabs.watchlist')} />,
+            title: listTitle,
+            headerTitle: () => <AppHeaderTitle title={listTitle} />,
             headerTitleAlign: 'left',
             headerRight: () => <HeaderActions />,
-            tabBarIcon: ({ color, size }) => <Ionicons name="tv" size={size - 2} color={color} />,
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name={games ? 'library' : 'tv'} size={size - 2} color={color} />
+            ),
           }}
         />
         <Tabs.Screen

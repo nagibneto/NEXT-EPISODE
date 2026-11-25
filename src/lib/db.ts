@@ -66,6 +66,13 @@ export interface OwnProfile extends Profile {
 /** Séries e filmes compartilham as tabelas de notas/comentários; isto distingue os dois. */
 export type MediaType = 'tv' | 'movie';
 
+/**
+ * Tudo que pode ter nota e comentários. Games entram aqui (media_type =
+ * 'game', com o id da IGDB no lugar do id da TMDB), mas não em MediaType:
+ * favoritos, feed e grades de pôster só conhecem séries e filmes da TMDB.
+ */
+export type CommentMediaType = MediaType | 'game';
+
 /** Nome exibido no app: apelido quando definido, senão o username. */
 export function profileDisplayName(profile: Pick<Profile, 'username' | 'display_name'> | null) {
   if (!profile) return 'Usuário';
@@ -515,7 +522,7 @@ export async function getMyEpisodeRating(
   tmdbShowId: number,
   seasonNumber: number,
   episodeNumber: number,
-  mediaType: MediaType = 'tv'
+  mediaType: CommentMediaType = 'tv'
 ): Promise<number | null> {
   const { data, error } = await supabase
     .from('episode_ratings')
@@ -534,7 +541,7 @@ export async function getEpisodeAverageRating(
   tmdbShowId: number,
   seasonNumber: number,
   episodeNumber: number,
-  mediaType: MediaType = 'tv'
+  mediaType: CommentMediaType = 'tv'
 ): Promise<{ average: number; count: number }> {
   const { data, error } = await supabase
     .from('episode_ratings')
@@ -556,7 +563,7 @@ export async function rateEpisode(
   seasonNumber: number,
   episodeNumber: number,
   rating: number,
-  mediaType: MediaType = 'tv'
+  mediaType: CommentMediaType = 'tv'
 ) {
   const { error } = await supabase.from('episode_ratings').upsert({
     user_id: userId,
@@ -577,7 +584,7 @@ export async function getEpisodeComments(
   seasonNumber: number,
   episodeNumber: number,
   viewerId: string,
-  mediaType: MediaType = 'tv'
+  mediaType: CommentMediaType = 'tv'
 ): Promise<EpisodeComment[]> {
   // O nome do FK desambigua o join: depois de comment_likes/comment_reports
   // existirem, há mais de um caminho entre episode_comments e profiles, e o
@@ -657,7 +664,7 @@ export async function addEpisodeComment(
   content: string,
   imageUrl?: string | null,
   parentId?: string | null,
-  mediaType: MediaType = 'tv'
+  mediaType: CommentMediaType = 'tv'
 ): Promise<string> {
   const { data, error } = await supabase
     .from('episode_comments')
@@ -688,6 +695,157 @@ export async function addEpisodeComment(
 
 export async function deleteEpisodeComment(commentId: string) {
   const { error } = await supabase.from('episode_comments').delete().eq('id', commentId);
+  if (error) throw error;
+}
+
+// ---------- Games (coleção) ----------
+
+/**
+ * Status de um jogo na coleção da aba Games. 'played' ("Joguei") é o jogo
+ * que a pessoa jogou mas não necessariamente terminou — é o que a
+ * importação do histórico das contas vinculadas usa para jogos antigos.
+ */
+export type GameStatus = 'want' | 'playing' | 'completed' | 'played' | 'dropped';
+
+/** Ordem em que os status aparecem nas telas. */
+export const GAME_STATUSES: readonly GameStatus[] = [
+  'playing',
+  'want',
+  'completed',
+  'played',
+  'dropped',
+];
+
+export interface GameLibraryEntry {
+  igdb_id: number;
+  name: string;
+  /** image_id da capa na IGDB (ver igdbImage em src/lib/igdb.ts). */
+  cover_image_id: string | null;
+  status: GameStatus;
+  added_at: string;
+  updated_at: string;
+}
+
+const GAME_LIBRARY_FIELDS = 'igdb_id, name, cover_image_id, status, added_at, updated_at';
+
+/** Coleção inteira, mexidos por último primeiro. */
+export async function getGameLibrary(userId: string): Promise<GameLibraryEntry[]> {
+  const { data, error } = await supabase
+    .from('game_library')
+    .select(GAME_LIBRARY_FIELDS)
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return (data as GameLibraryEntry[]) ?? [];
+}
+
+export async function getGameLibraryEntry(
+  userId: string,
+  igdbId: number
+): Promise<GameLibraryEntry | null> {
+  const { data, error } = await supabase
+    .from('game_library')
+    .select(GAME_LIBRARY_FIELDS)
+    .eq('user_id', userId)
+    .eq('igdb_id', igdbId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as GameLibraryEntry | null) ?? null;
+}
+
+/** Põe o jogo na coleção (ou troca o status de um que já está lá). */
+export async function setGameStatus(
+  userId: string,
+  game: { igdb_id: number; name: string; cover_image_id: string | null },
+  status: GameStatus
+) {
+  const { error } = await supabase.from('game_library').upsert({
+    user_id: userId,
+    igdb_id: game.igdb_id,
+    name: game.name,
+    cover_image_id: game.cover_image_id,
+    status,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function removeGameFromLibrary(userId: string, igdbId: number) {
+  const { error } = await supabase
+    .from('game_library')
+    .delete()
+    .eq('user_id', userId)
+    .eq('igdb_id', igdbId);
+  if (error) throw error;
+}
+
+/**
+ * Põe vários jogos na coleção de uma vez (importação da Steam). Jogos que já
+ * estão na coleção ficam como estão — não sobrescreve o status escolhido.
+ * Devolve quantos entraram de fato.
+ */
+export async function addGamesToLibraryBulk(
+  userId: string,
+  games: { igdb_id: number; name: string; cover_image_id: string | null }[],
+  status: GameStatus
+): Promise<number> {
+  if (games.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('game_library')
+    .upsert(
+      games.map((game) => ({ user_id: userId, status, ...game })),
+      { onConflict: 'user_id,igdb_id', ignoreDuplicates: true }
+    )
+    .select('igdb_id');
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+// ---------- Contas de games vinculadas ----------
+
+export type GamePlatform = 'steam' | 'xbox' | 'psn';
+
+export interface LinkedGameAccount {
+  platform: GamePlatform;
+  /** Identificador público da conta (SteamID na Steam). */
+  account_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  linked_at: string;
+}
+
+export async function getLinkedGameAccount(
+  userId: string,
+  platform: GamePlatform
+): Promise<LinkedGameAccount | null> {
+  const { data, error } = await supabase
+    .from('linked_game_accounts')
+    .select('platform, account_id, display_name, avatar_url, linked_at')
+    .eq('user_id', userId)
+    .eq('platform', platform)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as LinkedGameAccount | null) ?? null;
+}
+
+export async function linkGameAccount(
+  userId: string,
+  account: Omit<LinkedGameAccount, 'linked_at'>
+) {
+  const { error } = await supabase.from('linked_game_accounts').upsert({
+    user_id: userId,
+    ...account,
+    linked_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function unlinkGameAccount(userId: string, platform: GamePlatform) {
+  const { error } = await supabase
+    .from('linked_game_accounts')
+    .delete()
+    .eq('user_id', userId)
+    .eq('platform', platform);
   if (error) throw error;
 }
 
